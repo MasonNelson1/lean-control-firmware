@@ -34,6 +34,15 @@ void captureNeutral();
 //   0 = read the real sensor pins
 #define SIM_MODE 1
 
+// ---------- RAW MONITOR (sensor bring-up) ----------
+//   1 = only print raw ADC counts from MONITOR_PINS at 10 Hz. The control
+//       pipeline is skipped entirely, so motor outputs stay at 0.
+//   0 = normal control loop
+#define RAW_MONITOR 1
+const uint8_t MONITOR_PINS[]  = {A16, A17};   // pins 40, 41
+const char*   MONITOR_NAMES[] = {"A16", "A17"};
+const int     N_MONITOR = sizeof(MONITOR_PINS) / sizeof(MONITOR_PINS[0]);
+
 // ---------- PIN MAP (set to match your wiring) ----------
 const uint8_t PIN_FRONT = A0;
 const uint8_t PIN_BACK  = A1;
@@ -209,7 +218,9 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   delay(200);
   Serial.println("LEAN control firmware ready.");
-#if SIM_MODE
+#if RAW_MONITOR
+  Serial.println("RAW MONITOR: raw ADC counts (0-4095) and volts, control disabled");
+#elif SIM_MODE
   Serial.println("SIM MODE:");
   Serial.println("  type  F,B,L,R   e.g. 800,400,500,500   (raw ADC values)");
   Serial.println("  type  cal       to capture neutral posture");
@@ -221,6 +232,22 @@ void loop() {
   static uint32_t last = 0;
   if ((uint32_t)(micros() - last) < LOOP_US) return;
   last += LOOP_US;
+
+#if RAW_MONITOR
+  // --- bring-up: print raw sensor readings, no control output ---
+  static uint32_t tMon = 0;
+  if (millis() - tMon >= 100) {          // 10 Hz, readable
+    tMon = millis();
+    for (int i = 0; i < N_MONITOR; i++) {
+      int raw = analogRead(MONITOR_PINS[i]);
+      Serial.print(MONITOR_NAMES[i]); Serial.print("=");
+      Serial.print(raw);
+      Serial.print(" ("); Serial.print(raw * 3.3f / 4095.0f, 2); Serial.print("V)   ");
+    }
+    Serial.println();
+  }
+  return;
+#endif
 
   // --- knobs: update every 20 ms ---
   static uint32_t tKnob = 0;

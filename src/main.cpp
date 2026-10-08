@@ -32,29 +32,31 @@ void captureNeutral();
 //   1 = type "F,B,L,R" (e.g. 800,400,500,500) into Serial to test the math
 //       type "cal" to capture the neutral posture
 //   0 = read the real sensor pins
-#define SIM_MODE 1
+#define SIM_MODE 0
 
 // ---------- RAW MONITOR (sensor bring-up) ----------
 //   1 = only print raw ADC counts from MONITOR_PINS at 10 Hz. The control
 //       pipeline is skipped entirely, so motor outputs stay at 0.
 //   0 = normal control loop
-#define RAW_MONITOR 1
-const uint8_t MONITOR_PINS[]  = {A16, A17};   // pins 40, 41
-const char*   MONITOR_NAMES[] = {"A16", "A17"};
+#define RAW_MONITOR 0
+const uint8_t MONITOR_PINS[]  = {A14, A17, A16, A15};   // F,B,L,R = pins 38,41,40,39
+const char*   MONITOR_NAMES[] = {"F", "B", "L", "R"};
 const int     N_MONITOR = sizeof(MONITOR_PINS) / sizeof(MONITOR_PINS[0]);
 
 // ---------- PIN MAP (set to match your wiring) ----------
-const uint8_t PIN_FRONT = A0;
-const uint8_t PIN_BACK  = A1;
-const uint8_t PIN_LEFT  = A2;
-const uint8_t PIN_RIGHT = A3;
+const uint8_t PIN_FRONT = A14;   // pin 38
+const uint8_t PIN_BACK  = A17;   // pin 41
+const uint8_t PIN_LEFT  = A16;   // pin 40
+const uint8_t PIN_RIGHT = A15;   // pin 39
 const uint8_t PIN_CAL   = 4;        // calibration ("zero") button to GND
 const uint8_t PIN_SPEED_POT = A6;   // pin 20 — max speed knob wiper
 const uint8_t PIN_ACCEL_POT = A7;   // pin 21 — acceleration knob wiper
 
 // 1 = read the real knobs (works even in SIM_MODE — test real knobs
 //     against simulated sensors). 0 = use the default values below.
-#define USE_POTS 1
+// Keep 0 until the switch ladders are wired: unwired A6/A7 float and
+// would read random positions.
+#define USE_POTS 0
 
 // ---------- TUNABLES (measure/tune on real hardware) ----------
 const float   FLOOR         = 370.0f;  // no-load ADC reading per channel (the 0.3V bias)
@@ -83,12 +85,14 @@ float slewPerLoop = (LOOP_US / 1e6f) / DEFAULT_ACCEL;   // derived from accelTim
 
 // ---------- SMALL HELPERS ----------
 
-// Normalized center of pressure for one opposing pair -> -1..+1.
-// Uses POSITIVE forces, so the denominator is large and stable when seated.
-float coP(float pos, float neg) {
-  float sum = pos + neg;
-  if (sum < EPS) return 0.0f;             // no force on this pair
-  return (pos - neg) / (sum + EPS);
+// Normalized center of pressure along one axis -> -1..+1.
+// Divides by the TOTAL force on all four sensors, not just this pair:
+// dividing by the pair alone turned a few counts of noise on an unloaded
+// pair into a full ±1 lean. With the total, |speed| + |turn| <= 1, so the
+// differential mix can never exceed ±1.
+float coP(float pos, float neg, float total) {
+  if (total < EPS) return 0.0f;           // no force at all
+  return (pos - neg) / (total + EPS);
 }
 
 // Deadzone with rescale: 0 inside the band, ramps smoothly 0..1 outside
@@ -108,6 +112,29 @@ float slew(float cur, float target) {
   if (d >  slewPerLoop) d =  slewPerLoop;
   if (d < -slewPerLoop) d = -slewPerLoop;
   return cur + d;
+}
+
+// Last raw readings, kept for the live printout.
+float rawF = 0, rawB = 0, rawL = 0, rawR = 0;
+
+// Real-sensor mode: typing "cal" captures neutral (same as the zero
+// button), so the math can be tested before the button is wired.
+void readSerialCommands() {
+  static String buf = "";
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      buf.trim();
+      if (buf.equalsIgnoreCase("cal")) {
+        bool stopped = fabs(outLeft) < CAL_STILL_MAX && fabs(outRight) < CAL_STILL_MAX;
+        if (stopped) captureNeutral();
+        else Serial.println("** Zero ignored: chair must be stopped **");
+      }
+      buf = "";
+    } else if (c != '\r') {
+      buf += c;
+    }
+  }
 }
 
 // ---------- RAW SENSOR INPUT (real or simulated) ----------
@@ -143,6 +170,7 @@ void readRaw(float &f, float &b, float &l, float &r) {
   l = analogRead(PIN_LEFT);
   r = analogRead(PIN_RIGHT);
 #endif
+  rawF = f; rawB = b; rawL = l; rawR = r;
 }
 
 // Floor-subtracted forces (0 = no load). This is what the CoP uses.
@@ -199,13 +227,29 @@ void updateKnobs() {
   slewPerLoop = (LOOP_US / 1e6f) / accelTimeS;  // full-scale step per loop
 }
 
+// Plain-language direction the chair would go, from the post-deadzone
+// speed (+fwd) and turn (+right). Display only.
+const char* directionName(bool seated, float speed, float turn) {
+  if (!seated) return "STOP (empty seat)";
+  if (speed == 0 && turn == 0) return "STOP (neutral)";
+  if (speed == 0) return turn > 0 ? "PIVOT RIGHT" : "PIVOT LEFT";
+  if (turn == 0)  return speed > 0 ? "FORWARD" : "BACKWARD";
+  if (speed > 0)  return turn > 0 ? "FORWARD + RIGHT" : "FORWARD + LEFT";
+  return turn > 0 ? "BACKWARD + RIGHT" : "BACKWARD + LEFT";
+}
+
 // ---------- CALIBRATION ----------
 // Capture the rider's neutral posture as the "zero lean" center of pressure.
 void captureNeutral() {
   float f, b, l, r;
   readForces(f, b, l, r);
-  neutralSpeed = coP(f, b);
-  neutralTurn  = coP(r, l);
+  float total = f + b + l + r;
+  if (total < OCCUPANCY_MIN) {            // empty seat: CoP would be pure noise
+    Serial.println("** Zero ignored: nobody seated **");
+    return;
+  }
+  neutralSpeed = coP(f, b, total);
+  neutralTurn  = coP(r, l, total);
   Serial.println("** Neutral posture captured **");
 }
 
@@ -224,6 +268,9 @@ void setup() {
   Serial.println("SIM MODE:");
   Serial.println("  type  F,B,L,R   e.g. 800,400,500,500   (raw ADC values)");
   Serial.println("  type  cal       to capture neutral posture");
+#else
+  Serial.println("SENSOR MODE: reading A14-A17 (F,B,L,R). Motor output is print-only.");
+  Serial.println("  type  cal  (or press zero button) to capture neutral posture");
 #endif
 }
 
@@ -253,6 +300,10 @@ void loop() {
   static uint32_t tKnob = 0;
   if (millis() - tKnob >= 20) { tKnob = millis(); updateKnobs(); }
 
+#if !SIM_MODE
+  readSerialCommands();
+#endif
+
   // --- calibration ("zero") button: debounced, and only while stopped ---
   bool raw = digitalRead(PIN_CAL);
   if (raw != lastCal) { calChangedMs = millis(); lastCal = raw; }
@@ -278,14 +329,17 @@ void loop() {
 
   float targetLeft, targetRight;
   float speed = 0, turn = 0;            // kept outside for printing
+  float copSpeed = 0, copTurn = 0;      // raw CoP before neutral/deadzone (printing)
 
   // --- occupancy gate: empty seat OR disconnected sensor -> safe stop ---
   if (total < OCCUPANCY_MIN) {
     targetLeft = 0; targetRight = 0;
   } else {
     // --- center of pressure on each axis, relative to neutral posture ---
-    speed = clampUnit(coP(f, b) - neutralSpeed);   // forward(+)/back(-)
-    turn  = clampUnit(coP(r, l) - neutralTurn);    // right(+)/left(-)
+    copSpeed = coP(f, b, total);
+    copTurn  = coP(r, l, total);
+    speed = clampUnit(copSpeed - neutralSpeed);    // forward(+)/back(-)
+    turn  = clampUnit(copTurn  - neutralTurn);     // right(+)/left(-)
 
     // --- deadzone ---
     speed = deadzone(speed);
@@ -313,12 +367,19 @@ void loop() {
   static uint32_t tPrint = 0;
   if (millis() - tPrint >= 100) {        // 10 Hz, readable
     tPrint = millis();
-    Serial.print("speed="); Serial.print(speed, 2);
-    Serial.print("  turn="); Serial.print(turn, 2);
-    Serial.print("   ->  L="); Serial.print(outLeft, 2);
-    Serial.print("  R="); Serial.print(outRight, 2);
-    Serial.print("   seated="); Serial.print(total >= OCCUPANCY_MIN ? "Y" : "N");
-    Serial.print("   max="); Serial.print(maxOutput * 100, 0); Serial.print("%");
-    Serial.print("  ramp="); Serial.print(accelTimeS, 1); Serial.println("s");
+    bool seated = total >= OCCUPANCY_MIN;
+    Serial.print("raw F="); Serial.print(rawF, 0);
+    Serial.print(" B="); Serial.print(rawB, 0);
+    Serial.print(" L="); Serial.print(rawL, 0);
+    Serial.print(" R="); Serial.print(rawR, 0);
+    Serial.print("  tot="); Serial.print(total, 0);
+    Serial.print(seated ? " Y" : " N");
+    Serial.print(" | CoP fb="); Serial.print(copSpeed, 2);
+    Serial.print(" rl="); Serial.print(copTurn, 2);
+    Serial.print(" | spd="); Serial.print(speed, 2);
+    Serial.print(" trn="); Serial.print(turn, 2);
+    Serial.print(" | L="); Serial.print(outLeft, 2);
+    Serial.print(" R="); Serial.print(outRight, 2);
+    Serial.print(" | "); Serial.println(directionName(seated, speed, turn));
   }
 }

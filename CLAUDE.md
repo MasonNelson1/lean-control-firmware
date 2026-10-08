@@ -52,11 +52,10 @@ design history; this file holds the durable facts.
 ## Pin map
 | Signal | Pin |
 |---|---|
-| Front sensor | A0 |
-| Back sensor | A1 |
-| Left sensor | A2 |
-| Right sensor | A3 |
-| Bench sensor 1 / 2 (only 2 sensors on hand) | A16 (pin 40) / A17 (pin 41) |
+| Front sensor | A14 (pin 38) |
+| Back sensor | A17 (pin 41) |
+| Left sensor | A16 (pin 40) |
+| Right sensor | A15 (pin 39) |
 | Speed switch | A6 (pin 20) |
 | Accel switch | A7 (pin 21) |
 | Zero button | 4 |

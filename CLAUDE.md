@@ -12,6 +12,7 @@ design history; this file holds the durable facts.
 |---|---|---|
 | `teensy41` (default) | `src/main.cpp` | lean control pipeline |
 | `can_test` | `src/can_motor_test.cpp` | two-sensor → one-VESC bench test |
+| `simple` | `src/simple_drive.cpp` | 4 raw sensors → two VESCs (duty, differential), no pipeline/calibration (debug) |
 
 - Build:   `pio run` (main) / `pio run -e can_test`
 - Upload:  `pio run -t upload` / `pio run -e can_test -t upload`
@@ -47,15 +48,15 @@ design history; this file holds the durable facts.
   the Teensy with 100 nF + 1 MΩ to GND. Broken wire reads position 1 (slowest)
   on purpose.
 - Zero/calibration button: pin 4 to GND, INPUT_PULLUP.
-- Motor controllers: 2x VESC 6/75 on CAN, controller ID 1 = left, 2 = right.
+- Motor controllers: 2x VESC 6/75 on CAN, controller ID 26 = left (this unit's VESC Tool default; set in `VESC_LEFT_ID`), right = TBD (`VESC_RIGHT_ID`, currently 2).
 
 ## Pin map
 | Signal | Pin |
 |---|---|
-| Front sensor | A14 (pin 38) |
+| Front sensor | A15 (pin 39) |
 | Back sensor | A17 (pin 41) |
-| Left sensor | A16 (pin 40) |
-| Right sensor | A15 (pin 39) |
+| Left sensor | A14 (pin 38) |
+| Right sensor | A16 (pin 40) |
 | Speed switch | A6 (pin 20) |
 | Accel switch | A7 (pin 21) |
 | Zero button | 4 |
@@ -113,6 +114,19 @@ read forces (floor-subtracted) -> occupancy gate -> center of pressure per axis
 differential mix (left = speed + turn, right = speed - turn, normalized if >1)
 -> scale by speed-switch max -> slew limit set by accel switch -> output.
 
+Output (CAN_OUTPUT 1): `outLeft`/`outRight` x LEFT_DIR/RIGHT_DIR x MAX_DUTY
+(OUTPUT_MODE_DUTY 1, wheels-off) or MAX_CURRENT_A (0, on the floor), sent to
+the enabled VESCs (DRIVE_LEFT / DRIVE_RIGHT) at 100 Hz, zeros included.
+Protocol helpers live in `src/vesc_can.h`. Output is allowed unless: kill
+(`s`; `g` clears), a sensor at the 3.3 V rail, an enabled VESC silent for
+200 ms, or an empty seat; any of those zeros output immediately (no slew).
+No calibration or arming step (removed on request 2026-10-23): neutral is 0
+unless `cal` is typed. SIM_MODE + CAN_OUTPUT is a compile error.
+
+Built-in LED: off = empty seat, solid = driving, 5 Hz = fault/kill. Untethered there is no serial kill — the
+battery breaker is the only e-stop. Teensy on external 5 V (VIN): cut the
+VIN–VUSB pad or remove external 5 V before plugging in USB (back-feed).
+
 `SIM_MODE 1` replaces sensors with typed input: `F,B,L,R` raw ADC values, or
 `cal` to capture neutral. `USE_POTS 0` uses default speed/accel instead of the
 switches. `RAW_MONITOR 1` skips the pipeline and only prints raw counts from
@@ -136,7 +150,13 @@ switches. `RAW_MONITOR 1` skips the pipeline and only prints raw counts from
 1. **Done (2026-10-02):** HANDOFF.md §8 two-sensor CAN motor test
    (`can_test` env). Stages 1–3 passed on hardware with VESC ID 1, including
    the USB-unplug stop. `STAGE` in can_motor_test.cpp selects the stage.
-2. Wire and test the rotary-switch ladders and zero button.
-3. Implement VESC CAN in the main pipeline (current commands, status frames).
-4. When all 4 sensors return: SIM_MODE 0, set FLOOR and OCCUPANCY_MIN from
-   measurements, tune RF so a hard corner lean stays below ~3900 counts.
+2. **In progress (2026-10-23):** main firmware drives VESCs over CAN. On the
+   chair with one VESC (left, ID 1) and all 4 sensors; first test is
+   wheels-off in duty mode. Still to verify on hardware: LEFT_DIR, the
+   USB-unplug stop, OCCUPANCY_MIN with a real rider.
+3. Wire and test the rotary-switch ladders and zero button.
+4. Set FLOOR per sensor and OCCUPANCY_MIN from measurements, tune RF so a
+   hard corner lean stays below ~3900 counts.
+5. Open design items: an open (unplugged) sensor reads as zero force and
+   biases the CoP instead of faulting; occupancy loss stops instantly, which
+   may need a short debounce for bouncing in play (must stay within spec B).

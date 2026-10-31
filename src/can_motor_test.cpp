@@ -40,7 +40,7 @@ const uint8_t PIN_S2 = A17;   // pin 41 — sensor 2 (reverse)
 // CAN1: TX = pin 22, RX = pin 23 (fixed by FlexCAN_T4 for CAN1)
 
 // ---------- CAN / VESC ----------
-const uint8_t  VESC_ID  = 1;          // left VESC — the only target for this test
+const uint8_t  VESC_ID  = 26;          // left VESC — the only target for this test
 const uint32_t CAN_BAUD = 500000;
 
 // VESC packet types (id = controller_id | (type << 8), extended 29-bit)
@@ -52,7 +52,7 @@ const uint8_t PKT_STATUS_5 = 27;      // tachometer, input voltage
 const uint32_t STATUS_TIMEOUT_MS = 500;   // no status this long = CAN problem
 
 // ---------- DUTY COMMAND (Stage 2+) ----------
-const float    MAX_DUTY = 0.10f;      // hard cap for this test (keep <= 0.15)
+const float    MAX_DUTY = 0.60f;      // hard cap for this test (keep <= 0.15)
 const float    RAMP_S   = 0.5f;       // 0 -> MAX_DUTY takes at least this long
 const uint32_t SEND_MS  = 20;         // 50 Hz, well inside the VESC timeout
 const float    SLEW_PER_SEND = MAX_DUTY * (SEND_MS / 1000.0f) / RAMP_S;

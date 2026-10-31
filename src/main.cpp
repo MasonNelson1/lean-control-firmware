@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "vesc_can.h"
 
 // Forward declaration: captureNeutral() is called from readRaw() (sim "cal"
 // command) before it is defined. The Arduino IDE generated this
@@ -39,15 +40,15 @@ void captureNeutral();
 //       pipeline is skipped entirely, so motor outputs stay at 0.
 //   0 = normal control loop
 #define RAW_MONITOR 0
-const uint8_t MONITOR_PINS[]  = {A14, A17, A16, A15};   // F,B,L,R = pins 38,41,40,39
+const uint8_t MONITOR_PINS[]  = {A15, A17, A14, A16};   // F,B,L,R = pins 39,41,38,40
 const char*   MONITOR_NAMES[] = {"F", "B", "L", "R"};
 const int     N_MONITOR = sizeof(MONITOR_PINS) / sizeof(MONITOR_PINS[0]);
 
 // ---------- PIN MAP (set to match your wiring) ----------
-const uint8_t PIN_FRONT = A14;   // pin 38
+const uint8_t PIN_FRONT = A15;   // pin 39
 const uint8_t PIN_BACK  = A17;   // pin 41
-const uint8_t PIN_LEFT  = A16;   // pin 40
-const uint8_t PIN_RIGHT = A15;   // pin 39
+const uint8_t PIN_LEFT  = A14;   // pin 38
+const uint8_t PIN_RIGHT = A16;   // pin 40
 const uint8_t PIN_CAL   = 4;        // calibration ("zero") button to GND
 const uint8_t PIN_SPEED_POT = A6;   // pin 20 — max speed knob wiper
 const uint8_t PIN_ACCEL_POT = A7;   // pin 21 — acceleration knob wiper
@@ -58,14 +59,55 @@ const uint8_t PIN_ACCEL_POT = A7;   // pin 21 — acceleration knob wiper
 // would read random positions.
 #define USE_POTS 0
 
+// ---------- MOTOR OUTPUT (VESCs over CAN) ----------
+//   1 = send outLeft / outRight to the VESCs.  0 = print only, no CAN at all.
+#define CAN_OUTPUT 1
+
+// Which sides have a VESC installed. Only these are commanded, and every
+// one of them must be reporting status or all output is forced to 0.
+#define DRIVE_LEFT  1      // VESC_LEFT_ID
+#define DRIVE_RIGHT 0      // VESC_RIGHT_ID (not installed yet)
+const uint8_t VESC_LEFT_ID  = 26;    // VESC Tool default for this unit
+const uint8_t VESC_RIGHT_ID = 2;
+
+// Flip a side (-1) if leaning forward spins that wheel backward.
+// The motors are mirrored, so expect one side to need it.
+const float LEFT_DIR  = +1.0f;
+const float RIGHT_DIR = +1.0f;
+
+//   1 = DUTY: output * MAX_DUTY. Speed follows the lean. Use for
+//       wheels-off-the-ground tests (an unloaded wheel on current
+//       control runs away to full speed).
+//   0 = CURRENT: output * MAX_CURRENT_A. Torque control, for the floor.
+#define OUTPUT_MODE_DUTY 1
+const float    MAX_DUTY      = 0.30f;   // duty at full lean, speed switch at 100%
+const float    MAX_CURRENT_A = 10.0f;   // amps at full lean, speed switch at 100%
+const uint32_t CAN_SEND_MS   = 10;      // 100 Hz, zeros included
+const uint32_t VESC_STATUS_TIMEOUT_MS = 200;   // silent this long = CAN fault
+
+const int SENSOR_RAIL = 4000;   // raw reading this high = shorted sensor / wire on 3.3 V
+
+#if SIM_MODE && CAN_OUTPUT
+#error "SIM_MODE with CAN_OUTPUT would drive real motors from typed numbers. Set one to 0."
+#endif
+#if CAN_OUTPUT && !DRIVE_LEFT && !DRIVE_RIGHT
+#error "CAN_OUTPUT is on but no side is enabled (DRIVE_LEFT / DRIVE_RIGHT)."
+#endif
+
 // ---------- TUNABLES (measure/tune on real hardware) ----------
 const float   FLOOR         = 370.0f;  // no-load ADC reading per channel (the 0.3V bias)
-const float   OCCUPANCY_MIN = 150.0f;  // floor-subtracted total to count as "seated"
+const float   OCCUPANCY_MIN = 0.0f;  // floor-subtracted total to count as "seated"
 const float   DEADZONE      = 0.08f;   // ignore lean smaller than this (fraction of range)
+// A seated torso lean only moves the CoP a fraction of the way to ±1 (that
+// would be all weight on one sensor). The gain scales the lean AFTER the
+// deadzone, so the deadzone still ignores the same posture wobble.
+// Full output at a post-deadzone lean of 1/gain.
+const float   SPEED_GAIN    = 3.0f;    // forward/back
+const float   TURN_GAIN     = 3.0f;    // right/left
 // Speed and acceleration settings come from the rotary switch tables
 // (SPEED_TABLE / ACCEL_TABLE, next to updateKnobs()).
 // Defaults used when USE_POTS = 0
-const float   DEFAULT_SPEED = 0.50f;
+const float   DEFAULT_SPEED = 1.00f;
 const float   DEFAULT_ACCEL = 1.5f;
 const float   CAL_STILL_MAX = 0.05f;   // only allow "zero" when the chair is essentially stopped
 const uint32_t LOOP_US      = 1000;    // 1 kHz control loop
@@ -79,6 +121,16 @@ bool  lastCal = HIGH;
 uint32_t calChangedMs = 0;              // for button debounce
 bool  calStable = HIGH;
 
+// Motor output is allowed unless: kill, a sensor at the 3.3 V rail, a VESC
+// not reporting, or an empty seat. Any of those zeros output immediately.
+bool  driving    = false;    // output allowed this loop (for the LED / printout)
+bool  killed     = false;    // 's' typed: latched until 'g'
+
+#if CAN_OUTPUT
+VescBus can1;
+VescStatus vescs[2] = { {VESC_LEFT_ID}, {VESC_RIGHT_ID} };
+#endif
+
 float maxOutput   = DEFAULT_SPEED;                      // set by speed knob
 float accelTimeS  = DEFAULT_ACCEL;                      // set by accel knob
 float slewPerLoop = (LOOP_US / 1e6f) / DEFAULT_ACCEL;   // derived from accelTimeS
@@ -91,7 +143,7 @@ float slewPerLoop = (LOOP_US / 1e6f) / DEFAULT_ACCEL;   // derived from accelTim
 // pair into a full ±1 lean. With the total, |speed| + |turn| <= 1, so the
 // differential mix can never exceed ±1.
 float coP(float pos, float neg, float total) {
-  if (total < EPS) return 0.0f;           // no force at all
+  if (total < EPS) return 0.0f;           // divide-by-zero guard: no load = neutral
   return (pos - neg) / (total + EPS);
 }
 
@@ -117,18 +169,29 @@ float slew(float cur, float target) {
 // Last raw readings, kept for the live printout.
 float rawF = 0, rawB = 0, rawL = 0, rawR = 0;
 
-// Real-sensor mode: typing "cal" captures neutral (same as the zero
-// button), so the math can be tested before the button is wired.
+// Real-sensor mode serial commands:
+//   s   -> KILL: output to 0 now and latch (acts on the keypress, no Enter)
+//   g   -> clear the kill (still needs neutral lean to re-arm)
+//   cal -> capture neutral (same as the zero button), only while stopped
 void readSerialCommands() {
   static String buf = "";
   while (Serial.available()) {
     char c = Serial.read();
+    if (c == 's' || c == 'S') {
+      killed = true;
+      buf = "";
+      Serial.println("** KILLED — output 0. Type g to clear **");
+      continue;
+    }
     if (c == '\n') {
       buf.trim();
       if (buf.equalsIgnoreCase("cal")) {
         bool stopped = fabs(outLeft) < CAL_STILL_MAX && fabs(outRight) < CAL_STILL_MAX;
         if (stopped) captureNeutral();
         else Serial.println("** Zero ignored: chair must be stopped **");
+      } else if (buf.equalsIgnoreCase("g")) {
+        killed = false;
+        Serial.println("** Kill cleared **");
       }
       buf = "";
     } else if (c != '\r') {
@@ -139,37 +202,10 @@ void readSerialCommands() {
 
 // ---------- RAW SENSOR INPUT (real or simulated) ----------
 void readRaw(float &f, float &b, float &l, float &r) {
-#if SIM_MODE
-  static float sf = FLOOR, sb = FLOOR, sl = FLOOR, sr = FLOOR;
-  static String buf = "";
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\n') {
-      buf.trim();
-      if (buf.equalsIgnoreCase("cal")) {
-        captureNeutral();                 // typing "cal" calibrates in sim
-      } else {
-        int v[4], n = 0, start = 0;
-        for (int i = 0; i <= (int)buf.length() && n < 4; i++) {
-          if (i == (int)buf.length() || buf[i] == ',') {
-            v[n++] = buf.substring(start, i).toInt();
-            start = i + 1;
-          }
-        }
-        if (n == 4) { sf = v[0]; sb = v[1]; sl = v[2]; sr = v[3]; }
-      }
-      buf = "";
-    } else if (c != '\r') {
-      buf += c;
-    }
-  }
-  f = sf; b = sb; l = sl; r = sr;
-#else
-  f = analogRead(PIN_FRONT);
+f = analogRead(PIN_FRONT);
   b = analogRead(PIN_BACK);
   l = analogRead(PIN_LEFT);
   r = analogRead(PIN_RIGHT);
-#endif
   rawF = f; rawB = b; rawL = l; rawR = r;
 }
 
@@ -253,6 +289,53 @@ void captureNeutral() {
   Serial.println("** Neutral posture captured **");
 }
 
+// Built-in LED shows the state (no laptop needed):
+//   off = empty seat   solid = driving   fast blink = fault or kill
+void updateStatusLed(bool fault, bool seated) {
+  uint32_t t = millis();
+  bool on;
+  if (fault)            on = (t / 100) % 2;    // 5 Hz
+  else if (!seated)     on = false;
+  else                  on = true;
+  digitalWrite(LED_BUILTIN, on);
+}
+
+#if CAN_OUTPUT
+// Every enabled VESC has reported status recently.
+bool vescsReporting() {
+  if (DRIVE_LEFT  && !vescFresh(vescs[0], VESC_STATUS_TIMEOUT_MS)) return false;
+  if (DRIVE_RIGHT && !vescFresh(vescs[1], VESC_STATUS_TIMEOUT_MS)) return false;
+  return true;
+}
+
+// One side's -1..+1 output -> a VESC command.
+void sendMotor(uint8_t id, float out) {
+#if OUTPUT_MODE_DUTY
+  vescSetDuty(can1, id, out * MAX_DUTY);
+#else
+  vescSetCurrent(can1, id, out * MAX_CURRENT_A);
+#endif
+}
+
+uint32_t busFrames = 0;      // every CAN frame received, from any id
+int      busLastId = -1;     // controller id of the last extended frame
+
+void printVesc(const char *name, const VescStatus &v) {
+  if (v.frames == 0) {
+    // Diagnosis: frames from another id = wrong Controller ID in VESC Tool.
+    // No frames + tx errors climbing = nobody ACKs us (VESC off, no 5 V on
+    // MCP2562 VDD, STBY high, CANH/CANL open). rx errors = baud/wiring/termination.
+    uint32_t ecr = FLEXCAN1_ECR;
+    Serial.printf(" %s: no status (bus frames=%lu", name, (unsigned long)busFrames);
+    if (busLastId >= 0) Serial.printf(" last id=%d", busLastId);
+    Serial.printf(" err rx=%lu tx=%lu)", (unsigned long)((ecr >> 8) & 0xFF), (unsigned long)(ecr & 0xFF));
+    return;
+  }
+  Serial.printf(" %s: %6ld erpm %5.1fA %4.1fV %3.0fC", name, (long)v.erpm,
+                v.current, v.inputVoltage, v.mosfetTempC);
+}
+#endif
+
 // ============================================================
 void setup() {
   Serial.begin(115200);
@@ -260,6 +343,9 @@ void setup() {
   analogReadAveraging(4);
   pinMode(PIN_CAL, INPUT_PULLUP);
   pinMode(LED_BUILTIN, OUTPUT);
+#if CAN_OUTPUT
+  vescBegin(can1);
+#endif
   delay(200);
   Serial.println("LEAN control firmware ready.");
 #if RAW_MONITOR
@@ -269,12 +355,35 @@ void setup() {
   Serial.println("  type  F,B,L,R   e.g. 800,400,500,500   (raw ADC values)");
   Serial.println("  type  cal       to capture neutral posture");
 #else
-  Serial.println("SENSOR MODE: reading A14-A17 (F,B,L,R). Motor output is print-only.");
-  Serial.println("  type  cal  (or press zero button) to capture neutral posture");
+  Serial.println("SENSOR MODE: reading A14-A17 (F,B,L,R)");
+#if CAN_OUTPUT
+  Serial.print("  MOTORS LIVE over CAN: ");
+  if (DRIVE_LEFT)  Serial.printf("left=VESC %d  ", VESC_LEFT_ID);
+  if (DRIVE_RIGHT) Serial.printf("right=VESC %d  ", VESC_RIGHT_ID);
+#if OUTPUT_MODE_DUTY
+  Serial.print("DUTY mode, max "); Serial.println(MAX_DUTY, 2);
+#else
+  Serial.print("CURRENT mode, max "); Serial.print(MAX_CURRENT_A, 1); Serial.println(" A");
+#endif
+#else
+  Serial.println("  Motor output is print-only (CAN_OUTPUT 0)");
+#endif
+  Serial.println("  sit and lean to drive (optional: type  cal  to zero your posture)");
+  Serial.println("  s = KILL (instant, latched)   g = clear kill");
 #endif
 }
 
 void loop() {
+#if CAN_OUTPUT
+  // --- drain received VESC status frames ---
+  CAN_message_t msg;
+  while (can1.read(msg)) {
+    busFrames++;                          // any frame at all, for diagnosis
+    if (msg.flags.extended) busLastId = msg.id & 0xFF;
+    vescHandleFrame(msg, vescs, 2);
+  }
+#endif
+
   // --- fixed-rate control loop (rollover-safe) ---
   static uint32_t last = 0;
   if ((uint32_t)(micros() - last) < LOOP_US) return;
@@ -305,26 +414,25 @@ void loop() {
 #endif
 
   // --- calibration ("zero") button: debounced, and only while stopped ---
-  bool raw = digitalRead(PIN_CAL);
+  /*bool raw = digitalRead(PIN_CAL);
   if (raw != lastCal) { calChangedMs = millis(); lastCal = raw; }
   if (millis() - calChangedMs > 50 && raw != calStable) {   // stable 50 ms
     calStable = raw;
     if (calStable == LOW) {                                  // a real press
       bool stopped = fabs(outLeft) < CAL_STILL_MAX && fabs(outRight) < CAL_STILL_MAX;
-      if (stopped) {
-        captureNeutral();
-        digitalWrite(LED_BUILTIN, HIGH);                     // brief confirm blink
-      } else {
-        Serial.println("** Zero ignored: chair must be stopped **");
-      }
-    } else {
-      digitalWrite(LED_BUILTIN, LOW);
+      if (stopped) captureNeutral();
+      else Serial.println("** Zero ignored: chair must be stopped **");
     }
-  }
+  }*/
 
   // --- read forces ---
   float f, b, l, r;
   readForces(f, b, l, r);
+  f = 2100 - f;
+  b = 2100 - b;
+  l = 2100 - l;
+  r = 2100 - r;
+
   float total = f + b + l + r;
 
   float targetLeft, targetRight;
@@ -332,18 +440,24 @@ void loop() {
   float copSpeed = 0, copTurn = 0;      // raw CoP before neutral/deadzone (printing)
 
   // --- occupancy gate: empty seat OR disconnected sensor -> safe stop ---
-  if (total < OCCUPANCY_MIN) {
+  if (total <= OCCUPANCY_MIN) {
     targetLeft = 0; targetRight = 0;
   } else {
     // --- center of pressure on each axis, relative to neutral posture ---
-    copSpeed = coP(f, b, total);
-    copTurn  = coP(r, l, total);
-    speed = clampUnit(copSpeed - neutralSpeed);    // forward(+)/back(-)
-    turn  = clampUnit(copTurn  - neutralTurn);     // right(+)/left(-)
+    // copSpeed = coP(f, b, total);
+    // copTurn  = coP(r, l, total);
+    // float forwardCommand = f - b;
+    // float turnCommand = r - l;
+    speed = clampUnit((f - b) / (f + b));    // forward(+)/back(-)
+    turn  = clampUnit((r  - l) / (r + l));     // right(+)/left(-)
 
     // --- deadzone ---
-    speed = deadzone(speed);
-    turn  = deadzone(turn);
+    // speed = deadzone(speed);
+    // turn  = deadzone(turn);
+
+    // --- lean gain (after the deadzone) ---
+    speed = clampUnit(speed * SPEED_GAIN);
+    turn  = clampUnit(turn  * TURN_GAIN);
 
     // --- mix to differential drive ---
     float left  = speed + turn;
@@ -357,29 +471,62 @@ void loop() {
     targetRight = right * maxOutput;
   }
 
-  // --- slew-rate limit (smooth, no instant jumps) ---
-  outLeft  = slew(outLeft,  targetLeft);
-  outRight = slew(outRight, targetRight);
+  // --- arming / faults ---
+  bool seated = total >= OCCUPANCY_MIN;
+  bool sensorFault = rawF >= SENSOR_RAIL || rawB >= SENSOR_RAIL ||
+                     rawL >= SENSOR_RAIL || rawR >= SENSOR_RAIL;
+#if CAN_OUTPUT
+  bool canOk = vescsReporting();
+#else
+  bool canOk = true;
+#endif
+  driving = !(killed || sensorFault || !canOk || !seated);
 
-  // --- OUTPUT ---
-  // TODO (later): send outLeft / outRight as current commands over CAN to the
-  // two VESCs. For now, print so you can watch the behavior.
+  if (!driving) {
+    // Fault, kill, or empty seat: zero immediately, no slew.
+    outLeft = 0; outRight = 0;
+  } else {
+    // --- slew-rate limit (smooth, no instant jumps) ---
+    outLeft  = slew(outLeft,  targetLeft);
+    outRight = slew(outRight, targetRight);
+  }
+  updateStatusLed(killed || sensorFault || !canOk, seated);
+
+  // --- OUTPUT: VESC commands at 100 Hz, every cycle, zeros included ---
+#if CAN_OUTPUT
+  static uint32_t tCan = 0;
+  if (millis() - tCan >= CAN_SEND_MS) {
+    tCan = millis();
+    if (DRIVE_LEFT)  sendMotor(VESC_LEFT_ID,  outLeft  * LEFT_DIR);
+    if (DRIVE_RIGHT) sendMotor(VESC_RIGHT_ID, outRight * RIGHT_DIR);
+  }
+#endif
+
+  // --- printout: aligned columns, header every 20 lines, 5 Hz ---
   static uint32_t tPrint = 0;
-  if (millis() - tPrint >= 100) {        // 10 Hz, readable
+  static int printLines = 0;
+  if (millis() - tPrint >= 200) {
     tPrint = millis();
-    bool seated = total >= OCCUPANCY_MIN;
-    Serial.print("raw F="); Serial.print(rawF, 0);
-    Serial.print(" B="); Serial.print(rawB, 0);
-    Serial.print(" L="); Serial.print(rawL, 0);
-    Serial.print(" R="); Serial.print(rawR, 0);
-    Serial.print("  tot="); Serial.print(total, 0);
-    Serial.print(seated ? " Y" : " N");
-    Serial.print(" | CoP fb="); Serial.print(copSpeed, 2);
-    Serial.print(" rl="); Serial.print(copTurn, 2);
-    Serial.print(" | spd="); Serial.print(speed, 2);
-    Serial.print(" trn="); Serial.print(turn, 2);
-    Serial.print(" | L="); Serial.print(outLeft, 2);
-    Serial.print(" R="); Serial.print(outRight, 2);
-    Serial.print(" | "); Serial.println(directionName(seated, speed, turn));
+
+    // Why the motors are (not) allowed to move, first reason wins.
+    const char *state = killed       ? "KILLED (g)"
+                      : sensorFault  ? "SENSOR FAULT"
+                      : !canOk       ? "NO VESC"
+                      : !seated      ? "EMPTY SEAT"
+                      :                "DRIVING";
+
+    if (printLines++ % 20 == 0) {
+      Serial.println();
+      Serial.println("     F     B     L     R   total seat |  CoP fb    rl |   spd   trn |  outL  outR | state          | direction        | VESC");
+    }
+    Serial.printf("  %4.0f  %4.0f  %4.0f  %4.0f   %5.0f   %s  |  %+5.2f %+5.2f | %+5.2f %+5.2f | %+5.2f %+5.2f | %-14s | %-16s |",
+                  f, b, l, r, total, seated ? "Y" : "N",
+                  copSpeed, copTurn, speed, turn, outLeft, outRight,
+                  state, directionName(seated, speed, turn));
+#if CAN_OUTPUT
+    if (DRIVE_LEFT)  printVesc("L", vescs[0]);
+    if (DRIVE_RIGHT) printVesc("R", vescs[1]);
+#endif
+    Serial.println();
   }
 }

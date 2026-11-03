@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ezButton.h>
 #include "vesc_can.h"
 //test to see if caleb can commit. 
 // ============================================================
@@ -31,7 +32,7 @@ const uint8_t PIN_F = A0;    // pin 14
 const uint8_t PIN_B = A17;   // pin 41
 const uint8_t PIN_L = A14;   // pin 38
 const uint8_t PIN_R = A16;   // pin 40
-const uint8_t PIN_CAL_BUTTON = 4;    // button to GND (INPUT_PULLUP)
+const uint8_t PIN_CAL_BUTTON = 4;    
 const int     CAL_SAMPLES    = 20;   // readings averaged per sensor (~1 ms each)
 
 const uint8_t VESC_LEFT_ID  = 26;
@@ -51,8 +52,13 @@ const float FRONT_GAIN = 1.0f;
 const float LEFT_GAIN = 1.0f;
 const float RIGHT_GAIN = 1.0f;
 
+// MISC CONSTANTS and vars
+ezButton calibrateButton(PIN_CAL_BUTTON);
+const int CALIBRATE_BUTTON_DEBOUNCE = 50;//ms
+int userWeightEstimate = 370;//default to unloaded sensor values. 
+boolean initiallyCalibrated = false;
 
-const float RAMP_S     = 1.0f;   // 0 -> MAX_DUTY takes at least this long
+const float RAMP_S     = 0.5f;   // 0 -> MAX_DUTY takes at least this long
 const uint32_t SEND_MS = 10;     // 100 Hz
 
 VescBus can1;
@@ -60,7 +66,7 @@ VescStatus vescs[2] = { {VESC_LEFT_ID}, {VESC_RIGHT_ID} };
 float dutyL = 0.0f, dutyR = 0.0f;
 bool  stopped = false;
 int   unknownId = -1;            // a VESC on the bus that isn't LEFT or RIGHT
-int   floorF = DEFAULT_FLOOR, floorB = DEFAULT_FLOOR, floorL = DEFAULT_FLOOR, floorR = DEFAULT_FLOOR;
+int   floorF = 0, floorB = 0, floorL = 0, floorR = 0;
 
 int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
 
@@ -68,11 +74,7 @@ int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
 // sensor's floor. Only while both wheels are stopped. Blocks ~CAL_SAMPLES ms
 // (no CAN commands meanwhile; harmless since the wheels are stopped).
 void calibrate() {
-  //only calibrate when wheels are stopped
-  // if (fabs(dutyL) > 0.01f || fabs(dutyR) > 0.01f) {
-  //   Serial.println("** Calibrate ignored: wheels must be stopped **");
-  //   return;
-  // }
+  
   long sumF = 0, sumB = 0, sumL = 0, sumR = 0;
   for (int i = 0; i < CAL_SAMPLES; i++) {
     sumF += analogRead(PIN_F);
@@ -85,6 +87,13 @@ void calibrate() {
   floorB = (sumB + CAL_SAMPLES / 2) / CAL_SAMPLES;
   floorL = (sumL + CAL_SAMPLES / 2) / CAL_SAMPLES;
   floorR = (sumR + CAL_SAMPLES / 2) / CAL_SAMPLES;
+  userWeightEstimate = (floorF + floorB + floorL + floorR) / 4;//integer division ok here.
+
+  if (!initiallyCalibrated) {
+    initiallyCalibrated = true;
+    stopped = false;
+  }
+
   Serial.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
                 CAL_SAMPLES, floorF, floorB, floorL, floorR);
 }
@@ -108,20 +117,35 @@ void printVesc(const char *name, const VescStatus &v) {
   else Serial.printf(" | %s: %6ld erpm %5.1fA %3.0fC", name, (long)v.erpm, v.current, v.mosfetTempC);
 }
 
+
 void setup() {
   Serial.begin(115200);
   analogReadResolution(12);
   analogReadAveraging(4);
-  pinMode(PIN_CAL_BUTTON, INPUT_PULLUP);
+  calibrateButton.setDebounceTime(CALIBRATE_BUTTON_DEBOUNCE);
   vescBegin(can1);
   delay(200);
   Serial.printf("LEAN SIMPLE DRIVE: left VESC %d, right VESC %d.  s = stop, g = go\n",
                 VESC_LEFT_ID, VESC_RIGHT_ID);
   Serial.printf("  calibrate: button on pin %d, seat empty. Floors start at %d\n",
                 PIN_CAL_BUTTON, DEFAULT_FLOOR);
+  
 }
 
 void loop() {
+  //this debounces the button and calibrates if the user wants to calibrate. 
+  // for some reason this has to be the first thing in loop() because of interference from other stuff like the can or something. 
+  calibrateButton.loop();
+  if (calibrateButton.isPressed()) {
+    calibrate();
+  }
+
+  //force calibration before the wheels can move.
+  if (!initiallyCalibrated) {
+    stopped = true;
+  }
+
+
   // --- receive VESC status (for the printout only) ---
   CAN_message_t msg;
   while (can1.read(msg)) {
@@ -138,15 +162,7 @@ void loop() {
     if (c == 'g' || c == 'G') { stopped = false; Serial.println("** GO **"); }
   }
 
-  // --- calibrate button (to GND): act on the press, 50 ms debounce ---
-  static bool lastBtn = HIGH;
-  static uint32_t tBtn = 0;
-  bool btn = digitalRead(PIN_CAL_BUTTON);
-  if (btn != lastBtn && millis() - tBtn > 50) {
-    tBtn = millis();
-    lastBtn = btn;
-    if (btn == LOW) calibrate();
-  }
+  
 
   static uint32_t tSend = 0;
   if (millis() - tSend < SEND_MS) return;
@@ -182,15 +198,37 @@ void loop() {
   vescSetDuty(can1, VESC_LEFT_ID,  dutyL * DIR_LEFT);
   vescSetDuty(can1, VESC_RIGHT_ID, dutyR * DIR_RIGHT);
 
-  // --- print 5x a second ---
+  // // --- print 5x a second ---
+  // static int n = 0;
+  // if (n++ % 20 != 0) return;
+  // if (n % 400 == 1)
+  //   Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   dutyL   dutyR | VESCs");
+  // Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+5d  %+5d  %+.3f  %+.3f", f, b, l, r, total,
+  //              userWeightEstimate, speed, turn, dutyL, dutyR);
+  // printVesc("L", vescs[0]);
+  // printVesc("R", vescs[1]);
+  // if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
+  // Serial.println(stopped ? "  STOPPED" : "");
+  
+  
+  //csv debug printout
   static int n = 0;
-  if (n++ % 20 != 0) return;
-  if (n % 400 == 1)
-    Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total seat  speed   turn   dutyL   dutyR | VESCs");
-  Serial.printf("  %4d  %4d  %4d  %4d  %5d   %s  %+5d  %+5d  %+.3f  %+.3f", f, b, l, r, total,
-                true ? "Y" : "N", speed, turn, dutyL, dutyR);
-  printVesc("L", vescs[0]);
-  printVesc("R", vescs[1]);
-  if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
-  Serial.println(stopped ? "  STOPPED" : "");
+  if (n++ % 5 != 0) return;
+
+  // Print CSV header once
+  if (n == 1) {
+    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,dutyL,dutyR,stopped");
+  }
+
+  // Print CSV row
+  Serial.printf(
+    "%lu,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%d\n",
+    millis(),
+    f, b, l, r, total,
+    userWeightEstimate,
+    speed, turn,
+    dutyL, dutyR,
+    stopped ? 1 : 0
+);
+  
 }

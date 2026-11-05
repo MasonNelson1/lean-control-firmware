@@ -37,6 +37,7 @@ const int     CAL_SAMPLES    = 20;   // readings averaged per sensor (~1 ms each
 const float WHEEL_CIRCUMFERENCE_M = 74.75f * 0.0254f; //meters
 const float MAX_ACCEL = 2.85f;// m/s^2
 const float MAX_SPEED = 4.91744f;//11mph but in m/s
+const float JERK_RATE = 1;//m/s^3
 
 const uint8_t VESC_LEFT_ID  = 26;
 const uint8_t VESC_RIGHT_ID = 2;     // set to the second VESC's Controller ID (VESC Tool)
@@ -78,6 +79,8 @@ int backSaturation = 1000000;
 int leftSaturation = 1000000;
 int rightSaturation = 1000000;
 
+const float deadband = 0.05f;
+
 
 boolean initiallyCalibrated = false;
 
@@ -111,15 +114,43 @@ float speedToRPM(float speed) {
 }
 
 // Returns the next RPM, towards a target at the provided linear acceleration in m/s^2. 
-float accelToTarget(float currentRPM, float desiredRPM, float accelRate) {
+// float accelToTarget(float currentRPM, float desiredRPM, float accelRate) {
+//     const float dt = LOOP_RATE / 1000.0f;
+
+//     // Maximum RPM change this loop.
+//     const float maxStep = linearAccelToRPMs(accelRate) * dt;
+
+//     return currentRPM + constrain(desiredRPM - currentRPM, -maxStep, maxStep);
+// }
+
+float accelToTarget(float currentRPM, float desiredRPM,
+                    float accelRate, float jerkRate) {
+    static float currentAccelRPMs = 0.0f;
+
     const float dt = LOOP_RATE / 1000.0f;
 
-    // Maximum RPM change this loop.
-    const float maxStep = linearAccelToRPMs(accelRate) * dt;
+    // Desired acceleration needed to reach the target.
+    float desiredAccelRPMs = (desiredRPM - currentRPM) / dt;
 
-    return currentRPM + constrain(desiredRPM - currentRPM, -maxStep, maxStep);
+    // Limit desired acceleration.
+    desiredAccelRPMs = constrain(
+        desiredAccelRPMs,
+        -linearAccelToRPMs(accelRate),
+        linearAccelToRPMs(accelRate)
+    );
+
+    // Limit how quickly acceleration can change (jerk).
+    const float maxJerkStep = linearAccelToRPMs(jerkRate) * dt;
+
+    currentAccelRPMs += constrain(
+        desiredAccelRPMs - currentAccelRPMs,
+        -maxJerkStep,
+        maxJerkStep
+    );
+
+    // Integrate acceleration to get the new RPM.
+    return currentRPM + currentAccelRPMs * dt;
 }
-
 // Average CAL_SAMPLES readings of each sensor; each average becomes that
 // sensor's floor. Only while both wheels are stopped. Blocks ~CAL_SAMPLES ms
 // (no CAN commands meanwhile; harmless since the wheels are stopped).
@@ -246,12 +277,19 @@ void loop() {
 
   
 
+  
+
   int total = f + b + l + r;
   bool seated = total >= userWeightEstimate * .75f;
 
-  //calculate speed and turn components from -1 to 1
+  //calculate speed and turn components from -1 to 1 
   float speed = normalizeSensorPair(f - b, backSaturation, frontSaturation);
   float turn  = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
+  
+  //apply deadband. 
+  if (fabs(speed) < deadband) speed = 0.0f;
+  if (fabs(turn) < deadband)  turn = 0.0f;
+
 
 
   // --- stop now, or ramp each wheel toward its target ---
@@ -264,8 +302,8 @@ void loop() {
     //also need seperate angular max speed to match specs maybe. 
     float leftTargetRPM = constrain(speed + turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
     float rightTargetRPM = constrain(speed - turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-    leftRpms = accelToTarget(leftRpms, leftTargetRPM, MAX_ACCEL);
-    rightRpms = accelToTarget(rightRpms, rightTargetRPM, MAX_ACCEL);
+    leftRpms = accelToTarget(leftRpms, leftTargetRPM, MAX_ACCEL, JERK_RATE);
+    rightRpms = accelToTarget(rightRpms, rightTargetRPM, MAX_ACCEL, JERK_RATE);
     // leftRpms = accelToTarget(leftRpms,  map(speed + turn, -1, 1, -speedToRPM(MAX_SPEED), speedToRPM(MAX_SPEED)), MAX_ACCEL);
     // rightRpms = accelToTarget(rightRpms,  map(speed - turn, -1, 1, -speedToRPM(MAX_SPEED), speedToRPM(MAX_SPEED)), MAX_ACCEL);
   }

@@ -34,6 +34,9 @@ const uint8_t PIN_L = A14;   // pin 38
 const uint8_t PIN_R = A16;   // pin 40
 const uint8_t PIN_CAL_BUTTON = 4;    
 const int     CAL_SAMPLES    = 20;   // readings averaged per sensor (~1 ms each)
+const float WHEEL_CIRCUMFERENCE_M = 74.75f * 0.0254f; //meters
+const float MAX_ACCEL = 2.85f;// m/s^2
+const float MAX_SPEED = 4.91744f;//11mph but in m/s
 
 const uint8_t VESC_LEFT_ID  = 26;
 const uint8_t VESC_RIGHT_ID = 2;     // set to the second VESC's Controller ID (VESC Tool)
@@ -55,20 +58,67 @@ const float RIGHT_GAIN = 1.0f;
 // MISC CONSTANTS and vars
 ezButton calibrateButton(PIN_CAL_BUTTON);
 const int CALIBRATE_BUTTON_DEBOUNCE = 50;//ms
+
+//calibration constants
 int userWeightEstimate = 370;//default to unloaded sensor values. 
+
+//these constants decide how much a sensor needs to be triggered in relation to 
+//the weight estimate to be considered full input. 
+//so a value of one means if the sensor is reading a value equal to the user's weight, the the max value is reached. 
+//the smaller the value, the more responsive the chair is. 
+int frontWeightFactor = 1;
+int backWeightFactor = 1;
+int leftWeightFactor = 1;
+int rightWeightFactor = 1;
+
+//these values are set in calibration and are initialized unreasonably high to preclude 
+//accidental wheel movement. 
+int frontSaturation = 1000000;
+int backSaturation = 1000000;
+int leftSaturation = 1000000;
+int rightSaturation = 1000000;
+
+
 boolean initiallyCalibrated = false;
 
 const float RAMP_S     = 0.5f;   // 0 -> MAX_DUTY takes at least this long
-const uint32_t SEND_MS = 10;     // 100 Hz
+const uint32_t LOOP_RATE = 5;     // 200 Hz
 
 VescBus can1;
 VescStatus vescs[2] = { {VESC_LEFT_ID}, {VESC_RIGHT_ID} };
-float dutyL = 0.0f, dutyR = 0.0f;
+float leftRpms = 0.0f, rightRpms = 0.0f;
 bool  stopped = false;
 int   unknownId = -1;            // a VESC on the bus that isn't LEFT or RIGHT
 int   floorF = 0, floorB = 0, floorL = 0, floorR = 0;
 
 int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
+
+
+
+
+// Convert linear acceleration (m/s^2) to angular acceleration (RPM/s)
+float linearAccelToRPMs(float accel) {
+    return accel * (60.0f / WHEEL_CIRCUMFERENCE_M);
+}
+
+// Convert angular acceleration (RPM/s) to linear acceleration (m/s^2)
+float rpmsToLinearAccel(float rpms) {
+    return rpms * (WHEEL_CIRCUMFERENCE_M / 60.0f);
+}
+
+float speedToRPM(float speed) {
+  return linearAccelToRPMs(speed);
+}
+
+// Returns the next RPM, towards a target at the provided linear acceleration in m/s^2. 
+float accelToTarget(float currentRPM, float desiredRPM, float accelRate) {
+    const float dt = LOOP_RATE / 1000.0f;
+
+    // Maximum RPM change this loop.
+    const float maxStep = linearAccelToRPMs(accelRate) * dt;
+
+    return currentRPM + constrain(desiredRPM - currentRPM, -maxStep, maxStep);
+}
 
 // Average CAL_SAMPLES readings of each sensor; each average becomes that
 // sensor's floor. Only while both wheels are stopped. Blocks ~CAL_SAMPLES ms
@@ -89,6 +139,12 @@ void calibrate() {
   floorR = (sumR + CAL_SAMPLES / 2) / CAL_SAMPLES;
   userWeightEstimate = (floorF + floorB + floorL + floorR) / 4;//integer division ok here.
 
+  frontSaturation = frontWeightFactor * userWeightEstimate;
+  backSaturation = backWeightFactor * userWeightEstimate;
+  leftSaturation = leftWeightFactor * userWeightEstimate;
+  rightSaturation = rightWeightFactor * userWeightEstimate;
+  
+
   if (!initiallyCalibrated) {
     initiallyCalibrated = true;
     stopped = false;
@@ -98,19 +154,23 @@ void calibrate() {
                 CAL_SAMPLES, floorF, floorB, floorL, floorR);
 }
 
-// One wheel's lean (counts) -> target duty.
-float leanToDuty(int lean) {
-  if (abs(lean) <= DEADBAND) return 0.0f;
-  float x = (float)(abs(lean) - DEADBAND) / (FULL - DEADBAND) * GAIN;
-  if (x > 1.0f) x = 1.0f;
-  return (lean > 0 ? 1.0f : -1.0f) * x * MAX_DUTY;
+float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit) {
+    if (difference >= 0) {
+        return constrain(
+            (float)difference / positiveLimit,
+            0.0f,
+            1.0f
+        );
+    } else {
+        return constrain(
+            (float)difference / negativeLimit,
+            -1.0f,
+            0.0f
+        );
+    }
 }
 
-// Move cur toward target, no faster than RAMP_S for 0 -> MAX_DUTY.
-float ramp(float cur, float target) {
-  float step = MAX_DUTY * (SEND_MS / 1000.0f) / RAMP_S;
-  return cur + constrain(target - cur, -step, step);
-}
+
 
 void printVesc(const char *name, const VescStatus &v) {
   if (v.frames == 0) Serial.printf(" | %s: no status", name);
@@ -164,9 +224,7 @@ void loop() {
 
   
 
-  static uint32_t tSend = 0;
-  if (millis() - tSend < SEND_MS) return;
-  tSend = millis();
+
 
   // --- read, minus each sensor's floor ---
   int f = aboveFloor(analogRead(PIN_F), floorF);
@@ -180,55 +238,84 @@ void loop() {
   l = (int)(l * LEFT_GAIN);
   r = (int)(r * RIGHT_GAIN);
 
+  //apply saturations
+  f = min(frontSaturation, f);
+  b = min(frontSaturation, b);
+  l = min(frontSaturation, l);
+  r = min(frontSaturation, r);
+
+  
 
   int total = f + b + l + r;
-  // bool seated = total >= SEATED_MIN;
-  int speed = f - b;
-  int turn  = r - l;
+  bool seated = total >= userWeightEstimate * .75f;
+
+  //calculate speed and turn components from -1 to 1
+  float speed = normalizeSensorPair(f - b, backSaturation, frontSaturation);
+  float turn  = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
+
 
   // --- stop now, or ramp each wheel toward its target ---
   if (stopped /*|| !seated*/) {
-    dutyL = 0.0f;
-    dutyR = 0.0f;
+    leftRpms = 0.0f;
+    rightRpms = 0.0f;
   } else {
-    dutyL = ramp(dutyL, leanToDuty(speed + turn));
-    dutyR = ramp(dutyR, leanToDuty(speed - turn));
+    //todo replace MAX_ACCEL with min(accel, MAX_ACCEL) where accel is the user set value from the control box. 
+    //also do the same with the max speeds. 
+    //also need seperate angular max speed to match specs maybe. 
+    float leftTargetRPM = constrain(speed + turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
+    float rightTargetRPM = constrain(speed - turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
+    leftRpms = accelToTarget(leftRpms, leftTargetRPM, MAX_ACCEL);
+    rightRpms = accelToTarget(rightRpms, rightTargetRPM, MAX_ACCEL);
+    // leftRpms = accelToTarget(leftRpms,  map(speed + turn, -1, 1, -speedToRPM(MAX_SPEED), speedToRPM(MAX_SPEED)), MAX_ACCEL);
+    // rightRpms = accelToTarget(rightRpms,  map(speed - turn, -1, 1, -speedToRPM(MAX_SPEED), speedToRPM(MAX_SPEED)), MAX_ACCEL);
   }
 
-  vescSetDuty(can1, VESC_LEFT_ID,  dutyL * DIR_LEFT);
-  vescSetDuty(can1, VESC_RIGHT_ID, dutyR * DIR_RIGHT);
+
+  //rate limit the loop. 
+  //this is placed right before the motor communication to try and make that the most consistently limited thing. 
+  static uint32_t tSend = 0;
+  if (millis() - tSend < LOOP_RATE) {
+    return;
+  }
+  tSend = millis();
+
+  // vescSetDuty(can1, VESC_LEFT_ID,  dutyL * DIR_LEFT);
+  // vescSetDuty(can1, VESC_RIGHT_ID, dutyR * DIR_RIGHT);
+     vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
+    vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
+ 
 
   // // --- print 5x a second ---
-  // static int n = 0;
-  // if (n++ % 20 != 0) return;
-  // if (n % 400 == 1)
-  //   Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   dutyL   dutyR | VESCs");
-  // Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+5d  %+5d  %+.3f  %+.3f", f, b, l, r, total,
-  //              userWeightEstimate, speed, turn, dutyL, dutyR);
-  // printVesc("L", vescs[0]);
-  // printVesc("R", vescs[1]);
-  // if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
-  // Serial.println(stopped ? "  STOPPED" : "");
+  static int n = 0;
+  if (n++ % 20 != 0) return;
+  if (n % 400 == 1)
+    Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   dutyL   dutyR | VESCs");
+  Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %+.3f  %+.3f", f, b, l, r, total,
+               userWeightEstimate, speed, turn, leftRpms, rightRpms);
+  printVesc("L", vescs[0]);
+  printVesc("R", vescs[1]);
+  if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
+  Serial.println(stopped ? "  STOPPED" : "");
   
   
   //csv debug printout
-  static int n = 0;
-  if (n++ % 5 != 0) return;
+//   static int n = 0;
+//   if (n++ % 5 != 0) return;
 
-  // Print CSV header once
-  if (n == 1) {
-    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,dutyL,dutyR,stopped");
-  }
+//   // Print CSV header once
+//   if (n == 1) {
+//     Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,dutyL,dutyR,stopped");
+//   }
 
-  // Print CSV row
-  Serial.printf(
-    "%lu,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%d\n",
-    millis(),
-    f, b, l, r, total,
-    userWeightEstimate,
-    speed, turn,
-    dutyL, dutyR,
-    stopped ? 1 : 0
-);
+//   // Print CSV row
+//   Serial.printf(
+//     "%lu,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%d\n",
+//     millis(),
+//     f, b, l, r, total,
+//     userWeightEstimate,
+//     speed, turn,
+//     dutyL, dutyR,
+//     stopped ? 1 : 0
+// );
   
 }

@@ -15,6 +15,7 @@ const uint32_t VESC_CAN_BAUD = 500000;
 
 // Packet types
 const uint8_t VESC_SET_DUTY    = 0;    // int32 duty * 100000
+const uint8_t VESC_SET_ERPM    = 3;    //int32 erpm, unscaled. 
 const uint8_t VESC_SET_CURRENT = 1;    // int32 amps * 1000
 const uint8_t VESC_STATUS      = 9;    // ERPM, current, duty
 const uint8_t VESC_STATUS_4    = 16;   // MOSFET temp, motor temp, input current
@@ -64,6 +65,13 @@ inline void vescSend(VescBus &bus, uint8_t id, uint8_t type, int32_t value) {
 inline void vescSetDuty(VescBus &bus, uint8_t id, float duty) {
   vescSend(bus, id, VESC_SET_DUTY, (int32_t)lroundf(duty * 100000.0f));
 }
+
+inline void vescSetWheelRPM(VescBus &bus, uint8_t id, int32_t rpm) {
+   //14 is the gear and belt reduction and 8 is because its an 8 pole motor and for some reason you need to do half that 
+   // and the vesc takes erpm so you have to account for that. 
+  vescSend(bus, id, VESC_SET_ERPM, (int32_t)lroundf(rpm * 14.5454f * 4.0f));
+}
+
 inline void vescSetCurrent(VescBus &bus, uint8_t id, float amps) {
   vescSend(bus, id, VESC_SET_CURRENT, (int32_t)lroundf(amps * 1000.0f));
 }

@@ -1,0 +1,89 @@
+{
+  "serial_rows": 12836,
+  "serial_duration_s": 64.175,
+  "serial_median_interval_ms": 4.999999999999893,
+  "phone_offset_s": -0.586770822168784,
+  "alignment_equation": "serial_relative_time_s = phone_time_s + phone_offset_s",
+  "forward_correlation": 0.7880747837904487,
+  "right_correlation": 0.8370216616380891,
+  "forward_sign": 1,
+  "right_sign": 1,
+  "early_correlations": [
+    0.8486974575557955,
+    0.921297711216987
+  ],
+  "late_correlations": [
+    0.7226518693839799,
+    0.5064734492056094
+  ],
+  "diagnostic_scale_fit": {
+    "offset_s": -0.526325948640554,
+    "scale": 0.9977798072218205,
+    "mean_abs_correlation": 0.8129567350969502,
+    "applied": false
+  },
+  "forward_range_deg": [
+    -20.832074114514825,
+    56.8630820824635
+  ],
+  "right_range_deg": [
+    -22.310863789867803,
+    18.632336156952668
+  ],
+  "phone_streams": {
+    "Accelerometer": {
+      "rows": 6467,
+      "first_timestamp_s": -0.0001017082832,
+      "last_timestamp_s": 64.91637246,
+      "median_interval_ms": 10.039999999996496,
+      "min_interval_ms": 10.036290999998698,
+      "max_interval_ms": 10.043000000010238,
+      "rate_hz": 99.60159362553277,
+      "unmatched_serial_rows": 0
+    },
+    "Gravity": {
+      "rows": 6467,
+      "first_timestamp_s": 0.003663291689,
+      "last_timestamp_s": 64.92013746,
+      "median_interval_ms": 10.039999999996496,
+      "min_interval_ms": 10.036291000000475,
+      "max_interval_ms": 10.043000000010238,
+      "rate_hz": 99.60159362553277,
+      "unmatched_serial_rows": 0
+    },
+    "Gyroscope": {
+      "rows": 6467,
+      "first_timestamp_s": 0.003663291689,
+      "last_timestamp_s": 64.92013746,
+      "median_interval_ms": 10.039999999996496,
+      "min_interval_ms": 10.036291000000475,
+      "max_interval_ms": 10.043000000010238,
+      "rate_hz": 99.60159362553277,
+      "unmatched_serial_rows": 0
+    },
+    "Magnetometer": {
+      "rows": 6467,
+      "first_timestamp_s": 0.003663291689,
+      "last_timestamp_s": 64.92013746,
+      "median_interval_ms": 10.039999999996496,
+      "min_interval_ms": 10.036291000000475,
+      "max_interval_ms": 10.043000000010238,
+      "rate_hz": 99.60159362553277,
+      "unmatched_serial_rows": 0
+    }
+  },
+  "phone_recording_events": [
+    {
+      "event": "START",
+      "experiment time": 0.0,
+      "system time": 1793912862.773189,
+      "system time text": "2026-11-05 14:07:42.773 UTC-07:00"
+    },
+    {
+      "event": "PAUSE",
+      "experiment time": 64.93044470838504,
+      "system time": 1793912927.703666,
+      "system time text": "2026-11-05 14:08:47.704 UTC-07:00"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "tuning": {
+    "max_rpm": 155.3979933110368,
+    "low_speed_tau_s": 0.035,
+    "high_speed_tau_s": 0.1,
+    "ki": 0.0,
+    "kd": 2,
+    "derivative_filter_s": 0.02,
+    "low_speed_accel_m_s2": 2.85,
+    "high_speed_accel_m_s2": 2.85,
+    "max_jerk_rpm_s2": 150.0
+  },
+  "wheel_circumference_m": 1.89865,
+  "derived_acceleration_limits_rpm_s": {
+    "low": 90.06399283701577,
+    "high": 90.06399283701577
+  },
+  "meaning": "Offline command shaping; no measured motor feedback or vehicle dynamics",
+  "sensor_reconstruction_max_error": {
+    "speed": 4.931506849320533e-05,
+    "turn": 4.931506849320533e-05,
+    "left_target_rpm": 5.965089110304689e-05,
+    "right_target_rpm": 6.206075045156467e-05
+  },
+  "replay": {
+    "left": {
+      "original_max_step_rpm": 38.530187382599536,
+      "smoothed_max_step_rpm": 0.4503199641853115,
+      "rms_tracking_difference_rpm": 70.38735632678866,
+      "max_abs_smoothed_rpm": 156.72420660754997
+    },
+    "right": {
+      "original_max_step_rpm": 24.26763183213452,
+      "smoothed_max_step_rpm": 0.4503199641853115,
+      "rms_tracking_difference_rpm": 87.44951806540742,
+      "max_abs_smoothed_rpm": 156.8120989423161
+    }
+  },
+  "synthetic_steps": {
+    "small_from_rest": {
+      "response_90_s": 0.28500000000000003,
+      "overshoot_rpm": 0.0
+    },
+    "large_from_rest": {
+      "response_90_s": 1.8599999999999999,
+      "overshoot_rpm": 1.3133542253712562
+    },
+    "small_at_speed": {
+      "response_90_s": 0.73,
+      "overshoot_rpm": 0.0
+    }
+  }
+}

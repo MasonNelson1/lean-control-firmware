@@ -2,59 +2,13 @@
 #include <ezButton.h>
 #include "vesc_can.h"
 #include "rpm_setpoint_pid.h"
-//test to see if caleb can commit. 
-// ============================================================
-// LEAN — SIMPLE DRIVE: 4 raw sensors -> two VESCs. Nothing else.
-// Build + upload:  pio run -e simple -t upload
-//
-//   each sensor value = raw - that sensor's floor   (counts, >= 0)
-//   speed = front - back
-//   turn  = right - left
-//   left wheel  lean = speed + turn
-//   right wheel lean = speed - turn
-//   each wheel: duty = 0 inside DEADBAND, then ramps up to MAX_DUTY
-//
-// Lean forward -> both forward. Lean right -> left wheel faster (turns right).
-//
-// Kept on purpose, a few lines each:
-//   - empty seat -> 0
-//   - slew limit (duty changes smoothly)
-//   - duty sent every 10 ms, zeros included (if the Teensy dies, the
-//     VESCs stop on their own timeout)
-//   - type  s  in the monitor = stop (latched), then  g  = go
-//
-// Calibrate: press the button with the seat EMPTY and the wheels stopped.
-// Each sensor's average over CAL_SAMPLES readings becomes its own floor.
-// Until then every sensor uses FLOOR.
-// ============================================================
+#include "drive_constants.h"
 
-// ---------- PINS / VESCs ----------
-const uint8_t PIN_F = A0;    // pin 14
-const uint8_t PIN_B = A17;   // pin 41
-const uint8_t PIN_L = A14;   // pin 38
-const uint8_t PIN_R = A16;   // pin 40
-const uint8_t PIN_CAL_BUTTON = 4;    
-const int     CAL_SAMPLES    = 20;   // readings averaged per sensor (~1 ms each)
-const float WHEEL_CIRCUMFERENCE_M = 74.75f * 0.0254f; //meters
-const float MAX_ACCEL = 2.85f;// m/s^2
-const float MAX_SPEED = 4.91744f;//11mph but in m/s
-const float JERK_RATE = 1;//m/s^3
+using namespace DriveConstants;
+
 
 // ---------- RPM SETPOINT PID (review only; not used by loop yet) ----------
-// Values mirror the current Python experiment. Acceleration is wheel-linear
-// m/s^2; jerk remains RPM/s^2. This shapes commands, not measured motor speed.
-const float RPM_PID_MAX_RPM = MAX_SPEED * 60.0f / WHEEL_CIRCUMFERENCE_M;
-const float RPM_PID_LOW_SPEED_TAU_S = 0.035f;
-const float RPM_PID_HIGH_SPEED_TAU_S = 0.1f;
-const float RPM_PID_KI = 0.0f;
-const float RPM_PID_KD = 2.0f;
-const float RPM_PID_DERIVATIVE_FILTER_S = 0.02f;
-const float RPM_PID_LOW_SPEED_ACCEL_MS2 = 2.85f;
-const float RPM_PID_HIGH_SPEED_ACCEL_MS2 = 2.85f;
-const float RPM_PID_MAX_JERK_RPM_PER_S2 = 150.0f;
-
 const RPMSetpointPID::Tuning RPM_PID_TUNING = {
-    RPM_PID_MAX_RPM, WHEEL_CIRCUMFERENCE_M,
     RPM_PID_LOW_SPEED_TAU_S, RPM_PID_HIGH_SPEED_TAU_S,
     RPM_PID_KI, RPM_PID_KD, RPM_PID_DERIVATIVE_FILTER_S,
     RPM_PID_LOW_SPEED_ACCEL_MS2, RPM_PID_HIGH_SPEED_ACCEL_MS2,
@@ -62,29 +16,17 @@ const RPMSetpointPID::Tuning RPM_PID_TUNING = {
 
 RPMSetpointPID leftRPMSetpointPID(RPM_PID_TUNING);
 RPMSetpointPID rightRPMSetpointPID(RPM_PID_TUNING);
-// Future integration: leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt), and likewise
-// for right. A stop/fault must bypass smoothing and reset BOTH instances.
 
-const uint8_t VESC_LEFT_ID  = 26;
-const uint8_t VESC_RIGHT_ID = 2;     // set to the second VESC's Controller ID (VESC Tool)
-const float   DIR_LEFT  = +1.0f;     // -1 if leaning forward spins that wheel backward
-const float   DIR_RIGHT = +1.0f;     // mirrored motor: expect this one to need -1
 
-// ---------- TUNING (all in raw ADC counts) ----------
-const int   DEFAULT_FLOOR      = 400;    // default floor for every sensor until calibrated
-// const int   SEATED_MIN = 150;    // total above floor, all 4 sensors
-const int   DEADBAND   = 50;    // |lean| ignored below this (sitting still)
-const int   FULL       = 1200;   // |lean| that gives MAX_DUTY
-const float MAX_DUTY   = 0.60f;
-const float GAIN = 2;
-const float REAR_GAIN = 1.0f;
-const float FRONT_GAIN = 1.0f;
-const float LEFT_GAIN = 1.0f;
-const float RIGHT_GAIN = 1.0f;
+// Runtime knob selections: kept at the hard design limits until knobs are wired.
+float userMaxSpeedMS = MAX_SPEED;
+float userMaxAccelMS2 = MAX_ACCEL;
+// Future integration (once per VESC update):
+// leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, userMaxSpeedMS, userMaxAccelMS2);
+// Likewise for right. A stop/fault must bypass smoothing and reset BOTH instances.
 
 // MISC CONSTANTS and vars
 ezButton calibrateButton(PIN_CAL_BUTTON);
-const int CALIBRATE_BUTTON_DEBOUNCE = 50;//ms
 
 //calibration constants
 int userWeightEstimate = 370;//default to unloaded sensor values. 
@@ -105,13 +47,10 @@ int backSaturation = 1000000;
 int leftSaturation = 1000000;
 int rightSaturation = 1000000;
 
-const float deadband = 0.05f;
 
 
 boolean initiallyCalibrated = false;
 
-const float RAMP_S     = 0.5f;   // 0 -> MAX_DUTY takes at least this long
-const uint32_t LOOP_RATE = 5;     // 200 Hz
 
 VescBus can1;
 VescStatus vescs[2] = { {VESC_LEFT_ID}, {VESC_RIGHT_ID} };
@@ -149,34 +88,34 @@ float speedToRPM(float speed) {
 //     return currentRPM + constrain(desiredRPM - currentRPM, -maxStep, maxStep);
 // }
 
-float accelToTarget(float currentRPM, float desiredRPM,
-                    float accelRate, float jerkRate) {
-    static float currentAccelRPMs = 0.0f;
+// float accelToTarget(float currentRPM, float desiredRPM,
+//                     float accelRate, float jerkRate) {
+//     static float currentAccelRPMs = 0.0f;
 
-    const float dt = LOOP_RATE / 1000.0f;
+//     const float dt = LOOP_RATE / 1000.0f;
 
-    // Desired acceleration needed to reach the target.
-    float desiredAccelRPMs = (desiredRPM - currentRPM) / dt;
+//     // Desired acceleration needed to reach the target.
+//     float desiredAccelRPMs = (desiredRPM - currentRPM) / dt;
 
-    // Limit desired acceleration.
-    desiredAccelRPMs = constrain(
-        desiredAccelRPMs,
-        -linearAccelToRPMs(accelRate),
-        linearAccelToRPMs(accelRate)
-    );
+//     // Limit desired acceleration.
+//     desiredAccelRPMs = constrain(
+//         desiredAccelRPMs,
+//         -linearAccelToRPMs(accelRate),
+//         linearAccelToRPMs(accelRate)
+//     );
 
-    // Limit how quickly acceleration can change (jerk).
-    const float maxJerkStep = linearAccelToRPMs(jerkRate) * dt;
+//     // Limit how quickly acceleration can change (jerk).
+//     const float maxJerkStep = linearAccelToRPMs(jerkRate) * dt;
 
-    currentAccelRPMs += constrain(
-        desiredAccelRPMs - currentAccelRPMs,
-        -maxJerkStep,
-        maxJerkStep
-    );
+//     currentAccelRPMs += constrain(
+//         desiredAccelRPMs - currentAccelRPMs,
+//         -maxJerkStep,
+//         maxJerkStep
+//     );
 
-    // Integrate acceleration to get the new RPM.
-    return currentRPM + currentAccelRPMs * dt;
-}
+//     // Integrate acceleration to get the new RPM.
+//     return currentRPM + currentAccelRPMs * dt;
+// }
 // Average CAL_SAMPLES readings of each sensor; each average becomes that
 // sensor's floor. Only while both wheels are stopped. Blocks ~CAL_SAMPLES ms
 // (no CAN commands meanwhile; harmless since the wheels are stopped).
@@ -313,70 +252,71 @@ void loop() {
   float turn  = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
   
   //apply deadband. 
-  if (fabs(speed) < deadband) speed = 0.0f;
-  if (fabs(turn) < deadband)  turn = 0.0f;
+  if (fabs(speed) < DEADBAND) speed = 0.0f;
+  if (fabs(turn) < DEADBAND)  turn = 0.0f;
 
   static float leftTargetRPM = 0.0f;
   static float rightTargetRPM = 0.0f;
 
-  // --- stop now, or ramp each wheel toward its target ---
-  if (stopped /*|| !seated*/) {
-    leftRpms = 0.0f;
-    rightRpms = 0.0f;
-  } else {
-    //todo replace MAX_ACCEL with min(accel, MAX_ACCEL) where accel is the user set value from the control box. 
-    //also do the same with the max speeds. 
-    //also need seperate angular max speed to match specs maybe. 
-    leftTargetRPM = constrain(speed + turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-    rightTargetRPM = constrain(speed - turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-    leftRpms = accelToTarget(leftRpms, leftTargetRPM, MAX_ACCEL, JERK_RATE);
-    rightRpms = accelToTarget(rightRpms, rightTargetRPM, MAX_ACCEL, JERK_RATE);
-  }
-
-
   //rate limit the loop. 
-  //this is placed right before the motor communication to try and make that the most consistently limited thing. 
+  //this is placed right before the motor communication and pid smoothing because pid needs to run at a fixed rate. 
   static uint32_t tSend = 0;
   if (millis() - tSend < LOOP_RATE) {
     return;
   }
   tSend = millis();
 
-    //  vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
-    // vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
+  // --- stop now, or ramp each wheel toward its target ---
+  if (stopped /*|| !seated*/) {
+    leftRpms = 0.0f;
+    rightRpms = 0.0f;
+    leftRPMSetpointPID.reset();
+    rightRPMSetpointPID.reset();
+  } else {
+    //todo replace MAX_ACCEL with min(accel, MAX_ACCEL) where accel is the user set value from the control box. 
+    //also do the same with the max speeds. 
+    //also need seperate angular max speed to match specs maybe. 
+    leftTargetRPM = constrain(speed + turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
+    rightTargetRPM = constrain(speed - turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
+    leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
+    rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
+  }
+
+    vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
+    vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
  
 
   // // --- print 5x a second ---
-  // static int n = 0;
-  // if (n++ % 20 != 0) return;
-  // if (n % 400 == 1)
-  //   Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   dutyL   dutyR | VESCs");
-  // Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %+.3f  %+.3f", f, b, l, r, total,
-  //              userWeightEstimate, speed, turn, leftRpms, rightRpms);
-  // printVesc("L", vescs[0]);
-  // printVesc("R", vescs[1]);
-  // if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
-  // Serial.println(stopped ? "  STOPPED" : "");
+  static int n = 0;
+  if (n++ % 20 != 0) return;
+  if (n % 400 == 1)
+    Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   leftRpms   rightRpms | VESCs");
+  Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %.f  %.f", f, b, l, r, total,
+               userWeightEstimate, speed, turn, leftRpms, rightRpms);
+  printVesc("L", vescs[0]);
+  printVesc("R", vescs[1]);
+  if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
+  Serial.println(stopped ? "  STOPPED" : "");
   
   
   //csv debug printout
-  static int n = 0;
-  if (n++ % 1 != 0) return;
+//   static int n = 0;
+//   if (n++ % 1 != 0) return;
 
-  // Print CSV header once
-  if (n == 1) {
-    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,stopped");
-  }
+//   // Print CSV header once
+//   if (n == 1) {
+//     Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,stopped");
+//   }
 
-  // Print CSV row
-  Serial.printf(
-    "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%d\n",
-    millis(),
-    f, b, l, r, total,
-    userWeightEstimate,
-    speed, turn,
-    leftTargetRPM, rightTargetRPM,
-    stopped ? 1 : 0
-);
+//   // Print CSV row
+//   Serial.printf(
+//     "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%d\n",
+//     millis(),
+//     f, b, l, r, total,
+//     userWeightEstimate,
+//     speed, turn,
+//     leftTargetRPM, rightTargetRPM,
+//     stopped ? 1 : 0
+// );
   
 }

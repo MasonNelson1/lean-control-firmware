@@ -90,7 +90,9 @@ Tm1637Module<
     display(tmiInterface);
 
 // joystick
-ezButton button(SWITCH_PIN);
+// Active-low connect button: pressed = GND, released = 3.3V.
+// GPIO34 has no internal pull-up; an external pull-up to 3.3V is required.
+ezButton button(SWITCH_PIN, EXTERNAL_PULLUP);
 ezButton estop(ESTOP_PIN);
 
 // control stuff
@@ -165,9 +167,14 @@ void loop()
 {
   button.loop();
   estop.loop();
+  // sensitivity = map(readPotRollingAverage(), 0, 4096, 0, 1);
+  sensitivity = readPotRollingAverage() / 4095.0f;
+  // Serial.println(sensitivity);
 
   if (button.isPressed())
   {
+    Serial.println("Connect button pressed (LOW/GND)");
+    Serial.println("BUtton pressed");
     buttonStartMillis = millis();
     buttonHeld = true;
   }
@@ -179,6 +186,7 @@ void loop()
 
   if (button.isReleased())
   {
+    Serial.println("Connect button released (HIGH)");
     buttonMillis = 0;
     buttonHeld = false;
   }
@@ -345,11 +353,13 @@ void sendSoftStopClear()
 
 void finishDiscovery()
 {
+  Serial.println("finishding discovery");
   SerialBT.discoverAsyncStop();
 
   if (btDeviceList == nullptr ||
       btDeviceList->getCount() == 0)
   {
+    Serial.println("No devices found, disconnecting");
     changeState(DISCONNECTED);
     return;
   }
@@ -365,7 +375,7 @@ void finishDiscovery()
     {
       continue;
     }
-
+    Serial.println("Reciever found");
     std::map<int, std::string> channels =
         SerialBT.getChannels(device->getAddress());
 

@@ -96,6 +96,11 @@ int   floorF = 0, floorB = 0, floorL = 0, floorR = 0;
 
 int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
 
+// ---------- BLUETOOTH PRINTS ----------
+auto &bluetooth = Serial1;                  // HC-06: pin 0 = RX1, pin 1 = TX1
+const uint32_t BLUETOOTH_BAUD = 115200;     // must match the HC-06's baud setting
+uint8_t bluetoothTxBuffer[512];             // extra room so prints don't slow down loop()
+
 
 
 
@@ -183,6 +188,8 @@ void calibrate() {
 
   Serial.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
                 CAL_SAMPLES, floorF, floorB, floorL, floorR);
+  bluetooth.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
+                CAL_SAMPLES, floorF, floorB, floorL, floorR);
 }
 
 float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit) {
@@ -204,13 +211,20 @@ float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit) 
 
 
 void printVesc(const char *name, const VescStatus &v) {
-  if (v.frames == 0) Serial.printf(" | %s: no status", name);
-  else Serial.printf(" | %s: %6ld erpm %5.1fA %3.0fC", name, (long)v.erpm, v.current, v.mosfetTempC);
+  if (v.frames == 0) {
+    Serial.printf(" | %s: no status", name);
+    bluetooth.printf(" | %s: no status", name);
+  } else {
+    Serial.printf(" | %s: %6ld erpm %5.1fA %3.0fC", name, (long)v.erpm, v.current, v.mosfetTempC);
+    bluetooth.printf(" | %s: %6ld erpm %5.1fA %3.0fC", name, (long)v.erpm, v.current, v.mosfetTempC);
+  }
 }
 
 
 void setup() {
   Serial.begin(115200);
+  bluetooth.begin(BLUETOOTH_BAUD);
+  bluetooth.addMemoryForWrite(bluetoothTxBuffer, sizeof(bluetoothTxBuffer));
   analogReadResolution(12);
   analogReadAveraging(4);
   calibrateButton.setDebounceTime(CALIBRATE_BUTTON_DEBOUNCE);
@@ -218,7 +232,11 @@ void setup() {
   delay(200);
   Serial.printf("LEAN SIMPLE DRIVE: left VESC %d, right VESC %d.  s = stop, g = go\n",
                 VESC_LEFT_ID, VESC_RIGHT_ID);
+  bluetooth.printf("LEAN SIMPLE DRIVE: left VESC %d, right VESC %d.  s = stop, g = go\n",
+                VESC_LEFT_ID, VESC_RIGHT_ID);
   Serial.printf("  calibrate: button on pin %d, seat empty. Floors start at %d\n",
+                PIN_CAL_BUTTON, DEFAULT_FLOOR);
+  bluetooth.printf("  calibrate: button on pin %d, seat empty. Floors start at %d\n",
                 PIN_CAL_BUTTON, DEFAULT_FLOOR);
   
 }
@@ -249,8 +267,8 @@ void loop() {
   // --- s = stop, g = go ---
   while (Serial.available()) {
     char c = Serial.read();
-    if (c == 's' || c == 'S') { stopped = true;  Serial.println("** STOPPED (g to go) **"); }
-    if (c == 'g' || c == 'G') { stopped = false; Serial.println("** GO **"); }
+    if (c == 's' || c == 'S') { stopped = true;  Serial.println("** STOPPED (g to go) **"); bluetooth.println("** STOPPED (g to go) **"); }
+    if (c == 'g' || c == 'G') { stopped = false; Serial.println("** GO **"); bluetooth.println("** GO **"); }
   }
 
   
@@ -319,21 +337,29 @@ void loop() {
 
   // vescSetDuty(can1, VESC_LEFT_ID,  dutyL * DIR_LEFT);
   // vescSetDuty(can1, VESC_RIGHT_ID, dutyR * DIR_RIGHT);
-     vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
-    vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
+//     vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
+  //  vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
  
 
   // // --- print 5x a second ---
   static int n = 0;
   if (n++ % 20 != 0) return;
-  if (n % 400 == 1)
+  if (n % 400 == 1) {
     Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   dutyL   dutyR | VESCs");
+    bluetooth.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   dutyL   dutyR | VESCs");
+  }
   Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %+.3f  %+.3f", f, b, l, r, total,
+               userWeightEstimate, speed, turn, leftRpms, rightRpms);
+  bluetooth.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %+.3f  %+.3f", f, b, l, r, total,
                userWeightEstimate, speed, turn, leftRpms, rightRpms);
   printVesc("L", vescs[0]);
   printVesc("R", vescs[1]);
-  if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
+  if (unknownId >= 0) {
+    Serial.printf(" | other VESC id %d on bus", unknownId);
+    bluetooth.printf(" | other VESC id %d on bus", unknownId);
+  }
   Serial.println(stopped ? "  STOPPED" : "");
+  bluetooth.println(stopped ? "  STOPPED" : "");
   
   
   //csv debug printout

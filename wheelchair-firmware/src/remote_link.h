@@ -21,6 +21,7 @@ class RemoteLink {
 
   // nowMs must be read at or before the next service() call's nowMs.
   void onPacket(const uint8_t *buffer, size_t size, uint32_t nowMs) {
+    Serial.printf("RemoteLink::onPacket: size %zu, first byte 0x%02X\n", size, size > 0 ? buffer[0] : 0);
     if (buffer == nullptr || size < 1) {
       rejected_++;
       return;
@@ -28,6 +29,7 @@ class RemoteLink {
     switch (buffer[0]) {
       case PACKET_DRIVE:
         handleDrive(buffer, size, nowMs);
+        Serial.printf("Drive packet: left %.3f, right %.3f\n", left_, right_);
         return;
       case PACKET_SOFT_STOP:
         if (size != 1) {

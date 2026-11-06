@@ -1,6 +1,7 @@
 // LEAN remote drive: ESP32 controller -> Bluetooth -> HC-06 -> Teensy -> VESCs.
-// Lean sensors are not read here, so there is NO occupancy gate in this program.
-// Serial1 carries binary packets only; debug text goes to USB Serial.
+// Seat sensors are read for telemetry only and never affect control, so there is
+// NO occupancy gate in this program.
+// Serial1 carries binary packets only; telemetry and status go to USB Serial.
 #include <Arduino.h>
 #include <PacketSerial.h>
 #include "drive_constants.h"
@@ -22,7 +23,7 @@ static_assert(REMOTE_MAX_ACCEL_MS2 <= MAX_ACCEL, "Remote accel exceeds the desig
 constexpr uint32_t REMOTE_TIMEOUT_MS = 250;      // no drive packet this long = zero output
 constexpr uint32_t VESC_STATUS_TIMEOUT_MS = 200;
 constexpr uint32_t BLUETOOTH_BAUD = 115200;      // must match the HC-06's baud setting
-constexpr uint32_t PRINT_MS = 200;
+constexpr int TELEMETRY_USER_WEIGHT = 0;         // no calibration here, so not measured
 
 auto &bluetooth = Serial1;  // HC-06: pin 0 = RX1, pin 1 = TX1
 uint8_t bluetoothRxBuffer[256];
@@ -68,24 +69,67 @@ void updateStatusLed(bool fault) {
   digitalWrite(LED_BUILTIN, on);
 }
 
-void printStatus(float leftRPM, float rightRPM, bool vescsOk) {
-  // USB writes can stall when a host stops reading. Skip a line rather than
-  // delay the control loop.
-  char line[160];
-  const int length = snprintf(
-      line, sizeof(line),
-      "%-12s cmd %+.2f %+.2f | rpm %+6.1f %+6.1f | erpm %6ld %6ld | pkts %lu bad %lu timeouts %lu maxGap %lums\n",
-      stateName(vescsOk), remote.left(), remote.right(), leftRPM, rightRPM,
-      (long)vescs[0].erpm, (long)vescs[1].erpm,
-      (unsigned long)remote.drivePackets(), (unsigned long)remote.rejected(),
-      (unsigned long)remote.linkTimeouts(), (unsigned long)remote.maxDriveGapMs());
-  if (length > 0 && length < (int)sizeof(line) && Serial.availableForWrite() >= length) {
+// USB writes can stall when a host stops reading. Skip a line rather than delay
+// the control loop.
+void writeIfRoom(const char *line, int length, int capacity) {
+  if (length > 0 && length < capacity && Serial.availableForWrite() >= length) {
     Serial.write(line, length);
   }
 }
 
+// One status line each time the state changes, e.g. when the link drops.
+void printStateChange(bool vescsOk) {
+  static const char *lastState = nullptr;
+  const char *state = stateName(vescsOk);
+  if (state == lastState) return;
+  lastState = state;
+
+  char line[100];
+  const int length = snprintf(
+      line, sizeof(line), "** %s (pkts %lu bad %lu timeouts %lu maxGap %lums) **\n", state,
+      (unsigned long)remote.drivePackets(), (unsigned long)remote.rejected(),
+      (unsigned long)remote.linkTimeouts(), (unsigned long)remote.maxDriveGapMs());
+  writeIfRoom(line, length, sizeof(line));
+}
+
+int aboveDefaultFloor(uint8_t pin, float gain) {
+  const int raw = analogRead(pin);
+  return raw > DEFAULT_FLOOR ? (int)((raw - DEFAULT_FLOOR) * gain) : 0;
+}
+
+// Same columns as simple_drive.cpp, so the debug viewer reads both programs.
+// speed and turn come from the controller's commands, not from a lean.
+void printTelemetry(float leftTargetRPM, float rightTargetRPM, float leftRPM, float rightRPM,
+                    float speed, float turn, bool stopped) {
+  static bool headerPrinted = false;
+  if (!headerPrinted) {
+    headerPrinted = true;
+    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM, leftSmoothedRPM, rightSmoothedRPM, ,stopped");
+  }
+
+  const int f = aboveDefaultFloor(PIN_F, FRONT_GAIN);
+  const int b = aboveDefaultFloor(PIN_B, REAR_GAIN);
+  const int l = aboveDefaultFloor(PIN_L, LEFT_GAIN);
+  const int r = aboveDefaultFloor(PIN_R, RIGHT_GAIN);
+  const int total = f + b + l + r;
+
+  char line[160];
+  const int length = snprintf(
+      line, sizeof(line),
+      "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%.4f,%.4f,%d\n",
+      millis(),
+      f, b, l, r, total,
+      TELEMETRY_USER_WEIGHT,
+      speed, turn,
+      leftTargetRPM, rightTargetRPM, leftRPM, rightRPM,
+      stopped ? 1 : 0);
+  writeIfRoom(line, length, sizeof(line));
+}
+
 void setup() {
   Serial.begin(115200);
+  analogReadResolution(12);
+  analogReadAveraging(4);
   pinMode(LED_BUILTIN, OUTPUT);
   bluetooth.begin(BLUETOOTH_BAUD);
   bluetooth.addMemoryForRead(bluetoothRxBuffer, sizeof(bluetoothRxBuffer));
@@ -121,16 +165,25 @@ void loop() {
   tSend = millis();
 
   const bool vescsOk = vescsReporting();
+  const bool stopped = killed || !vescsOk || !remote.driveAllowed();
+  float leftTargetRPM = 0.0f;
+  float rightTargetRPM = 0.0f;
   float leftRPM = 0.0f;
   float rightRPM = 0.0f;
-  if (killed || !vescsOk || !remote.driveAllowed()) {
+  float speed = 0.0f;
+  float turn = 0.0f;
+  if (stopped) {
     // Any stop bypasses smoothing and restarts both wheels from zero.
     leftPID.reset();
     rightPID.reset();
   } else {
     const float maxRPM = REMOTE_MAX_SPEED_MS * LINEAR_TO_RPM;
-    leftRPM = leftPID.smoothRPM(remote.left() * maxRPM, dt, REMOTE_MAX_SPEED_MS, REMOTE_MAX_ACCEL_MS2);
-    rightRPM = rightPID.smoothRPM(remote.right() * maxRPM, dt, REMOTE_MAX_SPEED_MS, REMOTE_MAX_ACCEL_MS2);
+    speed = (remote.left() + remote.right()) / 2.0f;
+    turn = (remote.left() - remote.right()) / 2.0f;
+    leftTargetRPM = remote.left() * maxRPM;
+    rightTargetRPM = remote.right() * maxRPM;
+    leftRPM = leftPID.smoothRPM(leftTargetRPM, dt, REMOTE_MAX_SPEED_MS, REMOTE_MAX_ACCEL_MS2);
+    rightRPM = rightPID.smoothRPM(rightTargetRPM, dt, REMOTE_MAX_SPEED_MS, REMOTE_MAX_ACCEL_MS2);
   }
 
 #if REMOTE_MOTORS
@@ -140,9 +193,6 @@ void loop() {
 
   updateStatusLed(killed || !vescsOk);
 
-  static uint32_t tPrint = 0;
-  if (millis() - tPrint >= PRINT_MS) {
-    tPrint = millis();
-    printStatus(leftRPM, rightRPM, vescsOk);
-  }
+  printStateChange(vescsOk);
+  //printTelemetry(leftTargetRPM, rightTargetRPM, leftRPM, rightRPM, speed, turn, stopped);
 }

@@ -186,17 +186,6 @@ float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit) 
 
 
 
-void printVesc(const char *name, const VescStatus &v) {
-  if (v.frames == 0) {
-    Serial.printf(" | %s: no status", name);
-    bluetooth.printf(" | %s: no status", name);
-  } else {
-    Serial.printf(" | %s: %6ld erpm %5.1fA %3.0fC", name, (long)v.erpm, v.current, v.mosfetTempC);
-    bluetooth.printf(" | %s: %6ld erpm %5.1fA %3.0fC", name, (long)v.erpm, v.current, v.mosfetTempC);
-  }
-}
-
-
 void setup() {
   Serial.begin(115200);
   bluetooth.begin(BLUETOOTH_BAUD);
@@ -231,13 +220,16 @@ void loop() {
   }
 
 
-  // --- receive VESC status (for the printout only) ---
+  // --- receive VESC status (not used for control) ---
   CAN_message_t msg;
   while (can1.read(msg)) {
     vescHandleFrame(msg, vescs, 2);
     uint8_t id = msg.id & 0xFF, type = (msg.id >> 8) & 0xFF;
-    if (msg.flags.extended && type == VESC_STATUS && id != VESC_LEFT_ID && id != VESC_RIGHT_ID)
+    if (msg.flags.extended && type == VESC_STATUS && id != VESC_LEFT_ID && id != VESC_RIGHT_ID && id != unknownId) {
       unknownId = id;
+      Serial.printf("** other VESC id %d on bus **\n", unknownId);
+      bluetooth.printf("** other VESC id %d on bus **\n", unknownId);
+    }
   }
 
   // --- s = stop, g = go ---
@@ -319,45 +311,24 @@ void loop() {
     vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
  
 
-  // // --- print 5x a second ---
+  //csv telemetry printout, USB only: at this rate it would overrun the HC-06's 115200 baud
   static int n = 0;
-  if (n++ % 20 != 0) return;
-  if (n % 400 == 1) {
-    Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   leftRpms   rightRpms | VESCs");
-    bluetooth.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   leftRpms   rightRpms | VESCs");
-  }
-  Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %.f  %.f", f, b, l, r, total,
-               userWeightEstimate, speed, turn, leftRpms, rightRpms);
-  bluetooth.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %.f  %.f", f, b, l, r, total,
-               userWeightEstimate, speed, turn, leftRpms, rightRpms);
-  printVesc("L", vescs[0]);
-  printVesc("R", vescs[1]);
-  if (unknownId >= 0) {
-    Serial.printf(" | other VESC id %d on bus", unknownId);
-    bluetooth.printf(" | other VESC id %d on bus", unknownId);
-  }
-  Serial.println(stopped ? "  STOPPED" : "");
-  bluetooth.println(stopped ? "  STOPPED" : "");
-  
-  
-  //csv debug printout
-//   static int n = 0;
-//   if (n++ % 1 != 0) return;
+  if (n++ % 1 != 0) return;
 
-//   // Print CSV header once
-//   if (n == 1) {
-//     Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,stopped");
-//   }
+  // Print CSV header once
+  if (n == 1) {
+    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM, leftSmoothedRPM, rightSmoothedRPM, ,stopped");
+  }
 
-//   // Print CSV row
-//   Serial.printf(
-//     "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%d\n",
-//     millis(),
-//     f, b, l, r, total,
-//     userWeightEstimate,
-//     speed, turn,
-//     leftTargetRPM, rightTargetRPM,
-//     stopped ? 1 : 0
-// );
-  
+  // Print CSV row
+  Serial.printf(
+    "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%.4f,%.4f,%d\n",
+    millis(),
+    f, b, l, r, total,
+    userWeightEstimate,
+    speed, turn,
+    leftTargetRPM, rightTargetRPM,leftRpms, rightRpms,
+    stopped ? 1 : 0
+);
+
 }

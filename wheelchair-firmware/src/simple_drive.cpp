@@ -302,36 +302,36 @@ void loop() {
  
 
   // // --- print 5x a second ---
-  static int n = 0;
-  if (n++ % 20 != 0) return;
-  if (n % 400 == 1)
-    Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   leftRpms   rightRpms | VESCs");
-  Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %.f  %.f", f, b, l, r, total,
-               userWeightEstimate, speed, turn, leftRpms, rightRpms);
-  printVesc("L", vescs[0]);
-  printVesc("R", vescs[1]);
-  if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
-  Serial.println(stopped ? "  STOPPED" : "");
+  // static int n = 0;
+  // if (n++ % 20 != 0) return;
+  // if (n % 400 == 1)
+  //   Serial.println("\n  (sensor values = raw - floor)\n     F     B     L     R  total usrWeight  speed   turn   leftRpms   rightRpms | VESCs");
+  // Serial.printf("  %4d  %4d  %4d  %4d  %5d   %4d  %+.3f  %+.3f  %.f  %.f", f, b, l, r, total,
+  //              userWeightEstimate, speed, turn, leftRpms, rightRpms);
+  // printVesc("L", vescs[0]);
+  // printVesc("R", vescs[1]);
+  // if (unknownId >= 0) Serial.printf(" | other VESC id %d on bus", unknownId);
+  // Serial.println(stopped ? "  STOPPED" : "");
   
   
   //csv debug printout
-//   static int n = 0;
-//   if (n++ % 1 != 0) return;
+  static int n = 0;
+  if (n++ % 1 != 0) return;
 
 //   // Print CSV header once
-//   if (n == 1) {
-//     Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,stopped");
-//   }
+  if (n == 1) {
+    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM, leftSmoothedRPM, rightSmoothedRPM, ,stopped");
+  }
 
-//   // Print CSV row
-//   Serial.printf(
-//     "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%d\n",
-//     millis(),
-//     f, b, l, r, total,
-//     userWeightEstimate,
-//     speed, turn,
-//     leftTargetRPM, rightTargetRPM,
-//     stopped ? 1 : 0
-// );
+  // Print CSV row
+  Serial.printf(
+    "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%.4f,%.4f,%d\n",
+    millis(),
+    f, b, l, r, total,
+    userWeightEstimate,
+    speed, turn,
+    leftTargetRPM, rightTargetRPM,leftRpms, rightRpms,
+    stopped ? 1 : 0
+);
   
 }

@@ -30,7 +30,7 @@ constexpr float RPM_PID_KD = 2.0f;//derivitive constant
 constexpr float RPM_PID_DERIVATIVE_FILTER_S = 0.02f; //filters rpm setpoints to make derivitive response more smooth
 constexpr float RPM_PID_LOW_SPEED_ACCEL_MS2 = MAX_ACCEL;
 constexpr float RPM_PID_HIGH_SPEED_ACCEL_MS2 = MAX_ACCEL;
-constexpr float RPM_PID_MAX_JERK_RPM_PER_S2 = 300.0f;//lower is more smooth
+constexpr float RPM_PID_MAX_JERK_RPM_PER_S2 = 400.0f;//lower is more smooth
 
 constexpr uint8_t VESC_LEFT_ID = 26;
 constexpr uint8_t VESC_RIGHT_ID = 2;

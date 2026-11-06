@@ -44,6 +44,15 @@ constexpr float LEFT_GAIN = 1.0f;
 constexpr float RIGHT_GAIN = 1.0f;
 constexpr int CALIBRATE_BUTTON_DEBOUNCE = 50;  // ms
 constexpr float DEADBAND = 0.05f;//normalized values so this is a percentage.
+// Signed power response for speed and turn, applied after the deadband.
+// (0.5, 0.25) gives output = sign(input) * abs(input)^2.
+constexpr float INPUT_RESPONSE_KNEE_INPUT = 0.5f;
+constexpr float INPUT_RESPONSE_KNEE_OUTPUT = 0.25f;
+static_assert(INPUT_RESPONSE_KNEE_INPUT > 0.0f && INPUT_RESPONSE_KNEE_INPUT < 1.0f,
+              "Response knee input must be between zero and one");
+static_assert(INPUT_RESPONSE_KNEE_OUTPUT > 0.0f &&
+              INPUT_RESPONSE_KNEE_OUTPUT <= INPUT_RESPONSE_KNEE_INPUT,
+              "Response knee output must be positive and no greater than input");
 constexpr uint32_t LOOP_RATE = 5;             // ms (200 Hz)
 constexpr float dt = LOOP_RATE / 1000.0f;             // s 
 

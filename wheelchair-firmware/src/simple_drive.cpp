@@ -6,6 +6,17 @@
 
 using namespace DriveConstants;
 
+// Calculate once; configurable knee coordinates live in drive_constants.h.
+const float INPUT_RESPONSE_EXPONENT =
+    logf(INPUT_RESPONSE_KNEE_OUTPUT) / logf(INPUT_RESPONSE_KNEE_INPUT);
+
+/** Map a normalized [-1, 1] lean input through the configured power curve.
+ *  Preserves direction, zero and full scale; call after the input deadband.
+ */
+float applyLeanResponseCurve(float input) {
+  return copysignf(powf(fabsf(input), INPUT_RESPONSE_EXPONENT), input);
+}
+
 
 // ---------- RPM SETPOINT PID (review only; not used by loop yet) ----------
 const RPMSetpointPID::Tuning RPM_PID_TUNING = {
@@ -265,6 +276,10 @@ void loop() {
     return;
   }
   tSend = millis();
+
+  // Shape speed and turn separately before wheel mixing and PID smoothing.
+  speed = applyLeanResponseCurve(speed);
+  turn = applyLeanResponseCurve(turn);
 
   // --- stop now, or ramp each wheel toward its target ---
   if (stopped /*|| !seated*/) {

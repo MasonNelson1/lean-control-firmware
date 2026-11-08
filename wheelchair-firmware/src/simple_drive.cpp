@@ -18,7 +18,7 @@ float applyLeanResponseCurve(float input) {
 }
 
 
-// ---------- RPM SETPOINT PID (review only; not used by loop yet) ----------
+// ---------- RPM SETPOINT PID  ----------
 const RPMSetpointPID::Tuning RPM_PID_TUNING = {
     RPM_PID_LOW_SPEED_TAU_S, RPM_PID_HIGH_SPEED_TAU_S,
     RPM_PID_KI, RPM_PID_KD, RPM_PID_DERIVATIVE_FILTER_S,
@@ -80,58 +80,7 @@ uint8_t bluetoothTxBuffer[512];             // extra room so prints don't slow d
 
 
 
-// Convert linear acceleration (m/s^2) to angular acceleration (RPM/s)
-float linearAccelToRPMs(float accel) {
-    return accel * (60.0f / WHEEL_CIRCUMFERENCE_M);
-}
 
-// Convert angular acceleration (RPM/s) to linear acceleration (m/s^2)
-float rpmsToLinearAccel(float rpms) {
-    return rpms * (WHEEL_CIRCUMFERENCE_M / 60.0f);
-}
-
-float speedToRPM(float speed) {
-  return linearAccelToRPMs(speed);
-}
-
-// Returns the next RPM, towards a target at the provided linear acceleration in m/s^2. 
-// float accelToTarget(float currentRPM, float desiredRPM, float accelRate) {
-//     const float dt = LOOP_RATE / 1000.0f;
-
-//     // Maximum RPM change this loop.
-//     const float maxStep = linearAccelToRPMs(accelRate) * dt;
-
-//     return currentRPM + constrain(desiredRPM - currentRPM, -maxStep, maxStep);
-// }
-
-// float accelToTarget(float currentRPM, float desiredRPM,
-//                     float accelRate, float jerkRate) {
-//     static float currentAccelRPMs = 0.0f;
-
-//     const float dt = LOOP_RATE / 1000.0f;
-
-//     // Desired acceleration needed to reach the target.
-//     float desiredAccelRPMs = (desiredRPM - currentRPM) / dt;
-
-//     // Limit desired acceleration.
-//     desiredAccelRPMs = constrain(
-//         desiredAccelRPMs,
-//         -linearAccelToRPMs(accelRate),
-//         linearAccelToRPMs(accelRate)
-//     );
-
-//     // Limit how quickly acceleration can change (jerk).
-//     const float maxJerkStep = linearAccelToRPMs(jerkRate) * dt;
-
-//     currentAccelRPMs += constrain(
-//         desiredAccelRPMs - currentAccelRPMs,
-//         -maxJerkStep,
-//         maxJerkStep
-//     );
-
-//     // Integrate acceleration to get the new RPM.
-//     return currentRPM + currentAccelRPMs * dt;
-// }
 // Average CAL_SAMPLES readings of each sensor; each average becomes that
 // sensor's floor. Only while both wheels are stopped. Blocks ~CAL_SAMPLES ms
 // (no CAN commands meanwhile; harmless since the wheels are stopped).

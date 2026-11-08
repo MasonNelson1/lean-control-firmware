@@ -23,6 +23,7 @@
 #define DIO_PIN 23
 #define CLK_PIN 22
 #define POT_SAMPLES 10
+#define JOYSTICK_CALIBRATION_SAMPLES 32
 #define UPDATE_INTERVAL 10 // how fast to send packets
 #define ESTOP_PIN 32
 
@@ -90,6 +91,8 @@ Tm1637Module<
     display(tmiInterface);
 
 // joystick
+double joystickCenterX = 2048.0;
+double joystickCenterY = 2048.0;
 ezButton button(SWITCH_PIN);
 ezButton estop(ESTOP_PIN);
 
@@ -112,6 +115,7 @@ void updateConnectionLED(bool force);
 void startConnection();
 void finishDiscovery();
 void connectedLoop();
+void calibrateJoystick();
 void sendSoftStopClear();
 void sendSoftStop();
 void sendDrive();
@@ -163,6 +167,8 @@ String sendData = "Hi from esp32!\n";
 
 void loop()
 {
+  sensitivity = readPotRollingAverage() / 4096.0f;
+  Serial.println(sensitivity);
   button.loop();
   estop.loop();
 
@@ -282,12 +288,28 @@ void connectedLoop()
   sendDrive();
 }
 
+void calibrateJoystick()
+{
+  long totalX = 0;
+  long totalY = 0;
+
+  // The joystick is assumed to be resting whenever a connection is established.
+  for (int i = 0; i < JOYSTICK_CALIBRATION_SAMPLES; i++)
+  {
+    totalX += analogRead(JOY_X_PIN);
+    totalY += analogRead(JOY_Y_PIN);
+  }
+
+  joystickCenterX = totalX / double(JOYSTICK_CALIBRATION_SAMPLES);
+  joystickCenterY = totalY / double(JOYSTICK_CALIBRATION_SAMPLES);
+}
+
 // Send normal drive command
 void sendDrive()
 {
   // read joystick
-  x = (analogRead(JOY_X_PIN) / 2048.0) - 1;
-  y = (analogRead(JOY_Y_PIN) / 2048.0) - 1;
+  x = (analogRead(JOY_X_PIN) - joystickCenterX) / 2048.0;
+  y = (analogRead(JOY_Y_PIN) - joystickCenterY) / 2048.0;
   // apply deadband
   if (x >= 0 && x < DEADBAND_THRESH)
   {
@@ -324,6 +346,7 @@ void sendDrive()
   memcpy(packet + 1, &left, sizeof(left));
   memcpy(packet + 1 + sizeof(left), &right, sizeof(right));
 
+  Serial.println("Sending drive packet");
   packetSerial.send(packet, sizeof(packet));
 
   // Serial.printf("Pressed: %i, Released: %i, state: %i\n", estop.isPressed(), estop.isReleased(), estop.getState());
@@ -479,6 +502,7 @@ void changeState(ConnectionState newState)
     break;
 
   case CONNECTED:
+    calibrateJoystick();
     Serial.println("CONNECTED");
     break;
   case DISCONNECTING:

@@ -57,4 +57,17 @@ constexpr uint32_t LOOP_RATE = 5;             // ms (200 Hz)
 constexpr float dt = LOOP_RATE / 1000.0f;             // s 
 
 
+// Convert linear acceleration (m/s^2) to angular acceleration (RPM/s)
+float linearAccelToRPMs(float accel) {
+    return accel * (60.0f / WHEEL_CIRCUMFERENCE_M);
+}
+
+// Convert angular acceleration (RPM/s) to linear acceleration (m/s^2)
+float rpmsToLinearAccel(float rpms) {
+    return rpms * (WHEEL_CIRCUMFERENCE_M / 60.0f);
+}
+
+float speedToRPM(float speed) {
+  return linearAccelToRPMs(speed);
+}
 }  // namespace DriveConstants

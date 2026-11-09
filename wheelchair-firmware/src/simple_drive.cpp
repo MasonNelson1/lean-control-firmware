@@ -120,6 +120,18 @@ float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit) 
 
 
 static mode MODE = DEFAULT_MODE;
+
+const char *modeName(mode currentMode) {
+  switch (currentMode) {
+    case LEAN: return "LEAN";
+    case REMOTE: return "REMOTE";
+    default: return "UNKNOWN";
+  }
+}
+
+void printMode() {
+  Serial.printf("Mode: %s\n", modeName(MODE));
+}
 void setup() {
   Serial.begin(115200);
   analogReadResolution(12);
@@ -129,7 +141,8 @@ void setup() {
   remoteModeButton.setDebounceTime(BUTTON_DEBOUNCE);
   vescBegin(can1);
   delay(200);
-  remote_setup(); 
+  remote_setup();
+  printMode();
   Serial.printf("LEAN SIMPLE DRIVE: left VESC %d, right VESC %d.  s = stop, g = go\n",
                 VESC_LEFT_ID, VESC_RIGHT_ID);
   Serial.printf("  calibrate: button on pin %d, seat empty. Floors start at %d\n",
@@ -144,10 +157,10 @@ void loop() {
 
   if (leanModeButton.isPressed() && (MODE != LEAN)) {
     MODE = LEAN;
-    Serial.println("Entering LEAN mode");
+    printMode();
   }else if (remoteModeButton.isPressed() && (MODE != REMOTE)) {
     MODE = REMOTE;
-    Serial.println("Entering remote mode. ");
+    printMode();
   }
   int f = 0, b = 0, l = 0, r = 0, total = 0;
   float speed = 0.0f, turn = 0.0f;
@@ -251,18 +264,18 @@ void loop() {
 
   // Print CSV header once
   if (n == 1) {
-    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM, leftSmoothedRPM, rightSmoothedRPM, ,stopped");
+    Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,leftSmoothedRPM,rightSmoothedRPM,stopped,mode");
   }
 
   // Print CSV row
   Serial.printf(
-    "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%.4f,%.4f,%d\n",
+    "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%.4f,%.4f,%d,%s\n",
     millis(),
     f, b, l, r, total,
     userWeightEstimate,
     speed, turn,
     leftTargetRPM, rightTargetRPM,leftRpms, rightRpms,
-    stopped ? 1 : 0
+    stopped ? 1 : 0, modeName(MODE)
 );
 
 }

@@ -26,12 +26,12 @@ constexpr uint8_t PIN_LEAN_BUTTON = 5;
 constexpr uint8_t PIN_REMOTE_BUTTON = 6;
 constexpr int CAL_SAMPLES = 20;//number of samples for calibration. 
 
-constexpr mode DEFAULT_MODE = LEAN;
+constexpr mode DEFAULT_MODE = REMOTE;
 
 // Hard design limits. Runtime knob selections may lower, never raise, these.
 constexpr float JERK_RATE = 1.0f;       // m/s^3; existing accelToTarget helper
 
-constexpr float RPM_PID_MAX_RPM = MAX_SPEED * 60.0f / WHEEL_CIRCUMFERENCE_M;
+constexpr float RPM_PID_MAX_RPM = MAX_SPEED * 60.0f / WHEEL_CIRCUMFERENCE_M; 
 constexpr float RPM_PID_LOW_SPEED_TAU_S = 0.035f;// low speed rise time
 constexpr float RPM_PID_HIGH_SPEED_TAU_S = 0.1f; //high speed rise time
 constexpr float RPM_PID_KI = 0.0f; //integral constant
@@ -66,7 +66,10 @@ constexpr uint32_t LOOP_RATE = 5;             // ms (200 Hz)
 constexpr float dt = LOOP_RATE / 1000.0f;             // s 
 
 
-extern VescBus can1;
+// FlexCAN's interrupt dispatch uses file-local state. Keep every operation on
+// the bus in common.cpp, alongside its construction.
+void beginMotorCan();
+bool readMotorCan(CAN_message_t &msg);
 extern VescStatus vescs[2];
 // ---------- RPM SETPOINT PID  ----------
 const RPMSetpointPID::Tuning RPM_PID_TUNING = {
@@ -95,12 +98,5 @@ inline float speedToRPM(float speed) {
 // This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
 //where the value is the percentage of max speed. 
 // PID smoothing is applied prior to using the setpoints. 
-inline void setMotorPower(double left, double right) {
-  float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-  float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-  float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
-  float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
-  vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
-  vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
-}
+void setMotorPower(double left, double right);
 }  // namespace common

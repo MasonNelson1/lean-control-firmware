@@ -139,7 +139,7 @@ void setup() {
   calibrateButton.setDebounceTime(BUTTON_DEBOUNCE);
   leanModeButton.setDebounceTime(BUTTON_DEBOUNCE);
   remoteModeButton.setDebounceTime(BUTTON_DEBOUNCE);
-  vescBegin(can1);
+  beginMotorCan();
   delay(200);
   remote_setup();
   printMode();
@@ -154,11 +154,9 @@ void loop() {
   // Temporary startup trace: include subsequent passes, not just the first row.
   static unsigned int tracedRows = 0;
   const bool traceStartup = tracedRows < 5;
-  Serial.println("TRACE: loop entered");
   leanModeButton.loop();
   remoteModeButton.loop();
   calibrateButton.loop();
-  Serial.println("TRACE: buttons read");
 
   if (leanModeButton.isPressed() && (MODE != LEAN)) {
     MODE = LEAN;
@@ -186,21 +184,18 @@ void loop() {
 
     // --- receive VESC status (not used for control) ---
     CAN_message_t msg;
-    Serial.println("TRACE: before CAN receive");
-    while (can1.read(msg)) {
+    while (readMotorCan(msg)) {
       vescHandleFrame(msg, vescs, 2);
       uint8_t id = msg.id & 0xFF, type = (msg.id >> 8) & 0xFF;
       if (msg.flags.extended && type == VESC_STATUS && id != VESC_LEFT_ID && id != VESC_RIGHT_ID && id != unknownId) {
         unknownId = id;
       }
     }
-    Serial.println("TRACE: after CAN receive");
     // --- read, minus each sensor's floor ---
     f = aboveFloor(analogRead(PIN_F), floorF);
     b = aboveFloor(analogRead(PIN_B), floorB);
     l = aboveFloor(analogRead(PIN_L), floorL);
     r = aboveFloor(analogRead(PIN_R), floorR);
-    if (traceStartup) Serial.println("TRACE: sensors read");
 
     //apply sensor specific gains
     b = (int)(b * REAR_GAIN);
@@ -241,7 +236,6 @@ void loop() {
     turn = applyLeanResponseCurve(turn);
 
     // --- stop now, or ramp each wheel toward its target ---
-    Serial.println("TRACE: before motor output");
     if (stopped /*|| !seated*/) {
       //todo implement estop pid tuning
       leftRPMSetpointPID.reset();
@@ -255,21 +249,18 @@ void loop() {
       //also need seperate angular max speed to match specs maybe. 
       setMotorPower(speed + turn, speed - turn);
     }
-    Serial.println("TRACE: after motor output");
 
   } else if(MODE == REMOTE) {
     //remote mode
     remote_loop();
   }else {
     stopped = true;//should never happen
-    Serial.println("Unrecognized mode");
   }
 
 
  
 
   //csv telemetry printout, USB only: at this rate it would overrun the HC-06's 115200 baud
-  Serial.println("TRACE: before CSV");
   static int n = 0;
   if (n++ % 1 != 0) return;
 
@@ -288,6 +279,5 @@ void loop() {
     leftTargetRPM, rightTargetRPM,leftRpms, rightRpms,
     stopped ? 1 : 0, modeName(MODE)
 );
-  Serial.printf("TRACE: loop completed, row %u\n", tracedRows);
 
 }

@@ -171,9 +171,14 @@ void loop()
   Serial.println(sensitivity);
   button.loop();
   estop.loop();
+  // sensitivity = map(readPotRollingAverage(), 0, 4096, 0, 1);
+  sensitivity = readPotRollingAverage() / 4095.0f;
+  // Serial.println(sensitivity);
 
   if (button.isPressed())
   {
+    Serial.println("Connect button pressed (LOW/GND)");
+    Serial.println("BUtton pressed");
     buttonStartMillis = millis();
     buttonHeld = true;
   }
@@ -185,6 +190,7 @@ void loop()
 
   if (button.isReleased())
   {
+    Serial.println("Connect button released (HIGH)");
     buttonMillis = 0;
     buttonHeld = false;
   }
@@ -368,11 +374,13 @@ void sendSoftStopClear()
 
 void finishDiscovery()
 {
+  Serial.println("finishding discovery");
   SerialBT.discoverAsyncStop();
 
   if (btDeviceList == nullptr ||
       btDeviceList->getCount() == 0)
   {
+    Serial.println("No devices found, disconnecting");
     changeState(DISCONNECTED);
     return;
   }
@@ -388,7 +396,7 @@ void finishDiscovery()
     {
       continue;
     }
-
+    Serial.println("Reciever found");
     std::map<int, std::string> channels =
         SerialBT.getChannels(device->getAddress());
 

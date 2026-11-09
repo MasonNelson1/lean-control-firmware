@@ -1,4 +1,4 @@
-// Simple HC-06 receiver for Teensy 4.1. Prints commands; does not drive motors.
+// HC-06 packet receiver and remote motor control for Teensy 4.1.
 // HC-06 TX -> pin 0 (RX1), HC-06 RX -> pin 1 (TX1), STATE -> pin 4.
 #include <Arduino.h>
 #include <PacketSerial.h>
@@ -18,6 +18,10 @@ unsigned long lastDrivePacketMillis = 0;
 bool softStopLatched = false;
 double requestedLeftPower = 0.0;
 double requestedRightPower = 0.0;
+static uint32_t receivedPackets = 0;
+static uint32_t receivedDrivePackets = 0;
+static size_t lastPacketSize = 0;
+static uint8_t lastPacketType = 0;
 
 
 //this should rapidly ramp down to 0, not just instantly command zero. 
@@ -28,7 +32,10 @@ void requestSoftStop() {
 }
 
 void onPacketReceived(const uint8_t *buffer, size_t size) {
+  ++receivedPackets;
+  lastPacketSize = size;
   if (buffer == nullptr || size < 1) return;
+  lastPacketType = buffer[0];
 
   switch (buffer[0]) {
     case PACKET_DRIVE: {
@@ -39,6 +46,7 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
       memcpy(&rightInt, buffer + 1 + sizeof(leftInt), sizeof(rightInt));
       if (leftInt == INT16_MIN || rightInt == INT16_MIN) return;
 
+      ++receivedDrivePackets;
       lastDrivePacketMillis = millis();
       if (!softStopLatched) {
         requestedLeftPower = leftInt / 32767.0;
@@ -75,6 +83,8 @@ void remote_setup() {
 }
 
 void remote_loop() {
+  static bool sawUartData = false;
+  if (Serial1.available() > 0) sawUartData = true;
   packetSerial.update();
 
   //rate limit the loop. 
@@ -85,4 +95,22 @@ void remote_loop() {
   }
   tSend = millis();
   setMotorPower(requestedLeftPower, requestedRightPower);
+
+  // Bounded diagnostics: distinguish UART/framing issues from motor output.
+  static uint32_t lastStatusMs = 0;
+  const uint32_t now = millis();
+  if (now - lastStatusMs >= 250 && Serial && Serial.availableForWrite() >= 256) {
+    lastStatusMs = now;
+    Serial.printf("REMOTE: rx=%d packets=%lu drive=%lu type=%u size=%u L=%.3f R=%.3f softStop=%d pidValid=%d,%d\n",
+                  sawUartData ? 1 : 0,
+                  static_cast<unsigned long>(receivedPackets),
+                  static_cast<unsigned long>(receivedDrivePackets),
+                  static_cast<unsigned int>(lastPacketType),
+                  static_cast<unsigned int>(lastPacketSize),
+                  requestedLeftPower, requestedRightPower,
+                  softStopLatched ? 1 : 0,
+                  leftRPMSetpointPID.isValid() ? 1 : 0,
+                  rightRPMSetpointPID.isValid() ? 1 : 0);
+    sawUartData = false;
+  }
 }

@@ -121,6 +121,19 @@ float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit) 
 
 static mode MODE = DEFAULT_MODE;
 
+// Interrupts latch raw presses; ezButton confirms the debounced press in loop().
+// Never call ezButton, print, or command motors from an interrupt handler.
+static volatile bool leanEdgePending = false;
+static volatile bool remoteEdgePending = false;
+
+void onLeanButtonPress() {
+  leanEdgePending = true;
+}
+
+void onRemoteButtonPress() {
+  remoteEdgePending = true;
+}
+
 const char *modeName(mode currentMode) {
   switch (currentMode) {
     case LEAN: return "LEAN";
@@ -139,6 +152,9 @@ void setup() {
   calibrateButton.setDebounceTime(BUTTON_DEBOUNCE);
   leanModeButton.setDebounceTime(BUTTON_DEBOUNCE);
   remoteModeButton.setDebounceTime(BUTTON_DEBOUNCE);
+  // ezButton configures the pins as INPUT_PULLUP: pressing connects to GND.
+  attachInterrupt(digitalPinToInterrupt(PIN_LEAN_BUTTON), onLeanButtonPress, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_REMOTE_BUTTON), onRemoteButtonPress, FALLING);
   beginMotorCan();
   delay(200);
   remote_setup();
@@ -151,17 +167,32 @@ void setup() {
 }
 
 void loop() {
-  // Temporary startup trace: include subsequent passes, not just the first row.
-  static unsigned int tracedRows = 0;
-  const bool traceStartup = tracedRows < 5;
+  static bool leanPressPending = false;
+  static bool remotePressPending = false;
+  noInterrupts();
+  const bool leanEdge = leanEdgePending;
+  const bool remoteEdge = remoteEdgePending;
+  leanEdgePending = false;
+  remoteEdgePending = false;
+  interrupts();
+  leanPressPending |= leanEdge;
+  remotePressPending |= remoteEdge;
+
   leanModeButton.loop();
   remoteModeButton.loop();
   calibrateButton.loop();
 
-  if (leanModeButton.isPressed() && (MODE != LEAN)) {
+  const bool leanPressed = leanModeButton.isPressed() && leanPressPending;
+  const bool remotePressed = remoteModeButton.isPressed() && remotePressPending;
+  if (leanPressed) leanPressPending = false;
+  if (remotePressed) remotePressPending = false;
+  if (leanModeButton.isReleased()) leanPressPending = false;
+  if (remoteModeButton.isReleased()) remotePressPending = false;
+
+  if (leanPressed && (MODE != LEAN)) {
     MODE = LEAN;
     printMode();
-  }else if (remoteModeButton.isPressed() && (MODE != REMOTE)) {
+  } else if (remotePressed && (MODE != REMOTE)) {
     MODE = REMOTE;
     printMode();
   }
@@ -260,13 +291,19 @@ void loop() {
 
  
 
-  //csv telemetry printout, USB only: at this rate it would overrun the HC-06's 115200 baud
-  static int n = 0;
-  if (n++ % 1 != 0) return;
+  // remote_loop() rate-limits motor updates, not this outer loop. Keep USB
+  // telemetry bounded in BOTH modes so ezButton can be polled frequently.
+  static uint32_t lastTelemetryMs = 0;
+  const uint32_t now = millis();
+  if (now - lastTelemetryMs < 50) return;  // 20 Hz telemetry
+  if (!Serial || Serial.availableForWrite() < 512) return;
+  lastTelemetryMs = now;
 
   // Print CSV header once
-  if (n == 1) {
+  static bool headerPrinted = false;
+  if (!headerPrinted) {
     Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,leftSmoothedRPM,rightSmoothedRPM,stopped,mode");
+    headerPrinted = true;
   }
 
   // Print CSV row

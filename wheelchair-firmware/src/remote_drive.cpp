@@ -4,10 +4,9 @@
 #include <PacketSerial.h>
 #include <string.h>
 #include "vesc_can.h"
-#include "rpm_setpoint_pid.h"
-#include "drive_constants.h"
+#include "common.h"
 
-using namespace DriveConstants;
+using namespace common;
 constexpr uint8_t STATE_PIN = 3;
 constexpr uint8_t PACKET_DRIVE = 0x01;
 constexpr uint8_t PACKET_SOFT_STOP = 0x02;
@@ -20,34 +19,6 @@ bool softStopLatched = false;
 double requestedLeftPower = 0.0;
 double requestedRightPower = 0.0;
 
-
-
-VescBus can1;
-VescStatus vescs[2] = { {VESC_LEFT_ID}, {VESC_RIGHT_ID} };
-
-// ---------- RPM SETPOINT PID  ----------
-const RPMSetpointPID::Tuning RPM_PID_TUNING = {
-    RPM_PID_LOW_SPEED_TAU_S, RPM_PID_HIGH_SPEED_TAU_S,
-    RPM_PID_KI, RPM_PID_KD, RPM_PID_DERIVATIVE_FILTER_S,
-    RPM_PID_LOW_SPEED_ACCEL_MS2, RPM_PID_HIGH_SPEED_ACCEL_MS2,
-    RPM_PID_MAX_JERK_RPM_PER_S2};
-
-RPMSetpointPID leftRPMSetpointPID(RPM_PID_TUNING);
-RPMSetpointPID rightRPMSetpointPID(RPM_PID_TUNING);
-
-
-// This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
-//where the value is the percentage of max speed. 
-// PID smoothing is applied prior to using the setpoints. 
-void setMotorPower(double left, double right) {
-  float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-  float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-  float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
-  float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
-  Serial.printf("Setting motor power to: L:%.3f, R: %0.3f\n", left, right);
-  vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
-  vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
-}
 
 //this should rapidly ramp down to 0, not just instantly command zero. 
 //need to test if the PID controller properly does this or maybe create a separate estop pid tuning that aggressively decelerates. 
@@ -96,19 +67,15 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
 // Set this to the module's CURRENT UART baud before sending AT commands.
 constexpr unsigned long HC06_BAUD = 115200;
 
-void setup() {
-  Serial.begin(115200);
+void remote_setup() {
   Serial1.begin(115200);
-  // pinMode(STATE_PIN, INPUT);
   packetSerial.setStream(&Serial1);
   packetSerial.setPacketHandler(onPacketReceived);
-  // lastDrivePacketMillis = millis();
   vescBegin(can1);
   delay(200);
-  Serial.println("ready to recieve");
 }
 
-void loop() {
+void remote_loop() {
   packetSerial.update();
 
   //rate limit the loop. 

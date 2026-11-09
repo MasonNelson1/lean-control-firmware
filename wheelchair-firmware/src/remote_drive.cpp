@@ -71,7 +71,6 @@ void remote_setup() {
   Serial1.begin(115200);
   packetSerial.setStream(&Serial1);
   packetSerial.setPacketHandler(onPacketReceived);
-  vescBegin(can1);
   delay(200);
 }
 

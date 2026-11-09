@@ -83,12 +83,7 @@ void remote_setup() {
 }
 
 void remote_loop() {
-  static bool sawUartData = false;
-  if (Serial1.available() > 0) sawUartData = true;
   packetSerial.update();
-
-  //rate limit the loop. 
-  //this is placed right before the motor communication and pid smoothing because pid needs to run at a fixed rate. 
   static uint32_t tSend = 0;
   if (millis() - tSend < LOOP_RATE) {
     return;
@@ -96,21 +91,4 @@ void remote_loop() {
   tSend = millis();
   setMotorPower(requestedLeftPower, requestedRightPower);
 
-  // Bounded diagnostics: distinguish UART/framing issues from motor output.
-  static uint32_t lastStatusMs = 0;
-  const uint32_t now = millis();
-  if (now - lastStatusMs >= 250 && Serial && Serial.availableForWrite() >= 256) {
-    lastStatusMs = now;
-    Serial.printf("REMOTE: rx=%d packets=%lu drive=%lu type=%u size=%u L=%.3f R=%.3f softStop=%d pidValid=%d,%d\n",
-                  sawUartData ? 1 : 0,
-                  static_cast<unsigned long>(receivedPackets),
-                  static_cast<unsigned long>(receivedDrivePackets),
-                  static_cast<unsigned int>(lastPacketType),
-                  static_cast<unsigned int>(lastPacketSize),
-                  requestedLeftPower, requestedRightPower,
-                  softStopLatched ? 1 : 0,
-                  leftRPMSetpointPID.isValid() ? 1 : 0,
-                  rightRPMSetpointPID.isValid() ? 1 : 0);
-    sawUartData = false;
-  }
 }

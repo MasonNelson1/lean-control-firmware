@@ -2,6 +2,12 @@
 
 namespace common {
 
+static MotorCommandTelemetry motorCommandTelemetry = {};
+
+const MotorCommandTelemetry &getMotorCommandTelemetry() {
+  return motorCommandTelemetry;
+}
+
 RPMSetpointPID leftRPMSetpointPID(RPM_PID_TUNING);
 RPMSetpointPID rightRPMSetpointPID(RPM_PID_TUNING);
 
@@ -26,6 +32,7 @@ void setMotorPower(double left, double right) {
   float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
   vescSetWheelRPM(can1, VESC_LEFT_ID, leftRpms);
   vescSetWheelRPM(can1, VESC_RIGHT_ID, rightRpms);
+  motorCommandTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};
 }
 
 //end vesc and can stuff. 

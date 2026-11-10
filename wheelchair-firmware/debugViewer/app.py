@@ -2,7 +2,7 @@ import asyncio, csv, json, os, pty, time, argparse
 from collections import deque
 from pathlib import Path
 from fastapi import FastAPI, WebSocket
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 
 ROOT = Path(__file__).parent
 FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped'.split()
@@ -48,6 +48,7 @@ async def acquire():
         while True:
             previous=None
             for line in Path(args.replay).read_text().splitlines():
+                while not connected: await asyncio.sleep(.1)
                 kind,row=parse(line)
                 if kind=='data':
                     if previous is not None: await asyncio.sleep(max(0,min(1,(row['time_ms']-previous)/1000)))
@@ -63,7 +64,7 @@ async def acquire():
             proc=await asyncio.create_subprocess_exec(*cmd,stdin=slave,stdout=slave,stderr=slave,cwd=ROOT,start_new_session=True)
             os.close(slave); slave=None
             os.set_blocking(master,False); buffer=''
-            while proc.returncode is None:
+            while connected and proc.returncode is None:
                 try:
                     data=os.read(master,65536)
                     buffer+=data.decode(errors='replace')
@@ -78,7 +79,8 @@ async def acquire():
             os.close(master)
             if proc and proc.returncode is None: proc.terminate(); await proc.wait()
             proc=None
-        await note('Lost connection — reconnecting'); await asyncio.sleep(2)
+        if connected:
+            await note('Lost connection — reconnecting'); await asyncio.sleep(2)
 async def broadcast():
     while True:
         await emit({'history':list(history),'stale':not history or time.monotonic()-last_change[0]>2})
@@ -93,6 +95,8 @@ async def stop():
     if proc and proc.returncode is None: proc.terminate()
 @app.get('/')
 async def index(): return HTMLResponse((ROOT/'index.html').read_text())
+@app.get('/bluetooth.js')
+async def bluetooth_script(): return FileResponse(ROOT/'bluetooth.js', media_type='text/javascript')
 @app.websocket('/ws')
 async def socket(ws:WebSocket):
     global connected
@@ -103,7 +107,9 @@ async def socket(ws:WebSocket):
             command=await ws.receive_text()
             if command=='disconnect':
                 connected=False
-                if proc: proc.terminate()
+                if proc and proc.returncode is None:
+                    try: proc.terminate()
+                    except ProcessLookupError: pass
             elif command=='connect': connected=True
     finally: clients.discard(ws)
 if __name__=='__main__':

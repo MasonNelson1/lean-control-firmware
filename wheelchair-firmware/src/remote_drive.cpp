@@ -76,7 +76,9 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
 constexpr unsigned long HC06_BAUD = 115200;
 
 void remote_setup() {
+  static uint8_t bluetoothTxBuffer[512];
   Serial1.begin(115200);
+  Serial1.addMemoryForWrite(bluetoothTxBuffer, sizeof(bluetoothTxBuffer));
   packetSerial.setStream(&Serial1);
   packetSerial.setPacketHandler(onPacketReceived);
   delay(200);

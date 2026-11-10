@@ -99,4 +99,13 @@ inline float speedToRPM(float speed) {
 //where the value is the percentage of max speed. 
 // PID smoothing is applied prior to using the setpoints. 
 void setMotorPower(double left, double right);
+
+// Last wheel commands, in mechanical RPM (not measured VESC feedback).
+struct MotorCommandTelemetry {
+  float leftTargetRPM;
+  float rightTargetRPM;
+  float leftSmoothedRPM;
+  float rightSmoothedRPM;
+};
+const MotorCommandTelemetry &getMotorCommandTelemetry();
 }  // namespace common

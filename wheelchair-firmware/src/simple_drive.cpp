@@ -57,7 +57,6 @@ int rightSaturation = 1000000;
 boolean initiallyCalibrated = false;
 
 
-float leftRpms = 0.0f, rightRpms = 0.0f;
 bool  stopped = false;
 int   unknownId = -1;            // a VESC on the bus that isn't LEFT or RIGHT
 int   floorF = 0, floorB = 0, floorL = 0, floorR = 0;
@@ -198,7 +197,6 @@ void loop() {
   }
   int f = 0, b = 0, l = 0, r = 0, total = 0;
   float speed = 0.0f, turn = 0.0f;
-  static float leftTargetRPM = 0.0f, rightTargetRPM = 0.0f;
   if (MODE == LEAN) {
     //lean mode
     //this debounces the button and calibrates if the user wants to calibrate. 
@@ -271,9 +269,7 @@ void loop() {
       //todo implement estop pid tuning
       leftRPMSetpointPID.reset();
       rightRPMSetpointPID.reset();
-      leftRpms = 0;
-      rightRpms = 0;
-      setMotorPower(leftRpms, rightRpms);
+      setMotorPower(0.0, 0.0);
     } else {
       //todo replace MAX_ACCEL with min(accel, MAX_ACCEL) where accel is the user set value from the control box. 
       //also do the same with the max speeds. 
@@ -296,25 +292,33 @@ void loop() {
   static uint32_t lastTelemetryMs = 0;
   const uint32_t now = millis();
   if (now - lastTelemetryMs < 50) return;  // 20 Hz telemetry
-  if (!Serial || Serial.availableForWrite() < 512) return;
   lastTelemetryMs = now;
 
   // Print CSV header once
   static bool headerPrinted = false;
-  if (!headerPrinted) {
+  if (!headerPrinted && Serial && Serial.availableForWrite() >= 512) {
     Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,leftSmoothedRPM,rightSmoothedRPM,stopped,mode");
     headerPrinted = true;
   }
 
   // Print CSV row
-  Serial.printf(
+  const MotorCommandTelemetry &motorTelemetry = getMotorCommandTelemetry();
+  char row[256];
+  const int rowLength = snprintf(row, sizeof(row),
     "%lu,%d,%d,%d,%d,%d,%d,%0.4f,%0.4f,%.4f,%.4f,%.4f,%.4f,%d,%s\n",
     millis(),
     f, b, l, r, total,
     userWeightEstimate,
     speed, turn,
-    leftTargetRPM, rightTargetRPM,leftRpms, rightRpms,
+    motorTelemetry.leftTargetRPM, motorTelemetry.rightTargetRPM,
+    motorTelemetry.leftSmoothedRPM, motorTelemetry.rightSmoothedRPM,
     stopped ? 1 : 0, modeName(MODE)
 );
+  Serial.write(reinterpret_cast<const uint8_t *>(row), rowLength);
+  // HC-06 telemetry is read-only and only emitted in lean mode. It does not
+  // depend on a USB connection or change the remote command protocol.
+  if (MODE == LEAN && Serial1.availableForWrite() >= rowLength) {
+    Serial1.write(reinterpret_cast<const uint8_t *>(row), rowLength);
+  }
 
 }

@@ -71,7 +71,9 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
 
 MotorTargets RemoteDriveMode::getTargets()
 {
-    if (millis() - lastPacketMillis >= common::CONTROLLER_TIMEOUT_MS)
+    const bool timedOut = millis() - lastPacketMillis >= common::CONTROLLER_TIMEOUT_MS;
+    telemetry.stopped = timedOut || softStopLatched;
+    if (timedOut)
     {
         requestedLeftPower = 0.0;
         requestedRightPower = 0.0;
@@ -83,6 +85,7 @@ MotorTargets RemoteDriveMode::getTargets()
 void RemoteDriveMode::reset()
 {
     // Discard the previous drive command while preserving any latched soft stop.
+    telemetry.stopped = true;
     lastPacketMillis = 0;
     requestedLeftPower = 0.0;
     requestedRightPower = 0.0;

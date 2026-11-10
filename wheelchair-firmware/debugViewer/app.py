@@ -59,7 +59,7 @@ async def acquire():
         if not connected: await asyncio.sleep(.3); continue
         master,slave=pty.openpty()
         try:
-            cmd=['pio','device','monitor','-d',str(ROOT.parent),'-e','simple','-b',str(args.baud)]
+            cmd=['pio','device','monitor','-d',str(ROOT.parent),'-e','teensy41','-b',str(args.baud)]
             if args.port: cmd+=['-p',args.port]
             proc=await asyncio.create_subprocess_exec(*cmd,stdin=slave,stdout=slave,stderr=slave,cwd=ROOT,start_new_session=True)
             os.close(slave); slave=None

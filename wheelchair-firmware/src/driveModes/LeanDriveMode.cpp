@@ -36,21 +36,11 @@ float applyLeanResponseCurve(float input)
 
 MotorTargets LeanDriveMode::getTargets()
 {
-    int f = 0, b = 0, l = 0, r = 0, total = 0;
-    float speed = 0.0f, turn = 0.0f;
-
-    // force calibration before the wheels can move.
-    if (!initiallyCalibrated)
-    {
-        stopped = true;
-        return {0, 0};
-    }
-
     // --- read, minus each sensor's floor ---
-    f = aboveFloor(analogRead(common::PIN_F), floorF);
-    b = aboveFloor(analogRead(common::PIN_B), floorB);
-    l = aboveFloor(analogRead(common::PIN_L), floorL);
-    r = aboveFloor(analogRead(common::PIN_R), floorR);
+    int f = aboveFloor(analogRead(common::PIN_F), floorF);
+    int b = aboveFloor(analogRead(common::PIN_B), floorB);
+    int l = aboveFloor(analogRead(common::PIN_L), floorL);
+    int r = aboveFloor(analogRead(common::PIN_R), floorR);
 
     // apply sensor specific gains
     b = (int)(b * common::REAR_GAIN);
@@ -58,18 +48,24 @@ MotorTargets LeanDriveMode::getTargets()
     l = (int)(l * common::LEFT_GAIN);
     r = (int)(r * common::RIGHT_GAIN);
 
+    // Report live sensor readings while calibration still gates motor targets.
+    if (!initiallyCalibrated)
+    {
+        telemetry = {f, b, l, r, 0.0f, 0.0f, true};
+        return {0, 0};
+    }
+
     // apply saturations
     f = min(frontSaturation, f);
     b = min(frontSaturation, b);
     l = min(frontSaturation, l);
     r = min(frontSaturation, r);
 
-    total = f + b + l + r;
     // Seat detection is currently disabled in the stop condition.
 
     // calculate speed and turn components from -1 to 1
-    speed = normalizeSensorPair(f - b, backSaturation, frontSaturation);
-    turn = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
+    float speed = normalizeSensorPair(f - b, backSaturation, frontSaturation);
+    float turn = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
 
     // apply deadband.
     if (fabs(speed) < common::DEADBAND)
@@ -81,6 +77,7 @@ MotorTargets LeanDriveMode::getTargets()
     speed = applyLeanResponseCurve(speed);
     turn = applyLeanResponseCurve(turn);
 
+    telemetry = {f, b, l, r, speed, turn, false};
     return {speed + turn, speed - turn};
 }
 
@@ -108,11 +105,7 @@ void LeanDriveMode::calibrate()
     rightSaturation = rightWeightFactor * userWeightEstimate;
 
     // clear calibration gate at start of program.
-    if (!initiallyCalibrated)
-    {
-        initiallyCalibrated = true;
-        stopped = false;
-    }
+    initiallyCalibrated = true;
 
     // todo make telemetry handling more formal.
     Serial.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",

@@ -59,6 +59,8 @@ class ConnectionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(process.terminated)
                 self.assertIsNone(viewer.proc)
                 self.assertEqual(launch.call_count, 1)
+                command = launch.call_args.args
+                self.assertEqual(command[command.index('-e') + 1], 'teensy41')
                 self.assertFalse(any('reconnecting' in message for message in viewer.console))
             finally:
                 task.cancel()

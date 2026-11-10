@@ -3,17 +3,29 @@
 
 #include "DriveMode.h"
 
+struct LeanTelemetry
+{
+    int front;
+    int back;
+    int left;
+    int right;
+    float speed;
+    float turn;
+    bool stopped = true;
+};
+
 class LeanDriveMode : public DriveMode
 {
 private:
     bool initiallyCalibrated = false;
+    LeanTelemetry telemetry{};
 
     int floorF = 0;
     int floorB = 0;
     int floorL = 0;
     int floorR = 0;
 
-    int userWeightEstimate = 0;
+    int userWeightEstimate = 370; // Unloaded sensor estimate until calibration.
 
     float frontSaturation = 0;
     float backSaturation = 0;
@@ -29,9 +41,9 @@ private:
     int leftWeightFactor = 1;
     int rightWeightFactor = 1;
 
-    bool stopped = true;
-
 public:
     MotorTargets getTargets() override;
     void calibrate();
+    const LeanTelemetry &getTelemetry() const { return telemetry; }
+    int getUserWeightEstimate() const { return userWeightEstimate; }
 };

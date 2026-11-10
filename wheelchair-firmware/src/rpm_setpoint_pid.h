@@ -3,27 +3,50 @@
 #include <math.h>
 #include "drive_constants.h"
 
-//author codex. 
+// author codex.
 
 // RPM command smoothing only: this is not measured motor-speed feedback.
 // Use one instance per wheel. Call reset() on a stop/fault, and bypass this
 // helper when sending an immediate zero. A requested zero is otherwise smoothed.
-class RPMSetpointPID {
- public:
-  struct Tuning {
+class RPMSetpointPID
+{
+public:
+  struct Tuning
+  {
     float lowSpeedTauS;
     float highSpeedTauS;
-    float ki;                       // 1/s^2; zero disables integral
-    float kd;                       // dimensionless; D acts on command motion
+    float ki; // 1/s^2; zero disables integral
+    float kd; // dimensionless; D acts on command motion
     float derivativeFilterS;
     float lowSpeedAccelMS2;
     float highSpeedAccelMS2;
-    float maxJerkRPMPerS2;           // rate of change of RPM/s acceleration
+    float maxJerkRPMPerS2; // rate of change of RPM/s acceleration
   };
 
   explicit RPMSetpointPID(const Tuning &tuning)
       : tuning_(tuning), valid_(validTuning(tuning)) {}
 
+  /**
+   * Update PID tuning without resetting the smoother.
+   *
+   * Preserves RPM, acceleration, integral, and derivative history.
+   * Invalid tuning is rejected, leaving the existing tuning unchanged.
+   *
+   *
+   * @return true if the new tuning was accepted.
+   */
+  bool setTuning(const Tuning &newTuning)
+  {
+    if (!validTuning(newTuning))
+    {
+      return false;
+    }
+
+    tuning_ = newTuning;
+    valid_ = true;
+
+    return true;
+  }
   /**
    * Advance the smoother by one VESC motor-setpoint update.
    *
@@ -44,10 +67,12 @@ class RPMSetpointPID {
    * @return Next smoothed wheel RPM. The first call advances from zero.
    * Scheduling uses this instance's own smoothed RPM; wheel states are independent.
    */
-  float smoothRPM(float requestedRPM, float dt, float maxSpeedMS, float maxAccelMS2) {
+  float smoothRPM(float requestedRPM, float dt, float maxSpeedMS, float maxAccelMS2)
+  {
     if (!valid_ || !isfinite(requestedRPM) || !isfinite(dt) || dt <= 0.0f ||
         !isfinite(maxSpeedMS) || !isfinite(maxAccelMS2) ||
-        maxSpeedMS <= 0.0f || maxAccelMS2 <= 0.0f) {
+        maxSpeedMS <= 0.0f || maxAccelMS2 <= 0.0f)
+    {
       reset();
       return 0.0f;
     }
@@ -56,7 +81,8 @@ class RPMSetpointPID {
     const float maxRPM = speedLimitMS * DriveConstants::LINEAR_TO_RPM;
     const float maxAccel = fminf(maxAccelMS2, DriveConstants::MAX_ACCEL);
 
-    if (havePreviousRPM_) {
+    if (havePreviousRPM_)
+    {
       const float rate = (rpm_ - previousRPM_) / previousDt_;
       const float alpha = dt / (tuning_.derivativeFilterS + dt);
       filteredRate_ += alpha * (rate - filteredRate_);
@@ -70,10 +96,8 @@ class RPMSetpointPID {
     float fraction = clip(fabsf(rpm_) / maxRPM, 0.0f, 1.0f);
     fraction = fraction * fraction * (3.0f - 2.0f * fraction);
 
-
     const float tau = tuning_.lowSpeedTauS +
                       fraction * (tuning_.highSpeedTauS - tuning_.lowSpeedTauS);
-
 
     const float lowAccel = fminf(tuning_.lowSpeedAccelMS2, maxAccel) *
                            DriveConstants::LINEAR_TO_RPM;
@@ -81,7 +105,7 @@ class RPMSetpointPID {
                             DriveConstants::LINEAR_TO_RPM;
 
     const float accelLimit = lowAccel + fraction *
-        (highAccel - lowAccel);
+                                            (highAccel - lowAccel);
 
     const float error = requestedRPM - rpm_;
 
@@ -100,20 +124,23 @@ class RPMSetpointPID {
     // applying the requested correction. Each instance owns its own integral.
     if (tuning_.ki > 0.0f &&
         (fabsf(requestedAccel - acceleration_) < 1.0e-5f ||
-         error * (requestedAccel - acceleration_) <= 0.0f)) {
+         error * (requestedAccel - acceleration_) <= 0.0f))
+    {
       const float integralLimit = lowAccel / tuning_.ki;
       integral_ = clip(integral_ + error * dt, -integralLimit, integralLimit);
     }
 
     const float nextRPM = rpm_ + acceleration_ * dt;
-    if (!isfinite(nextRPM) || !isfinite(filteredRate_) || !isfinite(integral_)) {
+    if (!isfinite(nextRPM) || !isfinite(filteredRate_) || !isfinite(integral_))
+    {
       reset();
       return 0.0f;
     }
 
-    //enforce speed limits. 
+    // enforce speed limits.
     rpm_ = clip(nextRPM, -maxRPM, maxRPM);
-    if (rpm_ != nextRPM) {
+    if (rpm_ != nextRPM)
+    {
       // A hard speed boundary takes precedence over jerk continuity. Ordinary
       // target crossings may still overshoot within these absolute bounds.
       acceleration_ = 0.0f;
@@ -125,9 +152,10 @@ class RPMSetpointPID {
   }
 
   /** Clear command RPM, acceleration, integral and derivative history to zero.
-   *  Use on a stop/fault; the caller must send the immediate zero to the VESC.
+   *
    */
-  void reset() {
+  void reset()
+  {
     rpm_ = 0.0f;
     acceleration_ = 0.0f;
     integral_ = 0.0f;
@@ -140,12 +168,14 @@ class RPMSetpointPID {
   /** Return whether the constructor's tuning values are valid. */
   bool isValid() const { return valid_; }
 
- private:
-  static float clip(float value, float low, float high) {
+private:
+  static float clip(float value, float low, float high)
+  {
     return fminf(high, fmaxf(low, value));
   }
 
-  static bool validTuning(const Tuning &p) {
+  static bool validTuning(const Tuning &p)
+  {
     return isfinite(p.lowSpeedTauS) && p.lowSpeedTauS > 0.0f &&
            isfinite(p.highSpeedTauS) && p.highSpeedTauS > 0.0f &&
            isfinite(p.ki) && p.ki >= 0.0f &&
@@ -157,8 +187,8 @@ class RPMSetpointPID {
            isfinite(p.maxJerkRPMPerS2) && p.maxJerkRPMPerS2 > 0.0f;
   }
 
-  const Tuning tuning_;
-  const bool valid_;
+  Tuning tuning_;
+  bool valid_;
   float rpm_ = 0.0f;
   float acceleration_ = 0.0f;
   float integral_ = 0.0f;

@@ -1,8 +1,13 @@
-import asyncio, csv, json, os, pty, time, argparse
+import asyncio, csv, json, os, time, argparse
 from collections import deque
 from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse, FileResponse
+
+try:
+    import pty
+except ImportError:
+    pty = None
 
 ROOT = Path(__file__).parent
 FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped'.split()
@@ -55,6 +60,9 @@ async def acquire():
                     previous=row['time_ms']
                 await line_received(line)
             await asyncio.sleep(2)
+    if pty is None:
+        await note('Wired monitoring requires Linux or WSL. Use Bluetooth or start the viewer with --replay.')
+        return
     while True:
         if not connected: await asyncio.sleep(.3); continue
         master,slave=pty.openpty()
@@ -97,6 +105,12 @@ async def stop():
 async def index(): return HTMLResponse((ROOT/'index.html').read_text())
 @app.get('/bluetooth.js')
 async def bluetooth_script(): return FileResponse(ROOT/'bluetooth.js', media_type='text/javascript')
+@app.get('/config-protocol.js')
+async def config_protocol_script(): return FileResponse(ROOT/'config-protocol.js', media_type='text/javascript')
+@app.get('/configuration.js')
+async def configuration_script(): return FileResponse(ROOT/'configuration.js', media_type='text/javascript')
+@app.get('/pid-preview.js')
+async def pid_preview_script(): return FileResponse(ROOT/'pid-preview.js', media_type='text/javascript')
 @app.websocket('/ws')
 async def socket(ws:WebSocket):
     global connected

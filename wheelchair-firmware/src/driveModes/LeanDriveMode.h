@@ -27,23 +27,18 @@ private:
 
     int userWeightEstimate = 370; // Unloaded sensor estimate until calibration.
 
-    float frontSaturation = 0;
-    float backSaturation = 0;
-    float leftSaturation = 0;
-    float rightSaturation = 0;
+    // Cached from the weight estimate and configured factors during calibration.
+    int frontSaturation = 0;
+    int backSaturation = 0;
+    int leftSaturation = 0;
+    int rightSaturation = 0;
 
-    // these constants decide how much a sensor needs to be triggered in relation to
-    // the weight estimate to be considered full input.
-    // so a value of one means if the sensor is reading a value equal to the user's weight, the the max value is reached.
-    // the smaller the value, the more responsive the chair is.
-    int frontWeightFactor = 1;
-    int backWeightFactor = 1;
-    int leftWeightFactor = 1;
-    int rightWeightFactor = 1;
+    float responseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
 
 public:
     MotorTargets getTargets() override;
     void calibrate();
+    void updateResponseCurve();
     const LeanTelemetry &getTelemetry() const { return telemetry; }
     int getUserWeightEstimate() const { return userWeightEstimate; }
 };

@@ -12,6 +12,39 @@ function parseBluetoothLine(line) {
   return row;
 }
 
+// Legacy telemetry is newline-delimited. Configuration replies are framed
+// with a zero on each side of their COBS payload.
+class BluetoothReceiver {
+  constructor(onLine, onFrame) {
+    this.onLine = onLine;
+    this.onFrame = onFrame;
+    this.decoder = new TextDecoder();
+    this.line = [];
+    this.frame = null;
+  }
+
+  push(bytes) {
+    for (const byte of bytes) {
+      if (byte === 0) {
+        if (this.frame === null) {
+          this.line = [];
+          this.frame = [];
+        } else {
+          if (this.frame.length && this.frame.length <= 402) this.onFrame(Uint8Array.from(this.frame));
+          this.frame = null;
+        }
+      } else if (this.frame !== null) {
+        if (this.frame.length <= 402) this.frame.push(byte);
+      } else if (byte === 10) {
+        if (this.line.length <= 4096) this.onLine(this.decoder.decode(Uint8Array.from(this.line)).replace(/\r$/, ''));
+        this.line = [];
+      } else if (this.line.length <= 4096) {
+        this.line.push(byte);
+      }
+    }
+  }
+}
+
 let bluetoothPort = null, bluetoothReader = null, bluetoothReadTask = null;
 let bluetoothRows = [], bluetoothLastRowAt = 0, bluetoothTimer = null;
 let connectionBusy = false;
@@ -38,28 +71,21 @@ function renderBluetooth() {
 }
 
 async function readBluetooth(port) {
-  const decoder = new TextDecoder();
-  let buffer = '';
+  const receiver = new BluetoothReceiver(line => {
+    const row = parseBluetoothLine(line);
+    if (row) {
+      if (bluetoothRows.length && row.time_ms < bluetoothRows.at(-1).time_ms) bluetoothRows = [];
+      bluetoothRows.push(row);
+      bluetoothLastRowAt = performance.now();
+      while (bluetoothRows.length > 13000 || row.time_ms - bluetoothRows[0].time_ms > 60000) bluetoothRows.shift();
+    } else if (line.trim() && !line.startsWith('time_ms')) appendConsole(line);
+  }, frame => window.configLink?.receive(frame));
   try {
     bluetoothReader = port.readable.getReader();
     while (bluetoothActive) {
       const {value, done} = await bluetoothReader.read();
       if (done) break;
-      buffer += decoder.decode(value, {stream: true});
-      let newline;
-      while ((newline = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, newline).replace(/\r$/, '');
-        buffer = buffer.slice(newline + 1);
-        const row = parseBluetoothLine(line);
-        if (row) {
-          if (bluetoothRows.length && row.time_ms < bluetoothRows.at(-1).time_ms) bluetoothRows = [];
-          bluetoothRows.push(row);
-          bluetoothLastRowAt = performance.now();
-          while (bluetoothRows.length > 13000 || row.time_ms - bluetoothRows[0].time_ms > 60000) bluetoothRows.shift();
-        } else if (line.trim() && !line.startsWith('time_ms')) appendConsole(line);
-      }
-      // A damaged/mid-stream line must not grow the buffer indefinitely.
-      if (buffer.length > 4096) buffer = '';
+      receiver.push(value);
     }
   } catch (error) {
     if (bluetoothActive) appendConsole(`Bluetooth read failed: ${error.message}`);
@@ -67,6 +93,7 @@ async function readBluetooth(port) {
     bluetoothReader?.releaseLock();
     bluetoothReader = null;
     clearInterval(bluetoothTimer);
+    await window.configurationConnectionChanged?.(null);
     try { await port.close(); } catch (error) { appendConsole(`Bluetooth close: ${error.message}`); }
     bluetoothPort = null;
     bluetoothActive = false;
@@ -78,7 +105,7 @@ async function readBluetooth(port) {
 
 async function connectBluetooth() {
   if (!window.isSecureContext || !navigator.serial) {
-    appendConsole('Bluetooth serial requires Chrome on Linux with Web Serial enabled. Open this dashboard at http://localhost:8000 or HTTPS, and pair the HC-06 in Linux Bluetooth settings first.');
+    appendConsole('Bluetooth serial requires desktop Chrome with Web Serial enabled. Open this dashboard at http://localhost:8000 or HTTPS, and pair the HC-06 in your system Bluetooth settings first.');
     return;
   }
   connectionBusy = true;
@@ -99,10 +126,11 @@ async function connectBluetooth() {
     appendConsole('Bluetooth connected. Select LEAN on the wheelchair to receive telemetry.');
     bluetoothTimer = setInterval(renderBluetooth, 100);
     bluetoothReadTask = readBluetooth(port);
+    window.configurationConnectionChanged?.(port);
   } catch (error) {
     if (error.name !== 'NotFoundError') appendConsole(`Bluetooth connection failed: ${error.message}`);
     if (port && !bluetoothActive) {
-      appendConsole('Selecting a receiver only grants browser access. In Linux Bluetooth settings, finish pairing the receiver first; then close other serial apps and disconnect the handheld controller before retrying Connect.');
+      appendConsole('In your system Bluetooth settings, finish pairing the receiver. Close other serial apps and disconnect the handheld controller before retrying Connect.');
     }
     showDisconnected(error.name === 'NotFoundError' ? 'Bluetooth disconnected' : `Bluetooth connection failed: ${error.message}`);
   } finally {

@@ -1,30 +1,11 @@
 #include "RemoteDriveMode.h"
 #include "Arduino.h"
-#include "common.h"
-
-unsigned long RemoteDriveMode::lastPacketMillis = 0;
-bool RemoteDriveMode::softStopLatched = false;
-double RemoteDriveMode::requestedLeftPower = 0.0;
-double RemoteDriveMode::requestedRightPower = 0.0;
-
-uint32_t RemoteDriveMode::receivedPackets = 0;
-uint32_t RemoteDriveMode::receivedDrivePackets = 0;
-size_t RemoteDriveMode::lastPacketSize = 0;
-uint8_t RemoteDriveMode::lastPacketType = 0;
-
-RemoteDriveMode::RemoteDriveMode(PacketSerial &serial) : packetSerial(serial)
-{
-    packetSerial.setPacketHandler(
-        &RemoteDriveMode::onPacketReceived);
-}
+#include "../config/DriveSettings.h"
 
 void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
 {
-    ++receivedPackets;
-    lastPacketSize = size;
     if (buffer == nullptr || size < 1)
         return;
-    lastPacketType = buffer[0];
 
     switch (buffer[0])
     {
@@ -39,7 +20,6 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
         if (leftInt == INT16_MIN || rightInt == INT16_MIN)
             return;
 
-        ++receivedDrivePackets;
         lastPacketMillis = millis();
         if (!softStopLatched)
         {
@@ -71,7 +51,7 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
 
 MotorTargets RemoteDriveMode::getTargets()
 {
-    const bool timedOut = millis() - lastPacketMillis >= common::CONTROLLER_TIMEOUT_MS;
+    const bool timedOut = millis() - lastPacketMillis >= settings::controllerTimeout.get();
     telemetry.stopped = timedOut || softStopLatched;
     if (timedOut)
     {
@@ -89,9 +69,4 @@ void RemoteDriveMode::reset()
     lastPacketMillis = 0;
     requestedLeftPower = 0.0;
     requestedRightPower = 0.0;
-
-    receivedPackets = 0;
-    receivedDrivePackets = 0;
-    lastPacketSize = 0;
-    lastPacketType = 0;
 }

@@ -1,5 +1,5 @@
 // Host test (does not command hardware):
-// g++ -std=c++11 -Wall -Wextra -Werror -I tests/native/arduino_stub -I src tests/native/rpm_setpoint_pid_test.cpp -o /tmp/rpm_pid_test
+// g++ -std=c++17 -Wall -Wextra -Werror -I src tests/native/rpm_setpoint_pid_test.cpp -o /tmp/rpm_pid_test
 // /tmp/rpm_pid_test
 #include "rpm_setpoint_pid.h"
 #include <cassert>
@@ -10,10 +10,7 @@
 using namespace DriveConstants;
 
 static RPMSetpointPID::Tuning tuning() {
-  return {RPM_PID_LOW_SPEED_TAU_S, RPM_PID_HIGH_SPEED_TAU_S,
-          RPM_PID_KI, RPM_PID_KD, RPM_PID_DERIVATIVE_FILTER_S,
-          RPM_PID_LOW_SPEED_ACCEL_MS2, RPM_PID_HIGH_SPEED_ACCEL_MS2,
-          RPM_PID_MAX_JERK_RPM_PER_S2};
+  return RPMSetpointPID::defaultTuning();
 }
 
 int main() {
@@ -60,7 +57,7 @@ int main() {
   const float oldAccelRPM = (afterAccelReduction - previous) / dt;
   const float raisedRPM = changing.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL);
   const float newAccelRPM = (raisedRPM - afterAccelReduction) / dt;
-  assert(std::fabs(newAccelRPM - oldAccelRPM) <= RPM_PID_MAX_JERK_RPM_PER_S2 * dt + .001f);
+  assert(std::fabs(newAccelRPM - oldAccelRPM) <= tuning().maxJerkRPMPerS2 * dt + .001f);
   // Lower speed bounds apply to the returned value immediately in either direction.
   const float afterSpeedReduction = changing.smoothRPM(1000.0f, dt, .2f, .1f);
   assert(std::fabs(afterSpeedReduction) <= .2f * LINEAR_TO_RPM);
@@ -98,4 +95,29 @@ int main() {
   assert(right.smoothRPM(0.0f, dt, MAX_SPEED, MAX_ACCEL) == 0.0f);
   left.reset();
   assert(left.smoothRPM(0.0f, dt, MAX_SPEED, MAX_ACCEL) == 0.0f);
+
+  RPMSetpointPID nominal(tuning());
+  for (int k = 0; k < 2000; ++k)
+    nominal.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL);
+  // Selecting another profile does not reset accumulated motion state.
+  auto retuned = tuning();
+  retuned.kd = 1.0f;
+  assert(nominal.setTuning(retuned));
+  assert(nominal.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL) > designRPM * .9f);
+
+  // Updating the shared conversion affects an existing controller immediately.
+  const float defaultConversion = LINEAR_TO_RPM;
+  LINEAR_TO_RPM = 60.0f / 2.0f;
+  assert(nominal.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL) <= MAX_SPEED * LINEAR_TO_RPM);
+  LINEAR_TO_RPM = 60.0f / 1.8f;
+  RPMSetpointPID updated(tuning());
+  float updatedRPM = 0.0f;
+  for (int k = 0; k < 2000; ++k) {
+    const float previousRPM = updatedRPM;
+    updatedRPM = updated.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL);
+    assert(updatedRPM <= MAX_SPEED * LINEAR_TO_RPM);
+    assert(std::fabs(updatedRPM - previousRPM) / dt <= MAX_ACCEL * LINEAR_TO_RPM + .001f);
+  }
+  assert(updatedRPM > designRPM);
+  LINEAR_TO_RPM = defaultConversion;
 }

@@ -23,6 +23,12 @@ public:
     float maxJerkRPMPerS2; // rate of change of RPM/s acceleration
   };
 
+  static constexpr Tuning defaultTuning()
+  {
+    return {0.035f, 0.1f, 0.0f, 2.0f, 0.02f,
+            DriveConstants::MAX_ACCEL, DriveConstants::MAX_ACCEL, 400.0f};
+  }
+
   explicit RPMSetpointPID(const Tuning &tuning)
       : tuning_(tuning), valid_(validTuning(tuning)) {}
 
@@ -53,12 +59,11 @@ public:
    * Call exactly once per update to this wheel's VESC motor setpoint. This method does not
    * read a clock, schedule updates, or detect skipped/extra calls.
    *
-   * @param requestedRPM Desired wheel RPM, not normalized power or electrical RPM.
-   *                     Used directly for the error; only the output RPM is limited.
+   * @param requestedRPM Desired wheel RPM
+   *                     .
    * @param dt Seconds since the previous VESC setpoint update; must be finite
    *           and positive (for example, 0.005f for a 5 ms update).
-   * @param maxSpeedMS User speed limit in m/s, capped at the shared 11 mph
-   *                   design limit. Output magnitude is limited, not the target.
+   * @param maxSpeedMS User speed limit in m/s, capped at the shared firmware limit.
    * @param maxAccelMS2 User wheel acceleration limit in m/s^2, capped at the
    *                    shared 2.85 m/s^2 design limit and the tuned limits.
    * A zero limit returns zero and clears state. Negative/nonfinite inputs also

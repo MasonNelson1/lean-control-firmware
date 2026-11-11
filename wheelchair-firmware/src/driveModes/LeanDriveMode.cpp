@@ -1,8 +1,9 @@
 #include "LeanDriveMode.h"
 #include "Arduino.h"
 #include "common.h"
+#include "../config/DriveSettings.h"
 
-float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit)
+static float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit)
 {
     if (difference >= 0)
     {
@@ -20,33 +21,28 @@ float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit)
     }
 }
 
-int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
+static int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
 
-// need to refactor this to be configuration compatible.
-//  Calculate once; configurable knee coordinates live in drive_constants.h.
-const float INPUT_RESPONSE_EXPONENT =
-    logf(common::INPUT_RESPONSE_KNEE_OUTPUT) / logf(common::INPUT_RESPONSE_KNEE_INPUT);
-/** Map a normalized [-1, 1] lean input through the configured power curve.
- *  Preserves direction, zero and full scale; call after the input deadband.
- */
-float applyLeanResponseCurve(float input)
+void LeanDriveMode::updateResponseCurve()
 {
-    return copysignf(powf(fabsf(input), INPUT_RESPONSE_EXPONENT), input);
+    const auto &knee = settings::leanResponse.get();
+    responseExponent = logf(knee[1]) / logf(knee[0]);
 }
 
 MotorTargets LeanDriveMode::getTargets()
 {
     // --- read, minus each sensor's floor ---
-    int f = aboveFloor(analogRead(common::PIN_F), floorF);
-    int b = aboveFloor(analogRead(common::PIN_B), floorB);
-    int l = aboveFloor(analogRead(common::PIN_L), floorL);
-    int r = aboveFloor(analogRead(common::PIN_R), floorR);
+    const int defaultFloor = settings::defaultFloor.get();
+    int f = aboveFloor(analogRead(common::PIN_F), initiallyCalibrated ? floorF : defaultFloor);
+    int b = aboveFloor(analogRead(common::PIN_B), initiallyCalibrated ? floorB : defaultFloor);
+    int l = aboveFloor(analogRead(common::PIN_L), initiallyCalibrated ? floorL : defaultFloor);
+    int r = aboveFloor(analogRead(common::PIN_R), initiallyCalibrated ? floorR : defaultFloor);
 
     // apply sensor specific gains
-    b = (int)(b * common::REAR_GAIN);
-    f = (int)(f * common::FRONT_GAIN);
-    l = (int)(l * common::LEFT_GAIN);
-    r = (int)(r * common::RIGHT_GAIN);
+    b = (int)(b * settings::rearGain.get());
+    f = (int)(f * settings::frontGain.get());
+    l = (int)(l * settings::leftGain.get());
+    r = (int)(r * settings::rightGain.get());
 
     // Report live sensor readings while calibration still gates motor targets.
     if (!initiallyCalibrated)
@@ -55,11 +51,10 @@ MotorTargets LeanDriveMode::getTargets()
         return {0, 0};
     }
 
-    // apply saturations
     f = min(frontSaturation, f);
-    b = min(frontSaturation, b);
-    l = min(frontSaturation, l);
-    r = min(frontSaturation, r);
+    b = min(backSaturation, b);
+    l = min(leftSaturation, l);
+    r = min(rightSaturation, r);
 
     // Seat detection is currently disabled in the stop condition.
 
@@ -68,14 +63,14 @@ MotorTargets LeanDriveMode::getTargets()
     float turn = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
 
     // apply deadband.
-    if (fabs(speed) < common::DEADBAND)
+    if (fabs(speed) < settings::deadband.get())
         speed = 0.0f;
-    if (fabs(turn) < common::DEADBAND)
+    if (fabs(turn) < settings::deadband.get())
         turn = 0.0f;
 
     // Shape speed and turn separately before wheel mixing and PID smoothing.
-    speed = applyLeanResponseCurve(speed);
-    turn = applyLeanResponseCurve(turn);
+    speed = copysignf(powf(fabsf(speed), responseExponent), speed);
+    turn = copysignf(powf(fabsf(turn), responseExponent), turn);
 
     telemetry = {f, b, l, r, speed, turn, false};
     return {speed + turn, speed - turn};
@@ -84,8 +79,9 @@ MotorTargets LeanDriveMode::getTargets()
 void LeanDriveMode::calibrate()
 {
 
+    const int samples = settings::calibrationSamples.get();
     long sumF = 0, sumB = 0, sumL = 0, sumR = 0;
-    for (int i = 0; i < common::CAL_SAMPLES; i++)
+    for (int i = 0; i < samples; i++)
     {
         sumF += analogRead(common::PIN_F);
         sumB += analogRead(common::PIN_B);
@@ -93,23 +89,22 @@ void LeanDriveMode::calibrate()
         sumR += analogRead(common::PIN_R);
         delay(2);
     }
-    floorF = (sumF + common::CAL_SAMPLES / 2) / common::CAL_SAMPLES;
-    floorB = (sumB + common::CAL_SAMPLES / 2) / common::CAL_SAMPLES;
-    floorL = (sumL + common::CAL_SAMPLES / 2) / common::CAL_SAMPLES;
-    floorR = (sumR + common::CAL_SAMPLES / 2) / common::CAL_SAMPLES;
+    floorF = (sumF + samples / 2) / samples;
+    floorB = (sumB + samples / 2) / samples;
+    floorL = (sumL + samples / 2) / samples;
+    floorR = (sumR + samples / 2) / samples;
     userWeightEstimate = (floorF + floorB + floorL + floorR) / 4; // integer division ok here.
 
-    frontSaturation = frontWeightFactor * userWeightEstimate;
-    backSaturation = backWeightFactor * userWeightEstimate;
-    leftSaturation = leftWeightFactor * userWeightEstimate;
-    rightSaturation = rightWeightFactor * userWeightEstimate;
+    frontSaturation = settings::frontWeight.get() * userWeightEstimate;
+    backSaturation = settings::rearWeight.get() * userWeightEstimate;
+    leftSaturation = settings::leftWeight.get() * userWeightEstimate;
+    rightSaturation = settings::rightWeight.get() * userWeightEstimate;
 
-    // clear calibration gate at start of program.
     initiallyCalibrated = true;
 
     // todo make telemetry handling more formal.
     Serial.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
-                  common::CAL_SAMPLES, floorF, floorB, floorL, floorR);
+                  samples, floorF, floorB, floorL, floorR);
     Serial1.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
-                   common::CAL_SAMPLES, floorF, floorB, floorL, floorR);
+                   samples, floorF, floorB, floorL, floorR);
 }

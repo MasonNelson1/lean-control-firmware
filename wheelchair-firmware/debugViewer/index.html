@@ -4,10 +4,80 @@
 :root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#253345;background:#eef2f6;font-synthesis:none}*{box-sizing:border-box}body{margin:0;padding:28px;max-width:1800px;margin-inline:auto}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:16px}h1{font-size:25px;letter-spacing:-.8px;margin:0}header p{margin:5px 0 0;color:#778393;font-size:13px}.badge{display:inline-flex;align-items:center;gap:8px;border:1px solid #dce3eb;background:white;border-radius:20px;padding:8px 12px;font-size:12px}.badge:before{content:'';width:7px;height:7px;border-radius:50%;background:#22a280}.badge.off:before{background:#cc9244}main{display:grid;grid-template-columns:minmax(0,2.25fr) minmax(320px,1fr);gap:20px}.panel{background:white;border:1px solid #dce3ea;border-radius:14px;box-shadow:0 3px 12px #1c354606;overflow:hidden}.panelhead{padding:18px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eef1f5;gap:12px}h2{font-size:15px;margin:0;font-weight:650}.sub{color:#8691a0;font-size:12px;margin-top:4px}.controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap}button,select{font:inherit;font-size:12px;border:1px solid #d9e0e8;background:#fff;color:#46556a;padding:7px 11px;border-radius:6px;cursor:pointer}button:hover{background:#f2f6fa}select{padding:7px}.plots{padding:14px 12px 8px}.plot{height:280px;width:100%;display:block;background:white}.sensor-body{padding:20px}.force-map{height:240px;display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);gap:10px;align-items:center}.sensor{padding:10px 12px;border:1px solid #e0e7ef;border-radius:10px;background:#f8fafc;text-align:center}.sensor label{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#718095;display:block}.sensor strong{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;display:block;margin:3px 0 7px}.track{height:4px;background:#e4ebf2;border-radius:4px;overflow:hidden}.fill{height:100%;width:0;background:#4b8fb8;transition:width .12s}.front{grid-area:1/2}.back{grid-area:3/2}.left{grid-area:2/1}.right{grid-area:2/3}.seat{grid-area:2/2;text-align:center;color:#93a2b2;font-size:10px;letter-spacing:1px}.seat svg{display:block;margin:auto auto 6px}.metrics{display:flex;justify-content:space-between;border-top:1px solid #edf1f5;border-bottom:1px solid #edf1f5;padding:14px 0;margin:16px 0;color:#7b8796;font-size:11px}.metrics strong{display:block;color:#35475b;font-size:16px;margin-top:5px;font-variant-numeric:tabular-nums}.direction-title{font-size:11px;color:#798697;text-transform:uppercase;letter-spacing:1px}#vector{display:block;width:100%;height:235px}.coordinates{display:flex;justify-content:center;gap:30px;font-size:11px;color:#7a8797}.coordinates strong{color:#31475c;font-size:17px;display:block;margin-top:4px;font-variant-numeric:tabular-nums}.console{margin-top:20px}.console .panelhead{padding-block:12px}pre{height:150px;overflow:auto;margin:0;background:#15212f;color:#c6d7e5;padding:16px 20px;font:12px/1.7 ui-monospace,monospace;white-space:pre-wrap}.controls label{font-size:11px;color:#778697}.legend-note{padding:0 22px 14px;color:#8895a5;font-size:11px}@media(min-width:1400px){.plot{height:315px}}@media(max-width:950px){body{padding:16px}main{grid-template-columns:1fr}.sensor-body{max-width:530px;margin:auto}.plot{height:270px}.panelhead{flex-wrap:wrap}header{align-items:flex-start}.badge{max-width:220px}}
 .direction-plots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px}
 #smoothed-vector{display:block;width:100%;height:235px}
+[hidden]{display:none!important}
+.dashboard-layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:24px}
+.sidebar{position:sticky;top:20px;align-self:start;padding:12px;display:grid;gap:5px}
+.sidebar button{text-align:left;padding:10px;border-color:transparent}
+.sidebar button[aria-current="page"]{background:#e9f1f7;color:#165877;font-weight:650}
+.dashboard-content{min-width:0}
+.panel{border-radius:0;box-shadow:none}
+.badge{border-radius:3px}
+button,select{border-radius:3px}
+.sidebar{border:0;border-right:1px solid #dce3ea;background:transparent}
+.sidebar button{border-radius:0}
+.configuration{padding:22px;overflow:visible}
+.configuration header{margin-bottom:12px}
+.configuration h2{font-size:20px}
+.configuration h3{margin:0;font-size:15px}
+.configuration .controls button:disabled{opacity:.5;cursor:default}
+.config-status{margin:12px 0;color:#536378;font-size:13px}
+.config-status[data-error="true"]{color:#a32b25}
+.config-summary{margin:12px 0;font-size:13px}
+.config-group{margin-top:24px;padding:18px 0 0;border:0;border-top:1px solid #dce3ea}
+.config-group .config-group{margin-top:16px;padding:16px 0 0 18px;border-top:0;border-left:2px solid #e7edf2;background:transparent}
+.config-group-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.config-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));column-gap:28px;row-gap:0;margin-top:6px}
+.config-field{padding:16px 0;border:0;border-bottom:1px solid #e7edf2;background:transparent;min-width:0}
+.config-field-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;font-size:13px;font-weight:650}
+.config-field-title{margin-bottom:10px}
+.field-help{position:relative;flex:0 0 auto}
+.help-button{width:23px;height:23px;border:0;padding:0;background:transparent;color:#687f93;font-size:16px;font-weight:600;line-height:23px}
+.help-button:hover,.help-button:focus-visible{background:#eaf2f7;color:#174f70}
+.field-tooltip{position:absolute;right:0;top:calc(100% + 7px);z-index:30;width:min(300px,calc(100vw - 64px));padding:12px 14px;background:#23384b;color:#f5f8fc;box-shadow:0 5px 18px #172b3b30;font-size:12px;line-height:1.55;font-weight:400;visibility:hidden;opacity:0;pointer-events:none}
+.field-help:hover .field-tooltip,.field-help:focus-within .field-tooltip{visibility:visible;opacity:1;pointer-events:auto}
+.field-tooltip p{margin:8px 0 0}
+.config-field input:not([type="checkbox"]):not([type="range"]),.config-field select{width:100%;padding:8px;font:inherit;font-size:13px;border:1px solid #cbd6df;border-radius:2px;background:#fff}
+.number-controls{display:grid;grid-template-columns:minmax(0,1fr) 80px auto;column-gap:10px;row-gap:7px;align-items:center}
+.number-controls.no-slider{grid-template-columns:minmax(0,1fr) auto}
+.value-actions{display:flex;gap:4px}
+.value-actions button{padding:5px 6px;font-size:11px;color:#687d90}
+.value-actions button:first-child{font-size:17px;line-height:17px}
+.scalar-value{display:flex;align-items:center;gap:10px}
+.scalar-value select{flex:1;min-width:0}
+.config-slider{display:block;width:100%;min-width:0;margin:0;padding:0;accent-color:#287d9c;cursor:pointer}
+.config-slider:disabled{cursor:default}
+.input-limits{grid-column:1/-1;display:flex;justify-content:space-between;gap:12px;color:#778698;font-size:11px;font-weight:400}
+.config-field input[type="checkbox"]{width:18px;height:18px}
+.config-field :is(input,select)[aria-invalid="true"]{border-color:#a32b25}
+.config-field-note{margin:6px 0 0;color:#536378;font-size:12px;overflow-wrap:anywhere}
+.config-field-error{margin:6px 0 0;color:#a32b25;font-size:12px}
+.profile-field{grid-column:1/-1}
+.profile-plot{display:block;width:100%;max-width:500px;height:auto;margin:8px 0;touch-action:none}
+.profile-inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:24px}
+.profile-inputs label{display:block;font-size:12px}
+.profile-inputs .number-controls{margin-top:8px}
+.pid-preview{margin-top:20px;padding-top:16px;border-top:1px solid #e7edf2}
+.pid-preview-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.pid-preview h4{font-size:13px;margin:0;font-weight:650}
+.pid-legend{display:flex;gap:18px;color:#667586;font-size:11px}
+.pid-legend span{display:inline-flex;gap:7px;align-items:center}
+.pid-legend span:before{content:'';display:inline-block;width:22px;border-top:2px solid #146db0}
+.pid-legend .target-legend:before{border-color:#8996a4;border-top-style:dashed}
+.pid-step-plot{display:block;width:100%;height:280px;margin-top:10px}
+@media(max-width:1100px){.dashboard-layout{grid-template-columns:165px minmax(0,1fr);gap:16px}}
+@media(max-width:800px){.dashboard-layout{display:block}.sidebar{position:static;display:flex;flex-wrap:wrap;margin-bottom:12px}}
 </style></head><body>
-<header><div><h1>Lean <span style="font-weight:400;color:#8694a5">/ Debug viewer</span></h1><p>Wheel command tracking & sensor telemetry</p></div><div class="controls"><select id="connection-mode" aria-label="Connection mode"><option value="usb">USB / replay</option><option value="bluetooth">Bluetooth</option></select><button id="connection-connect">Connect</button><button id="connection-disconnect">Disconnect</button><span id="mode" class="badge off" role="status">Mode: Unknown</span><span id="status" class="badge off" role="status">Connecting to server</span></div></header>
-<p id="bluetooth-help" class="sub">For wireless telemetry, select LEAN on the wheelchair, pair its HC-06 in Linux Bluetooth settings, then connect here. Use Chrome at localhost or HTTPS.</p>
-<main><section class="panel"><div class="panelhead"><div><h2>RPM tracking</h2><div class="sub">Target and PID-smoothed wheel commands</div></div><div class="controls"><button id="pause">Pause graphs</button><select id="window" aria-label="Graph time window"><option value="60">60 seconds</option><option value="30">30 seconds</option><option value="10">10 seconds</option></select></div></div><div class="plots"><canvas id="left" class="plot" aria-label="Left target and smoothed RPM graph"></canvas><canvas id="right" class="plot" aria-label="Right target and smoothed RPM graph"></canvas></div><div class="legend-note">Commanded RPM · positive = forward · time from device boot</div></section>
+<div class="dashboard-layout">
+<nav class="panel sidebar" aria-label="Dashboard sections">
+  <button type="button" data-page="telemetry" aria-current="page">Dashboard / Telemetry</button>
+  <button type="button" data-page="configuration">Configuration</button>
+  <button type="button" data-page="advanced">Advanced Configuration</button>
+</nav>
+<div class="dashboard-content">
+<header><div><h1>Lean <span style="font-weight:400;color:#8694a5">/ Debug viewer</span></h1><p>Wheel command tracking & sensor telemetry</p></div><div class="controls"><select id="connection-mode" aria-label="Connection mode"><option value="usb">USB / replay</option><option value="bluetooth">Bluetooth</option></select><button id="connection-connect" title="Open the selected USB/replay or paired Bluetooth connection.">Connect</button><button id="connection-disconnect" title="Disconnect the current telemetry source.">Disconnect</button><span id="mode" class="badge off" role="status">Mode: Unknown</span><span id="status" class="badge off" role="status">Connecting to server</span></div></header>
+<div id="telemetry-page">
+<p id="bluetooth-help" class="sub">Pair the HC-06 in your system Bluetooth settings and connect using desktop Chrome at localhost or HTTPS. Select LEAN on the wheelchair for wireless telemetry.</p>
+<main><section class="panel"><div class="panelhead"><div><h2>RPM tracking</h2><div class="sub">Target and PID-smoothed wheel commands</div></div><div class="controls"><button id="pause" title="Pause or resume the RPM graphs while telemetry continues to update.">Pause graphs</button><select id="window" aria-label="Graph time window"><option value="60">60 seconds</option><option value="30">30 seconds</option><option value="10">10 seconds</option></select></div></div><div class="plots"><canvas id="left" class="plot" aria-label="Left target and smoothed RPM graph"></canvas><canvas id="right" class="plot" aria-label="Right target and smoothed RPM graph"></canvas></div><div class="legend-note">Commanded RPM · positive = forward · time from device boot</div></section>
 <section class="panel"><div class="panelhead"><div><h2>Sensor & lean input</h2><div class="sub">Four-point force distribution</div></div><span id="drive" class="badge off">Waiting</span></div><div class="sensor-body">
 <div class="direction-plots">
   <div>
@@ -25,7 +95,22 @@
 <div class="seat"><svg width="35" height="35" viewBox="0 0 40 40" fill="none" stroke="#aab9c8" stroke-width="1.5"><rect x="9" y="5" width="22" height="30" rx="8"/><path d="M10 15h20M10 27h20"/></svg>SEAT</div>
 <div class="sensor front" data-key="F"><label>Front</label><strong>—</strong><div class="track"><div class="fill"></div></div></div><div class="sensor back" data-key="B"><label>Back</label><strong>—</strong><div class="track"><div class="fill"></div></div></div><div class="sensor left" data-key="L"><label>Left</label><strong>—</strong><div class="track"><div class="fill"></div></div></div><div class="sensor right" data-key="R"><label>Right</label><strong>—</strong><div class="track"><div class="fill"></div></div></div></div>
 <div class="metrics"><div>Total force<strong id="total">—</strong></div><div>User weight reference<strong id="weight">—</strong></div><div>Bars show<strong style="font-size:12px">Share of total</strong></div></div></div></section></main>
-<section class="panel console"><div class="panelhead"><div><h2>Serial messages</h2><div class="sub">Status & calibration · telemetry CSV hidden</div></div><div class="controls"><button onclick="document.querySelector('pre').textContent=''">Clear</button><label><input id="scroll" type="checkbox" checked> Autoscroll</label></div></div><pre aria-live="polite"></pre></section>
+<section class="panel console"><div class="panelhead"><div><h2>Serial messages</h2><div class="sub">Status & calibration · telemetry CSV hidden</div></div><div class="controls"><button title="Clear the visible serial-message console." onclick="document.querySelector('pre').textContent=''">Clear</button><label><input id="scroll" type="checkbox" checked> Autoscroll</label></div></div><pre aria-live="polite"></pre></section>
+</div>
+<section id="config-page" class="panel configuration" hidden aria-labelledby="config-heading">
+  <header><h2 id="config-heading">Configuration</h2><button type="button" id="config-reload" title="Read the schema and current values from the wheelchair again. Compatible unapplied edits are kept.">Reload settings</button></header>
+  <div class="controls">
+    <button type="button" id="config-apply" title="Send your pending edits to the running settings in RAM. Use Save to keep them after power-off.">Apply changes</button>
+    <button type="button" id="config-save" title="Apply pending edits, then write the configuration to EEPROM so it survives restarting the wheelchair.">Save to wheelchair</button>
+    <button type="button" id="config-revert" title="Discard unapplied edits and restore the last saved settings from EEPROM if the running settings have changed.">Revert to saved</button>
+    <button type="button" id="config-defaults" title="Apply the firmware defaults to every group in RAM. Use Save to keep those defaults after power-off.">Restore all defaults</button>
+  </div>
+  <p id="config-summary" class="config-summary"></p>
+  <p id="config-status" class="config-status" role="status"></p>
+  <div id="config-groups"></div>
+</section>
+</div>
+</div>
 <script>
 let ws,paused=false,displayed=[],latest=[],lastRow=null,bluetoothActive=false,connectionMode='usb',usbConnected=true;
 const $=s=>document.querySelector(s);
@@ -43,7 +128,7 @@ function plot(side,rows,color){const[g,w,h]=surface(side),m={l:66,r:20,t:26,b:48
  g.strokeStyle='#333';g.strokeRect(m.l,m.t,pw,ph);if(ymin<0&&ymax>0){g.lineWidth=.7;g.beginPath();g.moveTo(m.l,Y(0));g.lineTo(w-m.r,Y(0));g.stroke()}
  g.save();g.beginPath();g.rect(m.l,m.t,pw,ph);g.clip();for(const[key,col,width]of[[side+'TargetRPM','#a8a8a8',1.25],[side+'SmoothedRPM',color,1.8]]){g.strokeStyle=col;g.lineWidth=width;g.beginPath();let pen=false,prev=null;for(const r of rows){if(r.time_ms/1000<start)continue;const v=r[key];if(!Number.isFinite(v)){pen=false;continue}const x=X(r.time_ms/1000),y=Y(v);if(!pen||prev!==null&&r.time_ms-prev>500)g.moveTo(x,y);else g.lineTo(x,y);pen=true;prev=r.time_ms}g.stroke()}g.restore();
  g.fillStyle='#252525';g.textAlign='center';g.font='13px Arial, sans-serif';g.fillText('Time (s)',m.l+pw/2,h-8);g.save();g.translate(17,m.t+ph/2);g.rotate(-Math.PI/2);g.fillText((side==='left'?'Left':'Right')+' target RPM',0,0);g.restore();
- const lw=Math.min(220,pw-16),lx=w-m.r-lw-9,ly=m.t+ph-49;g.fillStyle='#ffffffed';g.fillRect(lx,ly,lw,42);g.strokeStyle='#d3d3d3';g.strokeRect(lx,ly,lw,42);g.font='11px Arial, sans-serif';g.textAlign='left';[['#a8a8a8','Original target'],[color,rows.length&&rows.at(-1)[side+'SmoothedRPM']===undefined?'Smoothed unavailable':'PID-smoothed target']].forEach(([c,label],i)=>{g.strokeStyle=c;g.lineWidth=1.8;g.beginPath();g.moveTo(lx+8,ly+13+i*17);g.lineTo(lx+31,ly+13+i*17);g.stroke();g.fillStyle='#333';g.fillText(label,lx+38,ly+17+i*17)})}
+ const lw=Math.min(220,pw-16),lx=m.l+9,ly=m.t+9;g.fillStyle='#ffffffed';g.fillRect(lx,ly,lw,42);g.strokeStyle='#d3d3d3';g.strokeRect(lx,ly,lw,42);g.font='11px Arial, sans-serif';g.textAlign='left';[['#a8a8a8','Original target'],[color,rows.length&&rows.at(-1)[side+'SmoothedRPM']===undefined?'Smoothed unavailable':'PID-smoothed target']].forEach(([c,label],i)=>{g.strokeStyle=c;g.lineWidth=1.8;g.beginPath();g.moveTo(lx+8,ly+13+i*17);g.lineTo(lx+31,ly+13+i*17);g.stroke();g.fillStyle='#333';g.fillText(label,lx+38,ly+17+i*17)})}
 function graphs(){plot('left',displayed,'#146db0');plot('right',displayed,'#c46013')}
 // Match speedToRPM(MAX_SPEED) using the values in src/drive_constants.h.
 const maxWheelRPM = (4.91744 * 0.45) * 60 / (74.75 * 0.0254);
@@ -140,4 +225,4 @@ function sensors(r) {
 }
 function connect(){ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);ws.onopen=()=>{if(typeof syncUsbMonitoring==='function')syncUsbMonitoring()};ws.onclose=()=>{if(connectionMode==='usb'){showMode(lastRow,true);$('#status').textContent='Server disconnected';$('#status').classList.add('off')}setTimeout(connect,1000)};ws.onmessage=e=>{const d=JSON.parse(e.data);if(connectionMode!=='usb'||!usbConnected)return;if(d.console)appendConsole(d.console);if(d.history)applyTelemetry(d.history,!!d.stale,'USB / replay')}}
 $('#pause').onclick=()=>{paused=!paused;$('#pause').textContent=paused?'Resume graphs':'Pause graphs';if(!paused){displayed=latest;graphs()}};$('#window').onchange=graphs;window.addEventListener('resize',()=>{graphs();sensors(lastRow)});graphs();sensors(null);connect();
-</script><script src="/bluetooth.js"></script></body></html>
+</script><script src="/config-protocol.js"></script><script src="/pid-preview.js"></script><script src="/configuration.js"></script><script src="/bluetooth.js"></script></body></html>

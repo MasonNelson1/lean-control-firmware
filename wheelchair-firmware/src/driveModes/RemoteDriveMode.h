@@ -1,7 +1,8 @@
 #pragma once
 
 #include "DriveMode.h"
-#include <PacketSerial.h>
+#include <cstddef>
+#include <cstdint>
 
 struct RemoteTelemetry
 {
@@ -15,27 +16,15 @@ private:
     static constexpr uint8_t PACKET_SOFT_STOP = 0x02;
     static constexpr uint8_t PACKET_SOFT_STOP_CLEAR = 0x03;
 
-    PacketSerial &packetSerial;
     RemoteTelemetry telemetry{};
 
-    // Shared state for the static callback
-    static unsigned long lastPacketMillis;
-    static bool softStopLatched;
-    static double requestedLeftPower;
-    static double requestedRightPower;
-
-    static uint32_t receivedPackets;
-    static uint32_t receivedDrivePackets;
-    static size_t lastPacketSize;
-    static uint8_t lastPacketType;
-
-    static void onPacketReceived(
-        const uint8_t *buffer,
-        size_t size);
+    unsigned long lastPacketMillis = 0;
+    bool softStopLatched = false;
+    double requestedLeftPower = 0.0;
+    double requestedRightPower = 0.0;
 
 public:
-    explicit RemoteDriveMode(PacketSerial &serial);
-
+    void onPacketReceived(const uint8_t *buffer, size_t size);
     MotorTargets getTargets() override;
     const RemoteTelemetry &getTelemetry() const { return telemetry; }
 

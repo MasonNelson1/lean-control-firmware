@@ -37,7 +37,7 @@ function harness({secure = true, openError = null} = {}) {
   return {
     context, elements, frames, messages, commands,
     run: code => vm.runInContext(code, context),
-    send: text => controller.enqueue(new TextEncoder().encode(text)),
+    send: value => controller.enqueue(typeof value === 'string' ? new TextEncoder().encode(value) : value),
     fail: () => controller.error(new Error('out of range')),
     setNow: value => { now = value; },
     get closed() { return closed; },
@@ -96,6 +96,23 @@ test('Bluetooth loss releases reader and allows reconnecting', async () => {
   assert.equal(h.context.bluetoothActive, false);
   assert.ok(h.messages.some(message => message.includes('out of range')));
   assert.equal(h.elements.get('#connection-disconnect').disabled, true);
+});
+
+test('configuration replies and CSV share the Bluetooth reader without leaking binary into telemetry', async () => {
+  const h = harness();
+  const replies = [];
+  h.context.window.configLink = {receive: frame => replies.push([...frame])};
+  await h.context.connectBluetooth();
+  h.send(row() + '\n');
+  h.send(Uint8Array.of(0, 2, 10));
+  h.send(Uint8Array.of(9, 13, 0));
+  h.send(row(1050) + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  assert.deepEqual(replies, [[2, 10, 9, 13]]);
+  assert.equal(h.frames.at(-1).rows.length, 2);
+  assert.equal(h.messages.some(message => message.includes('\u0000')), false);
+  await h.context.disconnectBluetooth();
 });
 
 test('insecure origins and failed opens do not start a Bluetooth connection', async () => {

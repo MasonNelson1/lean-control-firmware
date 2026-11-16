@@ -24,7 +24,7 @@ def parse(line):
             if not all(math.isfinite(v) for v in values): raise ValueError()
             names = FIELDS if len(values) == 14 else FIELDS[:11]+['stopped']
             row = dict(zip(names, values))
-            row['mode'] = mode if mode in ('LEAN', 'REMOTE') else 'UNKNOWN'
+            row['mode'] = mode if mode in ('LEAN', 'REMOTE', 'DISARM') else 'UNKNOWN'
             return 'data', row
         except ValueError: pass
     return 'text', line

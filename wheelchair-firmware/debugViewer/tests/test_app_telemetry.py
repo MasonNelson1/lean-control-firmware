@@ -30,6 +30,7 @@ def install_parse_case(name, line, kind, mode=None):
 for name, line, kind, mode in [
     ("lean", row(), "data", "LEAN"),
     ("remote", row(mode="REMOTE"), "data", "REMOTE"),
+    ("disarm", row(mode="DISARM"), "data", "DISARM"),
     ("unknown_mode", row(mode="other"), "data", "UNKNOWN"),
     ("lowercase_mode", row(mode="lean"), "data", "LEAN"),
     ("legacy_fourteen", ",".join(row().split(",")[:14]), "data", "UNKNOWN"),

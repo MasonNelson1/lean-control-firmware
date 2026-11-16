@@ -49,6 +49,7 @@ test('parses current and legacy telemetry; rejects headers and damaged rows', ()
   const h = harness();
   const parse = line => h.context.parseBluetoothLine(line);
   assert.equal(parse(row()).mode, 'LEAN');
+  assert.equal(parse(row(1000, 'DISARM')).mode, 'DISARM');
   assert.equal(parse(row()).rightSmoothedRPM, 19);
   assert.equal(parse(row().split(',').slice(0, 14).join(',')).mode, 'UNKNOWN');
   assert.equal(parse('1,2,3,4,5,6,7,0,0,10,20,1').stopped, 1);

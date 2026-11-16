@@ -17,7 +17,7 @@ config::Registry &registry();
 extern config::Persistence persistence;
 extern config::Protocol protocol;
 
-extern config::EnumField<common::mode, 2> defaultMode;
+extern config::EnumField<common::mode, 3> defaultMode;
 extern config::ConfigField<float> deadband;
 extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain;
 extern config::ConfigField<float> frontWeight, rearWeight, leftWeight, rightWeight;

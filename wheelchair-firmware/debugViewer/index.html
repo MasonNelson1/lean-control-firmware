@@ -116,7 +116,7 @@ let ws,paused=false,displayed=[],latest=[],lastRow=null,bluetoothActive=false,co
 const $=s=>document.querySelector(s);
 function appendConsole(line){const p=$('pre');p.textContent=(p.textContent+line+'\n').split('\n').slice(-400).join('\n');if($('#scroll').checked)p.scrollTop=p.scrollHeight}
 function applyTelemetry(rows,stale,source){latest=rows;lastRow=latest.at(-1)||null;showMode(lastRow,stale);$('#status').textContent=`${source} · ${stale?'Waiting for telemetry':'Receiving telemetry'}`;$('#status').classList.toggle('off',stale);if(!paused){displayed=latest;graphs()}sensors(lastRow)}
-function showMode(row,stale=false){const mode=['LEAN','REMOTE'].includes(row?.mode)?row.mode:'Unknown';$('#mode').textContent=`Mode: ${mode}${stale&&row?' (stale)':''}`;$('#mode').classList.toggle('off',stale||mode==='Unknown')}
+function showMode(row,stale=false){const mode=['LEAN','REMOTE','DISARM'].includes(row?.mode)?row.mode:'Unknown';$('#mode').textContent=`Mode: ${mode}${stale&&row?' (stale)':''}`;$('#mode').classList.toggle('off',stale||mode==='Unknown')}
 
 function surface(id){const c=$('#'+id),b=c.getBoundingClientRect(),d=devicePixelRatio||1;c.width=Math.round(b.width*d);c.height=Math.round(b.height*d);const g=c.getContext('2d');g.scale(d,d);return[g,b.width,b.height]}
 function ticks(lo,hi,count){const raw=(hi-lo)/count,p=10**Math.floor(Math.log10(raw)),n=raw/p,step=(n<=1?1:n<=2?2:n<=5?5:10)*p;let a=[];for(let x=Math.ceil(lo/step)*step;x<=hi+step*.001;x+=step)a.push(Math.abs(x)<step*.001?0:x);return a}

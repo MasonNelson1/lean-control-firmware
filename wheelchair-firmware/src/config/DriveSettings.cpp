@@ -48,7 +48,7 @@ namespace settings
     // field, and never reuse a retired ID. Add a declaration and consume its get()
     // value to expose a setting through discovery. Cached consumers also need their
     // derived values refreshed in main.cpp's applyRuntimeSettings().
-    EnumField<common::mode, 2> defaultMode(registry(), 1,
+    EnumField<common::mode, 3> defaultMode(registry(), 1,
                                            {drive, "Startup drive mode", "Drive mode selected at power-on. LEAN requires calibration and REMOTE requires a fresh controller command.", "", true},
                                            common::DISARM, Modes);
     ConfigField<float> deadband(registry(), 2,

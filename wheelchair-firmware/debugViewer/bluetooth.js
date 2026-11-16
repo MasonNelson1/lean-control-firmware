@@ -8,7 +8,7 @@ function parseBluetoothLine(line) {
   if (numeric.some(value => value === '' || !Number.isFinite(Number(value)))) return null;
   const fields = numeric.length === 14 ? telemetryFields : [...telemetryFields.slice(0, 11), 'stopped'];
   const row = Object.fromEntries(fields.map((field, i) => [field, Number(numeric[i])]));
-  row.mode = parts.length === 15 && ['LEAN', 'REMOTE'].includes(parts[14]) ? parts[14] : 'UNKNOWN';
+  row.mode = parts.length === 15 && ['LEAN', 'REMOTE', 'DISARM'].includes(parts[14]) ? parts[14] : 'UNKNOWN';
   return row;
 }
 

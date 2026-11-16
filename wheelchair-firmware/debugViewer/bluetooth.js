@@ -137,7 +137,7 @@ async function connectBluetooth() {
     displayed = [];
     graphs();
     renderBluetooth();
-    appendConsole('Bluetooth connected. Select LEAN on the wheelchair to receive telemetry.');
+    appendConsole('Bluetooth connected. Live sensor telemetry is available in every mode.');
     bluetoothTimer = setInterval(renderBluetooth, 100);
     bluetoothReadTask = readBluetooth(port);
     window.configurationConnectionChanged?.(port);

@@ -29,7 +29,7 @@ void LeanDriveMode::updateResponseCurve()
     responseExponent = logf(knee[1]) / logf(knee[0]);
 }
 
-MotorTargets LeanDriveMode::getTargets()
+void LeanDriveMode::sampleSensors()
 {
     // --- read, minus each sensor's floor ---
     const int defaultFloor = settings::defaultFloor.get();
@@ -44,21 +44,25 @@ MotorTargets LeanDriveMode::getTargets()
     l = (int)(l * settings::leftGain.get());
     r = (int)(r * settings::rightGain.get());
 
-    // Report live sensor readings while calibration still gates motor targets.
-    //also set the calibrate led to indicate calibration status. 
-    if (!initiallyCalibrated)
+    if (initiallyCalibrated)
     {
-        telemetry = {f, b, l, r, 0.0f, 0.0f, true};
-        digitalWrite(common::PIN_CAL_LED, HIGH);
-        return {0, 0};
-    }else {
-        digitalWrite(common::PIN_CAL_LED, LOW);
+        f = min(frontSaturation, f);
+        b = min(backSaturation, b);
+        l = min(leftSaturation, l);
+        r = min(rightSaturation, r);
     }
+    telemetry = {f, b, l, r, 0.0f, 0.0f, !initiallyCalibrated};
+}
 
-    f = min(frontSaturation, f);
-    b = min(backSaturation, b);
-    l = min(leftSaturation, l);
-    r = min(rightSaturation, r);
+MotorTargets LeanDriveMode::getTargets()
+{
+    sampleSensors();
+    digitalWrite(common::PIN_CAL_LED, initiallyCalibrated ? LOW : HIGH);
+    if (!initiallyCalibrated)
+        return {0, 0};
+
+    const int f = telemetry.front, b = telemetry.back;
+    const int l = telemetry.left, r = telemetry.right;
 
     // Seat detection is currently disabled in the stop condition.
 

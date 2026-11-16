@@ -153,6 +153,7 @@ void setup()
 
     settings::persistence.load();
     MODE = settings::defaultMode.get();
+    if (MODE == LEAN) leanMode.reset();
     applyRuntimeSettings();
 
     // user input
@@ -217,6 +218,7 @@ void setMode()
     if (leanPressed && (MODE != LEAN))
     {
         MODE = LEAN;
+        leanMode.reset();
         printMode();
     }
     else if (remotePressed && (MODE != REMOTE))
@@ -327,7 +329,7 @@ void loop()
     updateDrive();
     replyToConfiguration();
 
-    // Keep telemetry at 20 Hz in both modes.
+    // Keep sensor telemetry at 20 Hz in every mode.
     static uint32_t lastTelemetryMs = 0;
     const uint32_t now = millis();
     if (now - lastTelemetryMs < 50)
@@ -343,8 +345,11 @@ void loop()
     }
 
     const bool leanActive = MODE == LEAN;
-    const LeanTelemetry lean = leanActive ? leanMode.getTelemetry() : LeanTelemetry{};
-    const bool stopped = leanActive ? lean.stopped : remoteMode.getTelemetry().stopped;
+    // LEAN samples on each control tick; other modes sample for display only.
+    if (!leanActive) leanMode.sampleSensors();
+    const LeanTelemetry lean = leanMode.getTelemetry();
+    const bool stopped = MODE == DISARM || (leanActive ? lean.stopped : remoteMode.getTelemetry().stopped);
+    const MotorCommandTelemetry commands = MODE == DISARM ? MotorCommandTelemetry{} : motorTelemetry;
     const int total = lean.front + lean.back + lean.left + lean.right;
 
     char row[256];
@@ -353,8 +358,8 @@ void loop()
                                    static_cast<unsigned long>(now),
                                    lean.front, lean.back, lean.left, lean.right, total,
                                    leanMode.getUserWeightEstimate(), lean.speed, lean.turn,
-                                   motorTelemetry.leftTargetRPM, motorTelemetry.rightTargetRPM,
-                                   motorTelemetry.leftSmoothedRPM, motorTelemetry.rightSmoothedRPM,
+                                   commands.leftTargetRPM, commands.rightTargetRPM,
+                                   commands.leftSmoothedRPM, commands.rightSmoothedRPM,
                                    stopped ? 1 : 0, modeName(MODE));
     if (rowLength <= 0 || rowLength >= static_cast<int>(sizeof(row)))
         return;
@@ -363,6 +368,6 @@ void loop()
     // Serial.println(digitalRead(common::PIN_CAL_BUTTON));
 
     // The HC-06 shares Serial1 with the remote controller.
-    if (leanActive && Serial1.availableForWrite() >= rowLength)
+    if (Serial1.availableForWrite() >= rowLength)
         Serial1.write(reinterpret_cast<const uint8_t *>(row), rowLength);
 }

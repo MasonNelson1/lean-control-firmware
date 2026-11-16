@@ -21,11 +21,11 @@ The mode badge shows LEAN or REMOTE from the final `mode` CSV column. Older 12- 
 
 For Bluetooth telemetry:
 
-1. Build and upload the updated `teensy41` firmware using your usual process. It sends the existing CSV rows over the HC-06 UART at 115200 baud and 20 Hz while in LEAN, including with USB disconnected.
+1. Build and upload the updated `teensy41` firmware using your usual process. It sends the existing CSV rows over the HC-06 UART at 115200 baud and 20 Hz in LEAN, REMOTE, and DISARM, including with USB disconnected.
 2. Pair the wheelchair's HC-06 using the Bluetooth settings on the computer running your browser. Disconnect the handheld controller from the HC-06 first; it uses the same Bluetooth connection.
 3. Start the dashboard as usual and open **http://localhost:8000** in desktop Chrome 117 or later. If accessing a server on another computer, use HTTPS; plain LAN HTTP cannot access Web Serial.
-4. Select LEAN using the wheelchair's physical button, choose **Bluetooth** in the connection dropdown, click **Connect**, and select the paired HC-06. Selecting Bluetooth pauses the USB monitor and its reconnect attempts. The browser's computer must have Bluetooth; the server's USB connection is not needed for this source.
-5. The graphs and badges now use Bluetooth data. **Disconnect** closes the selected connection without switching transports. To return to wired telemetry, choose **USB / replay** and click **Connect**. Switching dropdown options disconnects the old transport and waits for Connect. Data becomes stale after two seconds without telemetry, including when the chair switches to REMOTE; the last mode shown is then only the last observed mode.
+4. Choose **Bluetooth** in the connection dropdown, click **Connect**, and select the paired HC-06. Selecting Bluetooth pauses the USB monitor and its reconnect attempts. The browser's computer must have Bluetooth; the server's USB connection is not needed for this source.
+5. The graphs and badges now use Bluetooth data. **Disconnect** closes the selected connection without switching transports. To return to wired telemetry, choose **USB / replay** and click **Connect**. Switching dropdown options disconnects the old transport and waits for Connect. Live sensor readings continue in every mode. They use the configured sensor floors, gains, and calibrated saturation limits; before calibration they use the default floor. Sensor sampling outside LEAN does not generate lean motor commands. Data becomes stale after two seconds without telemetry; the last mode shown is then only the last observed mode.
 
 ## Configuration over Bluetooth
 

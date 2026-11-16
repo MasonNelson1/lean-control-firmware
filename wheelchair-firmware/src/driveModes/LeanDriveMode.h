@@ -36,7 +36,10 @@ private:
     float responseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
 
 public:
+    void reset() { initiallyCalibrated = false; }
     MotorTargets getTargets() override;
+    // Refresh sensor telemetry without generating motor commands or changing LEDs.
+    void sampleSensors();
     void calibrate();
     void updateResponseCurve();
     const LeanTelemetry &getTelemetry() const { return telemetry; }

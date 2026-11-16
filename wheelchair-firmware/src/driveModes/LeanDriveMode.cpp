@@ -45,10 +45,14 @@ MotorTargets LeanDriveMode::getTargets()
     r = (int)(r * settings::rightGain.get());
 
     // Report live sensor readings while calibration still gates motor targets.
+    //also set the calibrate led to indicate calibration status. 
     if (!initiallyCalibrated)
     {
         telemetry = {f, b, l, r, 0.0f, 0.0f, true};
+        digitalWrite(common::PIN_CAL_LED, HIGH);
         return {0, 0};
+    }else {
+        digitalWrite(common::PIN_CAL_LED, LOW);
     }
 
     f = min(frontSaturation, f);

@@ -6,6 +6,7 @@
 #include "driveModes/DriveMode.h"
 #include "driveModes/LeanDriveMode.h"
 #include "driveModes/RemoteDriveMode.h"
+#include "driveModes/DisarmDriveMode.h"
 #include "PacketSerial.h"
 #include "config/DriveSettings.h"
 
@@ -22,6 +23,7 @@ float userMaxAccelMS2 = MAX_ACCEL;
 ezButton calibrateButton(PIN_CAL_BUTTON);
 ezButton leanModeButton(PIN_LEAN_BUTTON);
 ezButton remoteModeButton(PIN_REMOTE_BUTTON);
+ezButton disarmModeButton(PIN_DISARM_BUTTON);
 
 RPMSetpointPID leftRPMSetpointPID(RPMSetpointPID::defaultTuning());
 RPMSetpointPID rightRPMSetpointPID(RPMSetpointPID::defaultTuning());
@@ -66,6 +68,7 @@ LeanDriveMode leanMode;
 
 PacketSerial packetSerial;
 RemoteDriveMode remoteMode;
+DisarmDriveMode disarmMode;
 
 static void onBluetoothPacket(const uint8_t *buffer, size_t size)
 {
@@ -84,6 +87,7 @@ static void applyRuntimeSettings()
     calibrateButton.setDebounceTime(settings::buttonDebounce.get());
     leanModeButton.setDebounceTime(settings::buttonDebounce.get());
     remoteModeButton.setDebounceTime(settings::buttonDebounce.get());
+    disarmModeButton.setDebounceTime(settings::buttonDebounce.get());
     leanMode.updateResponseCurve();
     const auto tuning = settings::normalPid.tuning();
     leftRPMSetpointPID.setTuning(tuning);
@@ -94,6 +98,7 @@ static void applyRuntimeSettings()
 // Never call ezButton, print, or command motors from an interrupt handler.
 static volatile bool leanEdgePending = false;
 static volatile bool remoteEdgePending = false;
+static volatile bool disarmEdgePending = false;
 
 void onLeanButtonPress()
 {
@@ -105,6 +110,10 @@ void onRemoteButtonPress()
     remoteEdgePending = true;
 }
 
+void onDisarmButtonPress()
+{
+    disarmEdgePending = true;
+}
 const char *modeName(mode currentMode)
 {
     switch (currentMode)
@@ -113,6 +122,8 @@ const char *modeName(mode currentMode)
         return "LEAN";
     case REMOTE:
         return "REMOTE";
+    case DISARM:
+        return "DISARM";
     default:
         return "UNKNOWN";
     }
@@ -133,6 +144,13 @@ void setup()
     packetSerial.setStream(&Serial1);
     packetSerial.setPacketHandler(onBluetoothPacket);
 
+    //setup led's
+    pinMode(common::PIN_CAL_LED, OUTPUT);
+    pinMode(common::PIN_REMOTE_LED, OUTPUT);
+    pinMode(common::PIN_LEAN_LED, OUTPUT);
+    pinMode(common::PIN_DISARM_LED, OUTPUT);
+    pinMode(common::PIN_CONNECTED_LED, OUTPUT);
+
     settings::persistence.load();
     MODE = settings::defaultMode.get();
     applyRuntimeSettings();
@@ -144,6 +162,7 @@ void setup()
 
     attachInterrupt(digitalPinToInterrupt(PIN_LEAN_BUTTON), onLeanButtonPress, FALLING);
     attachInterrupt(digitalPinToInterrupt(PIN_REMOTE_BUTTON), onRemoteButtonPress, FALLING);
+    attachInterrupt(digitalPinToInterrupt(PIN_DISARM_BUTTON), onDisarmButtonPress, FALLING);
 
     // motors
     vescBegin(can1);
@@ -157,32 +176,43 @@ void setMode()
 
     static bool leanPressPending = false;
     static bool remotePressPending = false;
+    static bool disarmPressPending = false;
 
     noInterrupts();
     const bool leanEdge = leanEdgePending;
     const bool remoteEdge = remoteEdgePending;
+    const bool disarmEdge = disarmEdgePending;
     leanEdgePending = false;
     remoteEdgePending = false;
+    disarmEdgePending = false;
     interrupts();
 
     leanPressPending |= leanEdge;
     remotePressPending |= remoteEdge;
+    disarmPressPending  |= disarmEdge;
 
     // loop the buttons right away
     leanModeButton.loop();
     remoteModeButton.loop();
     calibrateButton.loop();
+    disarmModeButton.loop();
 
     const bool leanPressed = leanModeButton.isPressed() && leanPressPending;
     const bool remotePressed = remoteModeButton.isPressed() && remotePressPending;
+    const bool disarmPressed = disarmModeButton.isPressed() && disarmPressPending;
+    
     if (leanPressed)
         leanPressPending = false;
     if (remotePressed)
         remotePressPending = false;
+    if (disarmPressed)
+        disarmPressPending = false;
     if (leanModeButton.isReleased())
         leanPressPending = false;
     if (remoteModeButton.isReleased())
         remotePressPending = false;
+    if (disarmModeButton.isReleased())
+        disarmPressPending =  false;
 
     if (leanPressed && (MODE != LEAN))
     {
@@ -194,6 +224,37 @@ void setMode()
         MODE = REMOTE;
         remoteMode.reset();
         printMode();
+    }
+    else if (disarmPressed && (MODE != DISARM))
+    {
+        MODE = DISARM;
+        printMode();
+    }
+
+    //set mode LED's
+    switch (MODE)
+    {
+    case LEAN:
+        digitalWrite(common::PIN_LEAN_LED, HIGH);
+        digitalWrite(common::PIN_DISARM_LED, LOW);
+        digitalWrite(common::PIN_REMOTE_LED, LOW);
+        //calibration button status is handled in the getTargets() for this mode. 
+        break;
+    
+    case REMOTE:
+        digitalWrite(common::PIN_LEAN_LED, LOW);
+        digitalWrite(common::PIN_DISARM_LED, LOW);
+        digitalWrite(common::PIN_REMOTE_LED, HIGH);
+        digitalWrite(common::PIN_CAL_LED, LOW);
+        break;
+    case DISARM:
+        digitalWrite(common::PIN_LEAN_LED, LOW);
+        digitalWrite(common::PIN_DISARM_LED, HIGH);
+        digitalWrite(common::PIN_REMOTE_LED, LOW);
+        digitalWrite(common::PIN_CAL_LED, LOW);
+        break;
+    default:
+        break;
     }
 }
 
@@ -211,7 +272,24 @@ static void updateDrive()
     tSend = now;
 
     const float dt = period / 1000.0f;
-    const MotorTargets targets = MODE == LEAN ? leanMode.getTargets() : remoteMode.getTargets();
+    MotorTargets targets;
+    switch (MODE)
+    {
+    case LEAN:
+        targets = leanMode.getTargets();
+        break;
+    
+    case REMOTE:
+        targets = remoteMode.getTargets();
+        break;
+    case DISARM:
+        targets = disarmMode.getTargets(); 
+        break;
+    default:
+        targets = {0.0f, 0.0f};
+        Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
+        break;
+    }
     setMotorPower(targets.left, targets.right, dt);
 }
 

@@ -29,7 +29,7 @@ namespace settings
         Group normal(registry(), 10, "Normal operation", true, &pid);
         Group transition(registry(), 11, "Transitions (reserved)", true, &pid);
 
-        constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}};
+        constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}};
         constexpr float DefaultKnee[] = {0.5f, 0.25f};
         constexpr Parameter KneeBounds[] = {{"Knee input", 0.001f, 0.999f}, {"Knee output", 0.001f, 0.999f}};
         constexpr auto DefaultPid = RPMSetpointPID::defaultTuning();
@@ -50,7 +50,7 @@ namespace settings
     // derived values refreshed in main.cpp's applyRuntimeSettings().
     EnumField<common::mode, 2> defaultMode(registry(), 1,
                                            {drive, "Startup drive mode", "Drive mode selected at power-on. LEAN requires calibration and REMOTE requires a fresh controller command.", "", true},
-                                           common::REMOTE, Modes);
+                                           common::DISARM, Modes);
     ConfigField<float> deadband(registry(), 2,
                                 {drive, "Lean deadband", "Normalized lean input below this magnitude is treated as zero before shaping."},
                                 0.05f, 0.01f, 1.0f);
@@ -94,9 +94,9 @@ namespace settings
                                   {calibration, "Default sensor floor", "ADC baseline used for sensor telemetry until a successful calibration. Calibration is still required to drive in LEAN.", "ADC counts"}, 400, 0, 1024);
 
     ConfigField<uint8_t> leftVesc(registry(), 60,
-                                  {motor, "Left VESC ID", "CAN address of the left motor controller. The two addresses must differ."}, 26, 0, 253);
+                                  {motor, "Left VESC ID", "CAN address of the left motor controller. The two addresses must differ."}, 2, 0, 253);
     ConfigField<uint8_t> rightVesc(registry(), 61,
-                                   {motor, "Right VESC ID", "CAN address of the right motor controller. The two addresses must differ."}, 2, 0, 253);
+                                   {motor, "Right VESC ID", "CAN address of the right motor controller. The two addresses must differ."}, 26, 0, 253);
     ConfigField<float> wheelCircumference(registry(), 62,
                                           {motor, "Wheel circumference", "Measured rolling circumference. Updates LINEAR_TO_RPM for wheel speed and acceleration conversion.", "m"},
                                           common::WHEEL_CIRCUMFERENCE_M, 1.80f, 2.00f);

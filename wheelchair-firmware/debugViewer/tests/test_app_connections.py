@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 spec = importlib.util.spec_from_file_location('viewer', Path(__file__).parents[1] / 'app.py')
 viewer = importlib.util.module_from_spec(spec)
@@ -65,6 +65,35 @@ class ConnectionTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
+
+
+class BluetoothCleanupTests(unittest.IsolatedAsyncioTestCase):
+    def request(self, host='127.0.0.1', headers=None):
+        return SimpleNamespace(client=SimpleNamespace(host=host),
+                               headers=headers if headers is not None else {'x-bluetooth-cleanup': '1'})
+
+    async def test_fixed_receiver_command(self):
+        process = SimpleNamespace(returncode=0, communicate=AsyncMock(return_value=(b'Successful disconnected', b'')))
+        with patch.object(viewer.sys, 'platform', 'linux'), patch.object(
+                viewer.asyncio, 'create_subprocess_exec', new=AsyncMock(return_value=process)) as spawn:
+            await viewer.release_bluetooth(self.request())
+            self.assertEqual(spawn.call_args.args, ('bluetoothctl', 'disconnect', '98:DA:60:0A:41:3C'))
+
+    async def test_remote_or_unmarked_requests_are_rejected(self):
+        with patch.object(viewer.asyncio, 'create_subprocess_exec', new=AsyncMock()) as spawn:
+            for request in (self.request(host='192.168.1.2'), self.request(headers={})):
+                with self.assertRaises(viewer.HTTPException) as error:
+                    await viewer.release_bluetooth(request)
+                self.assertEqual(error.exception.status_code, 403)
+            spawn.assert_not_called()
+
+    async def test_command_failure_is_reported(self):
+        process = SimpleNamespace(returncode=1, communicate=AsyncMock(return_value=(b'', b'No default controller')))
+        with patch.object(viewer.sys, 'platform', 'linux'), patch.object(
+                viewer.asyncio, 'create_subprocess_exec', new=AsyncMock(return_value=process)):
+            with self.assertRaises(viewer.HTTPException) as error:
+                await viewer.release_bluetooth(self.request())
+            self.assertEqual(error.exception.status_code, 503)
 
 
 if __name__ == '__main__':

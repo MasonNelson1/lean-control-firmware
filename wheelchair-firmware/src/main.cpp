@@ -290,7 +290,12 @@ static void updateDrive()
         Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
         break;
     }
-    setMotorPower(targets.left, targets.right, dt);
+    if (MODE != DISARM) {
+        setMotorPower(targets.left, targets.right, dt);
+    }else {
+        vescSetCurrent(can1, motors.leftId, 0.0f);
+        vescSetCurrent(can1, motors.rightId, 0.0f);
+    }
 }
 
 static void replyToConfiguration()
@@ -355,6 +360,7 @@ void loop()
         return;
 
     Serial.write(reinterpret_cast<const uint8_t *>(row), rowLength);
+    // Serial.println(digitalRead(common::PIN_CAL_BUTTON));
 
     // The HC-06 shares Serial1 with the remote controller.
     if (leanActive && Serial1.availableForWrite() >= rowLength)

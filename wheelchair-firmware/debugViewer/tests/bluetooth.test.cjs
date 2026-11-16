@@ -18,6 +18,7 @@ function harness({secure = true, openError = null} = {}) {
     async close() { assert.equal(port.readable.locked, false); closed = true; },
   };
   const context = vm.createContext({
+    fetch: async () => ({ok: true, json: async () => ({})}),
     TextDecoder, performance: {now: () => now},
     window: {isSecureContext: secure},
     navigator: {serial: {async requestPort(options) { requestOptions = options; return port; }}},
@@ -153,4 +154,24 @@ test('dropdown stops USB retries and connects only the selected transport', asyn
   await h.context.disconnectSelected();
   assert.equal(h.commands.at(-1), 'disconnect');
   assert.equal(h.context.usbConnected, false);
+});
+
+
+test('Linux cleanup runs before port open and after disconnect', async () => {
+  const h = harness();
+  const calls = [];
+  h.context.fetch = async (url, options) => {
+    calls.push({url, method: options.method, active: h.context.bluetoothActive});
+    return {ok: true, json: async () => ({})};
+  };
+  await h.context.connectBluetooth();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].active, false);
+  assert.equal(calls[0].url, '/bluetooth/disconnect');
+  assert.equal(calls[0].method, 'POST');
+  await h.context.disconnectBluetooth();
+  assert.equal(calls.length, 2);
+  await h.context.connectBluetooth();
+  assert.equal(calls.length, 3);
+  await h.context.disconnectBluetooth();
 });

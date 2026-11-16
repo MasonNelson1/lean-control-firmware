@@ -9,11 +9,11 @@ namespace common {
 
 enum mode { LEAN, REMOTE, DISARM};
 
-constexpr uint8_t PIN_F = A17;  // pin 14
-constexpr uint8_t PIN_B = A15; // pin 41
+constexpr uint8_t PIN_F = A15;  // pin 14
+constexpr uint8_t PIN_B = A17; // pin 41
 constexpr uint8_t PIN_L = A14; // pin 38
 constexpr uint8_t PIN_R = A16; // pin 40
-constexpr uint8_t PIN_CAL_BUTTON = 6;
+constexpr uint8_t PIN_CAL_BUTTON = 4;
 constexpr uint8_t PIN_LEAN_BUTTON = 24;
 constexpr uint8_t PIN_DISARM_BUTTON = 25;
 constexpr uint8_t PIN_REMOTE_BUTTON = 26;

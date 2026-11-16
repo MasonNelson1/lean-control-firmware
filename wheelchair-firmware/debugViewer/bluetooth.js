@@ -70,6 +70,18 @@ function renderBluetooth() {
   applyTelemetry(bluetoothRows, !bluetoothRows.length || performance.now() - bluetoothLastRowAt > 2000, 'Bluetooth');
 }
 
+async function releaseLinuxBluetooth() {
+  try {
+    const response = await fetch('/bluetooth/disconnect', {
+      method: 'POST', headers: {'X-Bluetooth-Cleanup': '1'},
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Bluetooth cleanup failed');
+  } catch (error) {
+    appendConsole(`Linux Bluetooth cleanup: ${error.message}`);
+  }
+}
+
 async function readBluetooth(port) {
   const receiver = new BluetoothReceiver(line => {
     const row = parseBluetoothLine(line);
@@ -95,6 +107,7 @@ async function readBluetooth(port) {
     clearInterval(bluetoothTimer);
     await window.configurationConnectionChanged?.(null);
     try { await port.close(); } catch (error) { appendConsole(`Bluetooth close: ${error.message}`); }
+    await releaseLinuxBluetooth();
     bluetoothPort = null;
     bluetoothActive = false;
     updateConnectionButtons();
@@ -114,6 +127,7 @@ async function connectBluetooth() {
   try {
     // Standard Serial Port Profile services are allowed by default.
     port = await navigator.serial.requestPort({filters: [{bluetoothServiceClassId: 0x1101}]});
+    await releaseLinuxBluetooth();
     await port.open({baudRate: 115200, bufferSize: 4096});
     bluetoothPort = port;
     bluetoothActive = true;
@@ -140,7 +154,10 @@ async function connectBluetooth() {
 }
 
 async function disconnectBluetooth() {
-  if (!bluetoothPort) return;
+  if (!bluetoothPort) {
+    if (connectionMode === 'bluetooth') await releaseLinuxBluetooth();
+    return;
+  }
   bluetoothActive = false;
   await bluetoothReader?.cancel();
   await bluetoothReadTask;

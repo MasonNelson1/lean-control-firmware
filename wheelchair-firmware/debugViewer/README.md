@@ -54,3 +54,10 @@ EEPROM compatibility, and the protocol. Desktop Chrome uses
 [Web Serial over Bluetooth Classic](https://developer.chrome.com/blog/serial-over-bluetooth).
 
 Run dashboard protocol and Bluetooth tests with `node --test debugViewer/tests/*.test.cjs` from the firmware root.
+
+Bluetooth on this Linux laptop: opening a selected Bluetooth port and disconnecting
+it also asks the local Python server to run
+`bluetoothctl disconnect 98:DA:60:0A:41:3C`, releasing the receiver's existing
+Linux connection. Use localhost and run the server on the same computer as
+Chrome. Cleanup errors appear in the console; Chrome can still attempt to connect.
+Restart the server and reload the page after updating this feature.

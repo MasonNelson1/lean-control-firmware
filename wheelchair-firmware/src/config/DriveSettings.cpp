@@ -57,7 +57,7 @@ namespace settings
                                 0.05f, 0.01f, 1.0f);
 
     ConfigField<float> frontGain(registry(), 10,
-                                 {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor.", "×"}, 3, 0.01f, 100);
+                                 {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor.", "×"}, 2, 0.01f, 100);
     ConfigField<float> rearGain(registry(), 11,
                                 {gains, "Rear gain", "Multiplier applied to the rear sensor after subtracting its calibrated floor.", "×"}, 3, 0.01f, 100);
     ConfigField<float> leftGain(registry(), 12,

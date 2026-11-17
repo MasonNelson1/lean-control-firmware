@@ -188,3 +188,26 @@ test('piecewise draft rejects coincident inputs', () => {
   const field = {type: h.types.profile, editor: 2, parameters: Array.from({length: 6}, () => ({min: 0, max: 1}))};
   assert.throws(() => h.api.parseDraft(field, ['0', '0', '.5', '.5', '.5', '1']), /increase/);
 });
+
+
+test('speed and turn curve editors keep independent drafts', () => {
+  const h = harness();
+  const group = {id: 5, parent: 0, name: 'Response curves', advanced: false};
+  const curves = [
+    {id: 30, name: 'Lean foreward response', value: [.21, .09]},
+    {id: 31, name: 'Lean turning response', value: [.35, .20]}
+  ].map(curve => ({...powerField(h), group: 5, description: 'Signed power curve', units: '',
+    ...curve, default: curve.value,
+    parameters: powerField(h).parameters.map((parameter, i) => ({...parameter, name: i ? 'Knee output' : 'Knee input'}))}));
+  h.api.seed([[5, group]], curves.map(curve => [curve.id, curve]));
+  const cards = curves.map(curve => h.api.renderField(curve));
+  const inputs = cards.map(card => descendants(card, node => node.tagName === 'input' && node.type === 'number'));
+  assert.equal(inputs[0][0].id, 'field-30-0');
+  assert.equal(inputs[1][0].id, 'field-31-0');
+  inputs[0][0].value = '.3'; inputs[0][0].fire('input');
+  assert.equal(h.api.draft(30)[0], '.3');
+  assert.equal(h.api.draft(31), undefined);
+  inputs[1][1].value = '.4'; inputs[1][1].fire('input');
+  assert.equal(h.api.draft(31)[1], '.4');
+  assert.equal(h.api.draft(30)[0], '.3');
+});

@@ -56,7 +56,7 @@ int main() {
             &settings::defaultMode, &settings::deadband,
             &settings::frontGain, &settings::rearGain, &settings::leftGain, &settings::rightGain,
             &settings::frontWeight, &settings::rearWeight, &settings::leftWeight, &settings::rightWeight,
-            &settings::leanResponse, &settings::controllerTimeout, &settings::buttonDebounce,
+            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::controllerTimeout, &settings::buttonDebounce,
             &settings::controlPeriod, &settings::calibrationSamples, &settings::defaultFloor,
             &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference,
             &settings::normalPid.lowTau, &settings::normalPid.highTau, &settings::normalPid.ki,
@@ -88,10 +88,27 @@ int main() {
         CHECK(settings::persistence.dirty());
         settings::persistence.load();
     });
-    test("actual profile accepts an amplifying knee", [] {
-        uint8_t raw[9]; Writer out(raw, sizeof(raw)); out.put(uint8_t{1}); out.put(.25f); out.put(.75f);
-        CHECK(request(Command::Set, settings::leanResponse.id, raw, sizeof(raw)) == Status::Ok);
+    test("both response curves accept independent edits and persist", [] {
+        auto &speed = settings::leanForewardBackResponse;
+        auto &turn = settings::leanSideToSideResponse;
+        CHECK(speed.id != turn.id);
+        const float originalTurnInput = turn.get()[0], originalTurnOutput = turn.get()[1];
+        uint8_t speedRaw[9]; Writer speedOut(speedRaw, sizeof(speedRaw));
+        speedOut.put(uint8_t{1}); speedOut.put(.25f); speedOut.put(.75f);
+        CHECK(request(Command::Set, speed.id, speedRaw, sizeof(speedRaw)) == Status::Ok);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(turn.get()[0] == originalTurnInput && turn.get()[1] == originalTurnOutput);
+        uint8_t turnRaw[9]; Writer turnOut(turnRaw, sizeof(turnRaw));
+        turnOut.put(uint8_t{1}); turnOut.put(.4f); turnOut.put(.2f);
+        CHECK(request(Command::Set, turn.id, turnRaw, sizeof(turnRaw)) == Status::Ok);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
+        CHECK(settings::persistence.save());
+        speed.reset(); turn.reset();
         settings::persistence.load();
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
+        CHECK(!settings::persistence.dirty());
     });
     test("actual settings fit EEPROM and survive reload", [] {
         CHECK(settings::persistence.save());

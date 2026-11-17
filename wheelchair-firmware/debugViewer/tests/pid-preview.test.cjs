@@ -39,12 +39,12 @@ test('step preview uses the device limits and rejects incomplete tuning', () => 
   assert.throws(() => model.simulate([0, ...values.slice(1)], limits), /valid PID settings/);
 });
 
-test('PID plot keeps the same zero-to-fifty RPM axis for every response', () => {
+test('PID plot keeps the same zero-to-160 RPM axis for every response', () => {
   const labels = [];
   const drawing = new Proxy({
     fillText(text) { labels.push(text); }
   }, {get(target, key) { return target[key] || (() => {}); }});
   const canvas = {getBoundingClientRect: () => ({width: 720, height: 280}), getContext: () => drawing};
   model.draw(canvas, {target: 100, duration: 5, samples: [{time: 0, rpm: 0, target: 0}, {time: 5, rpm: 100, target: 100}]});
-  assert.deepEqual(labels.slice(0, 6), ['0', '10', '20', '30', '40', '50']);
+  assert.deepEqual(labels.slice(0, 9), ['0', '20', '40', '60', '80', '100', '120', '140', '160']);
 });

@@ -33,7 +33,8 @@ private:
     int leftSaturation = 0;
     int rightSaturation = 0;
 
-    float responseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
+    float speedResponseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
+    float turnResponseExponent = 2.0f;
 
 public:
     void reset() { initiallyCalibrated = false; }

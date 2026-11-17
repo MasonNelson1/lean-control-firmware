@@ -21,7 +21,8 @@ extern config::EnumField<common::mode, 3> defaultMode;
 extern config::ConfigField<float> deadband;
 extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain;
 extern config::ConfigField<float> frontWeight, rearWeight, leftWeight, rightWeight;
-extern config::ProfileField<2> leanResponse;
+extern config::ProfileField<2> leanForewardBackResponse;
+extern config::ProfileField<2> leanSideToSideResponse;
 
 extern config::ConfigField<unsigned long> controllerTimeout, buttonDebounce;
 extern config::ConfigField<uint32_t> controlPeriod;

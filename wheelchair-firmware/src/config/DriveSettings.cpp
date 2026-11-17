@@ -30,7 +30,8 @@ namespace settings
         Group transition(registry(), 11, "Transitions (reserved)", true, &pid);
 
         constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}};
-        constexpr float DefaultKnee[] = {0.5f, 0.25f};
+        constexpr float DefaultForewardBackKnee[] = {0.21f, 0.09f};
+        constexpr float DefaultLeftRightKnee[] = {0.35f, 0.20f};
         constexpr Parameter KneeBounds[] = {{"Knee input", 0.001f, 0.999f}, {"Knee output", 0.001f, 0.999f}};
         constexpr auto DefaultPid = RPMSetpointPID::defaultTuning();
 
@@ -56,9 +57,9 @@ namespace settings
                                 0.05f, 0.01f, 1.0f);
 
     ConfigField<float> frontGain(registry(), 10,
-                                 {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor.", "×"}, 1, 0.01f, 100);
+                                 {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor.", "×"}, 3, 0.01f, 100);
     ConfigField<float> rearGain(registry(), 11,
-                                {gains, "Rear gain", "Multiplier applied to the rear sensor after subtracting its calibrated floor.", "×"}, 4, 0.01f, 100);
+                                {gains, "Rear gain", "Multiplier applied to the rear sensor after subtracting its calibrated floor.", "×"}, 3, 0.01f, 100);
     ConfigField<float> leftGain(registry(), 12,
                                 {gains, "Left gain", "Multiplier applied to the left sensor after subtracting its calibrated floor.", "×"}, 1, 0.01f, 100);
     ConfigField<float> rightGain(registry(), 13,
@@ -75,9 +76,12 @@ namespace settings
 
     // The knee is one atomic value, so input/output constraints can be checked
     // together. LeanDriveMode derives its exponent from the accepted coordinates.
-    ProfileField<2> leanResponse(registry(), 30,
-                                 {response, "Lean response", "Signed power curve for normalized speed and turn after the deadband. Lower knee output softens small inputs."},
-                                 Editor::SignedPower, DefaultKnee, KneeBounds);
+    ProfileField<2> leanForewardBackResponse(registry(), 30,
+                                 {response, "Lean foreward response", "Signed power curve for normalized speed after the deadband. Lower knee output softens small inputs."},
+                                 Editor::SignedPower, DefaultForewardBackKnee, KneeBounds);
+    ProfileField<2> leanSideToSideResponse(registry(), 31,
+                                 {response, "Lean turning response", "Signed power curve for normalized turn after the deadband. Lower knee output softens small inputs."},
+                                 Editor::SignedPower, DefaultLeftRightKnee, KneeBounds);
 
     // These bounds keep the watchdog at or below its original timeout and the
     // control loop at 100 Hz or faster. Hard propulsion limits stay in drive_constants.h.

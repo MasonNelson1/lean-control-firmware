@@ -25,8 +25,8 @@ public:
 
   static constexpr Tuning defaultTuning()
   {
-    return {0.035f, 0.1f, 0.0f, 2.0f, 0.02f,
-            DriveConstants::MAX_ACCEL, DriveConstants::MAX_ACCEL, 400.0f};
+    return {0.03f, 0.1f, 0.0f, 2.0f, 0.02f,
+            DriveConstants::MAX_ACCEL, DriveConstants::MAX_ACCEL, 500.0f};
   }
 
   explicit RPMSetpointPID(const Tuning &tuning)

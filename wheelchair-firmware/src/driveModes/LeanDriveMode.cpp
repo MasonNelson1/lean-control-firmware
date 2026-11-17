@@ -25,8 +25,10 @@ static int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0
 
 void LeanDriveMode::updateResponseCurve()
 {
-    const auto &knee = settings::leanResponse.get();
-    responseExponent = logf(knee[1]) / logf(knee[0]);
+    const auto &speedKnee = settings::leanForewardBackResponse.get();
+    speedResponseExponent = logf(speedKnee[1]) / logf(speedKnee[0]);
+    const auto &turnKnee = settings::leanSideToSideResponse.get();
+    turnResponseExponent = logf(turnKnee[1]) / logf(turnKnee[0]);
 }
 
 void LeanDriveMode::sampleSensors()
@@ -77,8 +79,8 @@ MotorTargets LeanDriveMode::getTargets()
         turn = 0.0f;
 
     // Shape speed and turn separately before wheel mixing and PID smoothing.
-    speed = copysignf(powf(fabsf(speed), responseExponent), speed);
-    turn = copysignf(powf(fabsf(turn), responseExponent), turn);
+    speed = copysignf(powf(fabsf(speed), speedResponseExponent), speed);
+    turn = copysignf(powf(fabsf(turn), turnResponseExponent), turn);
 
     telemetry = {f, b, l, r, speed, turn, false};
     return {speed + turn, speed - turn};

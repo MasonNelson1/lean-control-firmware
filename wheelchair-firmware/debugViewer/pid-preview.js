@@ -69,7 +69,7 @@ const PidPreview = (() => {
     g.scale(ratio, ratio);
     const margin = {left: 56, right: 18, top: 18, bottom: 38};
     const width = w - margin.left - margin.right, height = h - margin.top - margin.bottom;
-    const lo = 0, hi = 50;
+    const lo = 0, hi = 160;
     const x = time => margin.left + time / response.duration * width;
     const y = rpm => margin.top + (hi - rpm) / (hi - lo) * height;
     g.clearRect(0, 0, w, h);
@@ -77,8 +77,8 @@ const PidPreview = (() => {
     g.fillRect(margin.left, margin.top, width, height);
     g.font = '12px system-ui';
     g.lineWidth = 1;
-    for (let tick = 0; tick <= 5; tick++) {
-      const rpm = tick * 10;
+    for (let tick = 0; tick <= 8; tick++) {
+      const rpm = tick * 20;
       g.strokeStyle = '#e0e6eb';
       g.beginPath(); g.moveTo(margin.left, y(rpm)); g.lineTo(w - margin.right, y(rpm)); g.stroke();
       g.fillStyle = '#667586'; g.textAlign = 'right';

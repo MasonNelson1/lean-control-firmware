@@ -66,6 +66,8 @@ public:
    * @param maxSpeedMS User speed limit in m/s, capped at the shared firmware limit.
    * @param maxAccelMS2 User wheel acceleration limit in m/s^2, capped at the
    *                    shared 2.85 m/s^2 design limit and the tuned limits.
+   *                    It limits speeding up only (|RPM| increasing). Braking
+   *                    toward zero always uses the tuned/design limits.
    * A zero limit returns zero and clears state. Negative/nonfinite inputs also
    * reset to zero. Lowered limits take precedence over jerk continuity, including
    * immediate clipping when the speed limit drops below the current output.
@@ -108,22 +110,36 @@ public:
                            DriveConstants::LINEAR_TO_RPM;
     const float highAccel = fminf(tuning_.highSpeedAccelMS2, maxAccel) *
                             DriveConstants::LINEAR_TO_RPM;
+    // Braking (reducing |RPM|) is never limited by the user acceleration
+    // selection: it always gets the tuned limits capped only by the design cap.
+    const float lowBrake = fminf(tuning_.lowSpeedAccelMS2, DriveConstants::MAX_ACCEL) *
+                           DriveConstants::LINEAR_TO_RPM;
+    const float highBrake = fminf(tuning_.highSpeedAccelMS2, DriveConstants::MAX_ACCEL) *
+                            DriveConstants::LINEAR_TO_RPM;
 
-    const float accelLimit = lowAccel + fraction *
-                                            (highAccel - lowAccel);
+    const float driveLimit = lowAccel + fraction * (highAccel - lowAccel);
+    const float brakeLimit = lowBrake + fraction * (highBrake - lowBrake);
+    // Positive acceleration speeds up a forward (or stopped) wheel and brakes a
+    // reversing one; negative acceleration is the mirror image.
+    const float upperLimit = rpm_ < 0.0f ? brakeLimit : driveLimit;
+    const float lowerLimit = rpm_ > 0.0f ? -brakeLimit : -driveLimit;
 
     const float error = requestedRPM - rpm_;
 
     const float requestedAccel = error / tau + tuning_.ki * integral_ -
                                  tuning_.kd * filteredRate_;
-    const float boundedAccel = clip(requestedAccel, -accelLimit, accelLimit);
+    const float boundedAccel = clip(requestedAccel, lowerLimit, upperLimit);
     const float jerkStep = tuning_.maxJerkRPMPerS2 * dt;
     acceleration_ += clip(boundedAccel - acceleration_, -jerkStep, jerkStep);
     // A lower user-selected acceleration cap applies on this update, even if
     // reaching it exceeds the normal jerk limit. Increasing the cap does not
     // force acceleration upward; normal PID/jerk control still governs that.
-    const float userAccelLimit = maxAccel * DriveConstants::LINEAR_TO_RPM;
-    acceleration_ = clip(acceleration_, -userAccelLimit, userAccelLimit);
+    // The user cap only restricts speeding up; braking keeps the design cap.
+    const float userDriveLimit = maxAccel * DriveConstants::LINEAR_TO_RPM;
+    const float designBrakeLimit = DriveConstants::MAX_ACCEL * DriveConstants::LINEAR_TO_RPM;
+    acceleration_ = clip(acceleration_,
+                         rpm_ > 0.0f ? -designBrakeLimit : -userDriveLimit,
+                         rpm_ < 0.0f ? designBrakeLimit : userDriveLimit);
 
     // Conditional integration: do not wind up while rate/jerk limits prevent
     // applying the requested correction. Each instance owns its own integral.

@@ -43,10 +43,16 @@ design history; this file holds the durable facts.
   into the Teensy pin. RF is tuned later with the real plate and rider.
 - Resting reading ≈ 370 counts nominal; measured 385–398 on the bench
   (2026-10-02). A firm thumb press ≈ 650–700.
-- Speed + acceleration: two 5-position rotary selector switches (C&K A105),
-  each wired as a 10k resistor ladder (pos 1 = GND, pos 5 = 3.3 V), rotor to
-  the Teensy with 100 nF + 1 MΩ to GND. Broken wire reads position 1 (slowest)
-  on purpose.
+- Speed + acceleration: two 4-position rotary selector switches (C&K
+  A10403RNCQ, SP4T, non-shorting/break-before-make). Common → analog pin with a
+  4.7 kΩ pull-up to 3.3 V (R49 speed, R54 accel) and 100 nF (C2/C1); each
+  position grounds it through 1k / 2.2k / 4.7k / 10k. Nominal 12-bit readings
+  718 / 1306 / 2048 / 2786; open (unplugged, between detents) reads ~4095 and
+  is invalid. Firmware: `src/drive_knobs.h` — bands at midpoints, 3 stable
+  reads at 20 ms, invalid < 200 ms holds the last position, longer → slowest
+  position (fault). Tables: 25/50/75/100 % of MAX_SPEED / MAX_ACCEL. The accel
+  knob limits speeding up only; braking always uses MAX_ACCEL. Knob changes
+  print a `Knobs: ...` text line with raw counts.
 - Zero/calibration button: pin 4 to GND, INPUT_PULLUP.
 - Motor controllers: 2x VESC 6/75 on CAN, controller ID 26 = left (this unit's VESC Tool default; set in `VESC_LEFT_ID`), right = TBD (`VESC_RIGHT_ID`, currently 2).
 
@@ -57,8 +63,8 @@ design history; this file holds the durable facts.
 | Back sensor | A17 (pin 41) |
 | Left sensor | A14 (pin 38) |
 | Right sensor | A16 (pin 40) |
-| Speed switch | A6 (pin 20) |
-| Accel switch | A7 (pin 21) |
+| Speed switch | A0 (pin 14), J4 pin 1 |
+| Accel switch | A1 (pin 15), J3 pin 1 |
 | Zero button | 4 |
 | CAN1 TX / RX | 22 / 23 |
 Keep pins 18/19 (I2C) and 22/23 (CAN) free.

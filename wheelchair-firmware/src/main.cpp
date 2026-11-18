@@ -9,15 +9,17 @@
 #include "driveModes/DisarmDriveMode.h"
 #include "PacketSerial.h"
 #include "config/DriveSettings.h"
+#include "drive_knobs.h"
 
 using namespace common;
 
-// Runtime knob selections: kept at the hard design limits until knobs are wired.
-float userMaxSpeedMS = MAX_SPEED;
-float userMaxAccelMS2 = MAX_ACCEL;
-// Future integration (once per VESC update):
-// leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, userMaxSpeedMS, userMaxAccelMS2);
-// Likewise for right. A stop/fault must bypass smoothing and reset BOTH instances.
+// Runtime knob selections, set by updateKnobs(). Start at the gentlest
+// position until the knobs are read in setup().
+knobs::RotarySwitch speedKnob;
+knobs::RotarySwitch accelKnob;
+float userMaxSpeedMS = knobs::speedLimitMS(0);
+float userMaxAccelMS2 = knobs::accelLimitMS2(0);
+// TODO: a stop/fault should bypass smoothing and reset BOTH PID instances.
 
 // MISC CONSTANTS and vars
 ezButton calibrateButton(PIN_CAL_BUTTON);
@@ -50,14 +52,20 @@ struct MotorCommandTelemetry
 static MotorCommandTelemetry motorTelemetry{};
 
 // This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
-// where the value is the percentage of max speed.
+// where the value is the percentage of the speed-knob max speed (full input = selected top speed).
 // PID smoothing is applied prior to using the setpoints.
 void setMotorPower(double left, double right, float dt)
 {
-    const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * MAX_SPEED * LINEAR_TO_RPM;
-    const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * MAX_SPEED * LINEAR_TO_RPM;
-    const float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
-    const float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
+    // Turning the speed knob up takes effect at once (the PID still limits
+    // acceleration). Turning it down lowers the cap no faster than the design
+    // braking rate, so the smoother never sees a step drop in its speed limit.
+    static float speedLimitMS = 0.0f;
+    speedLimitMS = knobs::slewDown(speedLimitMS, userMaxSpeedMS, MAX_ACCEL, dt);
+
+    const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
+    const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
+    const float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
+    const float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
     vescSetWheelRPM(can1, motors.leftId, leftRpms);
     vescSetWheelRPM(can1, motors.rightId, rightRpms);
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};
@@ -133,6 +141,43 @@ void printMode()
 {
     Serial.printf("Mode: %s\n", modeName(MODE));
 }
+
+// Apply the knobs' current positions and report them as one text line.
+// Non-CSV lines show up as console text in the debug viewer.
+static void applyKnobs()
+{
+    userMaxSpeedMS = knobs::speedLimitMS(speedKnob.position());
+    userMaxAccelMS2 = knobs::accelLimitMS2(accelKnob.position());
+
+    char line[160];
+    const int length = snprintf(line, sizeof(line),
+                                "Knobs: speed %d/%d (%.2f m/s, raw %u)%s, accel %d/%d (%.2f m/s2, raw %u)%s\n",
+                                speedKnob.position() + 1, knobs::Positions, userMaxSpeedMS,
+                                static_cast<unsigned>(speedKnob.lastRaw()), speedKnob.faulted() ? " FAULT->slowest" : "",
+                                accelKnob.position() + 1, knobs::Positions, userMaxAccelMS2,
+                                static_cast<unsigned>(accelKnob.lastRaw()), accelKnob.faulted() ? " FAULT->slowest" : "");
+    if (length <= 0 || length >= static_cast<int>(sizeof(line)))
+        return;
+    Serial.write(reinterpret_cast<const uint8_t *>(line), length);
+    if (Serial1.availableForWrite() >= length)
+        Serial1.write(reinterpret_cast<const uint8_t *>(line), length);
+}
+
+// Sample both knobs every knobs::SampleMs; an invalid (open/shorted) knob
+// falls back to its slowest position after knobs::FaultHoldMs.
+static void updateKnobs()
+{
+    static uint32_t lastSampleMs = 0;
+    const uint32_t now = millis();
+    if (now - lastSampleMs < knobs::SampleMs)
+        return;
+    lastSampleMs = now;
+
+    const bool speedChanged = speedKnob.update(analogRead(PIN_SPEED), now);
+    const bool accelChanged = accelKnob.update(analogRead(PIN_ACCEL), now);
+    if (speedChanged || accelChanged)
+        applyKnobs();
+}
 void setup()
 {
     static uint8_t bluetoothTxBuffer[512];
@@ -159,6 +204,11 @@ void setup()
     // user input
     analogReadResolution(12);
     analogReadAveraging(4);
+    // Take the knobs' power-on positions before the first drive tick. An
+    // invalid reading leaves that knob at its slowest position.
+    speedKnob.seed(analogRead(PIN_SPEED), millis());
+    accelKnob.seed(analogRead(PIN_ACCEL), millis());
+    applyKnobs();
     // ezButton configures the pins as INPUT_PULLUP: pressing connects to GND.
 
     attachInterrupt(digitalPinToInterrupt(PIN_LEAN_BUTTON), onLeanButtonPress, FALLING);
@@ -322,6 +372,7 @@ static void replyToConfiguration()
 void loop()
 {
     setMode();
+    updateKnobs();
     packetSerial.update();
     if (calibrateButton.isPressed() && MODE == LEAN)
         leanMode.calibrate();

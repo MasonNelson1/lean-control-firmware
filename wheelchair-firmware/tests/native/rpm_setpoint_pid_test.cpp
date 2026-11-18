@@ -26,7 +26,8 @@ int main() {
     assert(std::fabs(a) <= designRPM);
   }
 
-  // Low selections constrain both signed output RPM and acceleration.
+  // Low selections constrain signed output RPM and speeding-up acceleration.
+  // Braking toward zero is limited only by the design cap.
   RPMSetpointPID low(tuning());
   float previous = 0.0f;
   for (int k = 0; k < 2000; ++k) {
@@ -34,9 +35,34 @@ int main() {
     assert(std::fabs(rpm) <= 1.0f * LINEAR_TO_RPM);
     // Skip a hard output-boundary crossing: that clamp has higher priority.
     if (std::fabs(rpm) < LINEAR_TO_RPM && std::fabs(previous) < LINEAR_TO_RPM) {
-      assert(std::fabs(rpm - previous) / dt / LINEAR_TO_RPM <= .3001f);
+      const float accel = std::fabs(rpm - previous) / dt / LINEAR_TO_RPM;
+      const bool speedingUp = std::fabs(rpm) > std::fabs(previous) && rpm * previous >= 0.0f;
+      assert(accel <= (speedingUp ? .3001f : MAX_ACCEL + .0001f));
     }
     previous = rpm;
+  }
+
+  // A gentle acceleration knob does not slow braking: from top speed, a zero
+  // request decelerates near the design limit in both directions.
+  for (float sign : {1.0f, -1.0f}) {
+    RPMSetpointPID braking(tuning());
+    float rpm = 0.0f;
+    for (int k = 0; k < 4000; ++k)
+      rpm = braking.smoothRPM(sign * 1000.0f, dt, MAX_SPEED, .3f);
+    assert(std::fabs(rpm) > designRPM * .99f);
+    const float start = std::fabs(rpm);
+    float maxDecel = 0.0f;
+    int steps = 0;
+    while (std::fabs(rpm) > start * .05f && steps < 2000) {
+      const float before = rpm;
+      rpm = braking.smoothRPM(0.0f, dt, MAX_SPEED, .3f);
+      const float decel = (std::fabs(before) - std::fabs(rpm)) / dt / LINEAR_TO_RPM;
+      assert(decel <= MAX_ACCEL + .0001f);
+      if (decel > maxDecel) maxDecel = decel;
+      ++steps;
+    }
+    assert(maxDecel > 2.0f);        // well above the .3 m/s^2 knob setting
+    assert(steps * dt < 2.5f);      // ~14 s if braking were knob-limited
   }
 
   // An acceleration knob reduction acts immediately, despite stored acceleration.

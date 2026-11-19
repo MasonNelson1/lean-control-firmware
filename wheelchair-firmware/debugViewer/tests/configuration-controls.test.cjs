@@ -15,6 +15,8 @@ class Node {
     this.listeners = {};
     this.style = {};
     this.classList = {add() {}, toggle() {}};
+    this.classes = new Set();
+    this.classList.toggle = (name, enabled) => enabled ? this.classes.add(name) : this.classes.delete(name);
     this._value = '';
   }
   set value(value) { this._value = String(value); }
@@ -51,12 +53,15 @@ function harness() {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
   }
   const source = fs.readFileSync(path.join(__dirname, '..', 'configuration.js'), 'utf8');
-  const hook = '  globalThis.controlsUnderTest = {numberInput, parseDraft, inputValue, renderField, restoreDefaults,' +
+  const hook = '  globalThis.controlsUnderTest = {numberInput, parseDraft, inputValue, renderField, restoreDefaults, createProfile, stageProfile, loadProfile,' +
     ' draft(id) { return drafts.get(id); }, seed(items, entries) { groups = new Map(items); fields = new Map(entries); drafts.clear(); loaded = true; }};\n';
   assert.ok(source.includes('  window.configurationConnectionChanged(null);'));
   vm.runInContext(source.replace('  window.configurationConnectionChanged(null);', hook + '  window.configurationConnectionChanged(null);'), context);
   return {
     api: context.controlsUnderTest,
+    link: context.window.configLink,
+    fetch(handler) { context.fetch = handler; },
+    node: id => document.getElementById(id),
     types: vm.runInContext('ConfigWire.types', context),
     prompts,
     confirm(value) { confirmed = value; }
@@ -152,6 +157,63 @@ test('group defaults require confirmation before an operation starts', async () 
   assert.equal(h.prompts.length, 1);
   assert.match(h.prompts[0], /Sensor gains/);
 });
+
+test('restore all defaults refreshes values then saves to EEPROM', async () => {
+  const h = harness(), c = scalar(h, {value: 2});
+  h.link.port = {};
+  h.confirm(true);
+  const commands = [];
+  h.link.request = async command => {
+    commands.push(command);
+    return {get: () => 1, done() {}};
+  };
+  await h.node('config-defaults').onclick();
+  assert.deepEqual(commands, [8, 4, 6]);
+  assert.equal(c.field.value, 1);
+  assert.match(h.node('config-status').textContent, /Defaults saved to wheelchair/);
+});
+
+test('restoring one group keeps the existing RAM-only behavior', async () => {
+  const h = harness(); scalar(h);
+  h.link.port = {};
+  h.confirm(true);
+  const commands = [];
+  h.link.request = async command => {
+    commands.push(command);
+    return {get: () => 1, done() {}};
+  };
+  await h.api.restoreDefaults(1);
+  assert.deepEqual(commands, [8, 4]);
+});
+
+test('restore all defaults does not save when restoring fails or is cancelled', async () => {
+  const h = harness(); scalar(h);
+  h.link.port = {};
+  const commands = [];
+  h.link.request = async command => {
+    commands.push(command);
+    throw new Error('Restore rejected');
+  };
+  await h.api.restoreDefaults();
+  assert.deepEqual(commands, []);
+  h.confirm(true);
+  await h.api.restoreDefaults();
+  assert.deepEqual(commands, [8]);
+  assert.equal(h.node('config-status').dataset.error, true);
+});
+
+test('restore all defaults reports EEPROM failure without claiming it saved', async () => {
+  const h = harness(); scalar(h);
+  h.link.port = {};
+  h.confirm(true);
+  h.link.request = async command => {
+    if (command === 6) throw new Error('Save rejected');
+    return {get: () => 1, done() {}};
+  };
+  await h.api.restoreDefaults();
+  assert.match(h.node('config-status').textContent, /Defaults applied to RAM, but saving to EEPROM failed/);
+  assert.equal(h.node('config-status').dataset.error, true);
+});
 test('units appear in the field title', () => {
   const h = harness(), c = scalar(h);
   assert.ok(descendants(c.node, node => node.tagName === 'label').some(node => node.textContent === 'Front gain (×)'));
@@ -210,4 +272,121 @@ test('speed and turn curve editors keep independent drafts', () => {
   inputs[1][1].value = '.4'; inputs[1][1].fire('input');
   assert.equal(h.api.draft(31)[1], '.4');
   assert.equal(h.api.draft(30)[0], '.3');
+});
+
+test('profile round trip stages edits without device writes or changing device values', () => {
+  const h = harness(), c = scalar(h);
+  c.input.value = '2.125'; c.input.fire('input');
+  const profile = JSON.parse(JSON.stringify(h.api.createProfile()));
+  assert.equal(profile.fields[0].value, '2.125');
+  h.api.seed([[1, {id: 1, parent: 0, name: 'Sensor gains'}]], [[10, c.field]]);
+  const result = h.api.stageProfile(profile);
+  assert.equal(result.matched, 1);
+  assert.equal(h.api.draft(10), '2.125');
+  assert.equal(c.field.value, 1);
+  const card = h.api.renderField(c.field);
+  assert.equal(card.classes.has('config-field-pending'), true);
+});
+
+test('profile preserves all 64-bit integer digits', () => {
+  const h = harness(), c = scalar(h, {type: h.types.u64, value: 18446744073709551615n,
+    min: 0n, max: 18446744073709551615n}, 'Integer settings');
+  const profile = JSON.parse(JSON.stringify(h.api.createProfile()));
+  assert.equal(profile.fields[0].value, '18446744073709551615');
+  h.api.stageProfile(profile);
+  assert.equal(h.api.draft(c.field.id), undefined);
+});
+
+test('profile skips unknown and incompatible fields and accepts missing metadata', () => {
+  const h = harness(); scalar(h);
+  const profile = h.api.createProfile();
+  profile.fields = [null, {id: 999, type: 1, value: '3'},
+    {id: 10, type: h.types.boolean, value: true},
+    {id: 10, type: h.types.f32, name: 'A different setting', value: '2'},
+    {id: 10, type: h.types.f32, value: '4', extra: 'ignored'}];
+  const result = h.api.stageProfile(profile);
+  assert.equal(result.skipped, 4);
+  assert.equal(result.matched, 1);
+  assert.equal(h.api.draft(10), '4');
+});
+
+test('missing profile fields preserve existing drafts', () => {
+  const h = harness(), c = scalar(h);
+  c.input.value = '3'; c.input.fire('input');
+  h.api.stageProfile({format: 'lean-config', version: 1, fields: []});
+  assert.equal(h.api.draft(10), '3');
+});
+
+test('invalid recognized profile values preserve all existing drafts atomically', () => {
+  const h = harness(), c = scalar(h);
+  const other = {...c.field, id: 11, name: 'Other gain'};
+  h.api.seed([[1, {id: 1, parent: 0, name: 'Sensor gains'}]], [[10, c.field], [11, other]]);
+  c.input.value = '3'; c.input.fire('input');
+  const profile = h.api.createProfile();
+  profile.fields[0].value = '5';
+  profile.fields[1].value = '101';
+  assert.throws(() => h.api.stageProfile(profile), /Other gain/);
+  assert.equal(h.api.draft(10), '3');
+  assert.equal(h.api.draft(11), undefined);
+});
+
+test('invalid edits cannot be exported', () => {
+  const h = harness(), c = scalar(h);
+  c.input.value = 'NaN'; c.input.fire('input');
+  assert.throws(() => h.api.createProfile(), /finite/);
+});
+
+test('pending highlight follows manual edits and resets', () => {
+  const h = harness(), c = scalar(h);
+  c.input.value = '2'; c.input.fire('input');
+  assert.equal(h.node('config-field-10').classes.has('config-field-pending'), true);
+  c.input.value = '1'; c.input.fire('input');
+  assert.equal(h.node('config-field-10').classes.has('config-field-pending'), false);
+  const card = h.api.renderField(c.field);
+  assert.equal(card.classes.has('config-field-pending'), false);
+});
+
+test('loading through the dashboard stages edits without sending any device requests', async () => {
+  const h = harness(), c = scalar(h);
+  const profile = h.api.createProfile();
+  profile.fields[0].value = '4';
+  h.link.port = {};
+  h.link.request = () => assert.fail('Profile load must not send requests to the wheelchair');
+  h.fetch(async (route, options) => {
+    assert.equal(route, '/profiles/import');
+    assert.equal(options.method, 'POST');
+    return {ok: true, json: async () => profile};
+  });
+  await h.api.loadProfile({name: 'settings.lean', size: 100});
+  assert.equal(h.api.draft(10), '4');
+  assert.equal(c.field.value, 1);
+  assert.equal(h.node('config-status').textContent, '');
+});
+
+test('a profile finishing after a connection change cannot edit the new device', async () => {
+  const h = harness(); scalar(h);
+  const profile = h.api.createProfile();
+  profile.fields[0].value = '4';
+  h.link.port = {};
+  h.fetch(async () => {
+    h.link.generation++;
+    return {ok: true, json: async () => profile};
+  });
+  await h.api.loadProfile({name: 'settings.lean', size: 100});
+  assert.equal(h.api.draft(10), undefined);
+});
+
+test('profiles preserve Boolean and curve values and skip unknown curve editors', () => {
+  const h = harness();
+  const boolean = {id: 10, group: 1, name: 'Enabled', type: h.types.boolean, value: false};
+  const curve = {...powerField(h), id: 11, group: 1, name: 'Curve', value: [.5, .5]};
+  h.api.seed([[1, {id: 1, parent: 0, name: 'Settings'}]], [[10, boolean], [11, curve]]);
+  const profile = JSON.parse(JSON.stringify(h.api.createProfile()));
+  profile.fields[0].value = true;
+  profile.fields[1].value = ['.5', '.25'];
+  h.api.stageProfile(profile);
+  assert.equal(h.api.draft(10), true);
+  assert.equal(h.api.draft(11)[1], '.25');
+  profile.fields[1].editor = 999;
+  assert.equal(h.api.stageProfile(profile).skipped, 1);
 });

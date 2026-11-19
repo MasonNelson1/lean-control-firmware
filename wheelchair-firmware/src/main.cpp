@@ -149,6 +149,7 @@ static void applyKnobs()
     userMaxSpeedMS = knobs::speedLimitMS(speedKnob.position());
     userMaxAccelMS2 = knobs::accelLimitMS2(accelKnob.position());
 
+    // this only prints when the knobs are moved, not all the time.
     char line[160];
     const int length = snprintf(line, sizeof(line),
                                 "Knobs: speed %d/%d (%.2f m/s, raw %u)%s, accel %d/%d (%.2f m/s2, raw %u)%s\n",
@@ -189,7 +190,7 @@ void setup()
     packetSerial.setStream(&Serial1);
     packetSerial.setPacketHandler(onBluetoothPacket);
 
-    //setup led's
+    // setup led's
     pinMode(common::PIN_CAL_LED, OUTPUT);
     pinMode(common::PIN_REMOTE_LED, OUTPUT);
     pinMode(common::PIN_LEAN_LED, OUTPUT);
@@ -198,7 +199,8 @@ void setup()
 
     settings::persistence.load();
     MODE = settings::defaultMode.get();
-    if (MODE == LEAN) leanMode.reset();
+    if (MODE == LEAN)
+        leanMode.reset();
     applyRuntimeSettings();
 
     // user input
@@ -240,7 +242,7 @@ void setMode()
 
     leanPressPending |= leanEdge;
     remotePressPending |= remoteEdge;
-    disarmPressPending  |= disarmEdge;
+    disarmPressPending |= disarmEdge;
 
     // loop the buttons right away
     leanModeButton.loop();
@@ -251,7 +253,7 @@ void setMode()
     const bool leanPressed = leanModeButton.isPressed() && leanPressPending;
     const bool remotePressed = remoteModeButton.isPressed() && remotePressPending;
     const bool disarmPressed = disarmModeButton.isPressed() && disarmPressPending;
-    
+
     if (leanPressed)
         leanPressPending = false;
     if (remotePressed)
@@ -263,7 +265,7 @@ void setMode()
     if (remoteModeButton.isReleased())
         remotePressPending = false;
     if (disarmModeButton.isReleased())
-        disarmPressPending =  false;
+        disarmPressPending = false;
 
     if (leanPressed && (MODE != LEAN))
     {
@@ -283,16 +285,16 @@ void setMode()
         printMode();
     }
 
-    //set mode LED's
+    // set mode LED's
     switch (MODE)
     {
     case LEAN:
         digitalWrite(common::PIN_LEAN_LED, HIGH);
         digitalWrite(common::PIN_DISARM_LED, LOW);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
-        //calibration button status is handled in the getTargets() for this mode. 
+        // calibration button status is handled in the getTargets() for this mode.
         break;
-    
+
     case REMOTE:
         digitalWrite(common::PIN_LEAN_LED, LOW);
         digitalWrite(common::PIN_DISARM_LED, LOW);
@@ -330,21 +332,24 @@ static void updateDrive()
     case LEAN:
         targets = leanMode.getTargets();
         break;
-    
+
     case REMOTE:
         targets = remoteMode.getTargets();
         break;
     case DISARM:
-        targets = disarmMode.getTargets(); 
+        targets = disarmMode.getTargets();
         break;
     default:
         targets = {0.0f, 0.0f};
         Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
         break;
     }
-    if (MODE != DISARM) {
+    if (MODE != DISARM)
+    {
         setMotorPower(targets.left, targets.right, dt);
-    }else {
+    }
+    else
+    {
         vescSetCurrent(can1, motors.leftId, 0.0f);
         vescSetCurrent(can1, motors.rightId, 0.0f);
     }
@@ -397,7 +402,8 @@ void loop()
 
     const bool leanActive = MODE == LEAN;
     // LEAN samples on each control tick; other modes sample for display only.
-    if (!leanActive) leanMode.sampleSensors();
+    if (!leanActive)
+        leanMode.sampleSensors();
     const LeanTelemetry lean = leanMode.getTelemetry();
     const bool stopped = MODE == DISARM || (leanActive ? lean.stopped : remoteMode.getTelemetry().stopped);
     const MotorCommandTelemetry commands = MODE == DISARM ? MotorCommandTelemetry{} : motorTelemetry;

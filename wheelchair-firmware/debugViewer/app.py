@@ -1,8 +1,8 @@
-import asyncio, csv, json, os, time, argparse, sys
+import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib
 from collections import deque
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, Request, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 
 try:
     import pty
@@ -111,6 +111,61 @@ async def config_protocol_script(): return FileResponse(ROOT/'config-protocol.js
 async def configuration_script(): return FileResponse(ROOT/'configuration.js', media_type='text/javascript')
 @app.get('/pid-preview.js')
 async def pid_preview_script(): return FileResponse(ROOT/'pid-preview.js', media_type='text/javascript')
+
+# Profile files are handled only by the dashboard; these routes never access a
+# serial connection or change the running/saved wheelchair configuration.
+PROFILE_LIMIT = 1024 * 1024
+
+def profile_json(data):
+    try:
+        profile = json.loads(data)
+        if not isinstance(profile, dict) or profile.get('format') != 'lean-config' or \
+                type(profile.get('version')) is not int or profile['version'] != 1 or \
+                not isinstance(profile.get('fields'), list):
+            raise ValueError()
+        result = json.dumps(profile, ensure_ascii=False, allow_nan=False, indent=2).encode('utf-8')
+        if len(result) > PROFILE_LIMIT:
+            raise ValueError()
+        return result
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        raise HTTPException(400, 'Invalid or unsupported Lean configuration JSON.')
+
+async def profile_body(request):
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > PROFILE_LIMIT:
+            raise HTTPException(413, 'Profile files must be at most 1 MiB.')
+    return bytes(data)
+
+@app.post('/profiles/export')
+async def export_profile(request: Request):
+    data = profile_json(await profile_body(request))
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as profile:
+        profile.writestr('profile.json', data)
+    return Response(archive.getvalue(), media_type='application/zip',
+                    headers={'Content-Disposition': 'attachment; filename="configuration.lean"'})
+
+@app.post('/profiles/import')
+async def import_profile(request: Request):
+    data = await profile_body(request)
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            entries = archive.infolist()
+            if len(entries) != 1 or entries[0].filename != 'profile.json' or \
+                    entries[0].file_size > PROFILE_LIMIT or entries[0].flag_bits & 1 or \
+                    entries[0].compress_type != zipfile.ZIP_DEFLATED:
+                raise ValueError()
+            # Bound actual decompression too, rather than trusting ZIP metadata.
+            with archive.open(entries[0]) as source:
+                content = source.read(PROFILE_LIMIT + 1)
+            if len(content) > PROFILE_LIMIT:
+                raise ValueError()
+    except (ValueError, OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error):
+        raise HTTPException(400, 'Invalid .lean file. Expected a ZIP containing compressed profile.json.')
+    return Response(profile_json(content), media_type='application/json')
+
 # Fixed receiver only: never accept a command or address from the browser.
 @app.post('/bluetooth/disconnect')
 async def release_bluetooth(request: Request):

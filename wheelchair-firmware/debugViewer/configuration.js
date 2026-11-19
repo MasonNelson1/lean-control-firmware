@@ -41,6 +41,9 @@
     byId('config-save').disabled = !editable || !(link.dirty || hasDrafts);
     byId('config-revert').disabled = busy || !(hasDrafts || (editable && link.dirty));
     byId('config-defaults').disabled = !editable;
+    byId('config-profile-save').disabled = !editable;
+    byId('config-profile-load').disabled = !editable;
+    byId('config-profile-file').disabled = !editable;
     byId('config-summary').textContent = loaded
       ? [
           hasDrafts ? `${drafts.size} unapplied ${drafts.size === 1 ? 'edit' : 'edits'}` : '',
@@ -199,6 +202,7 @@
     }
     for (const input of inputs) input.setAttribute('aria-invalid', String(Boolean(error)));
     message.textContent = error;
+    byId('config-field-' + field.id)?.classList.toggle('config-field-pending', drafts.has(field.id));
     updateToolbar();
     updatePidPlots();
     return value;
@@ -229,6 +233,110 @@
     }
   }
 
+  // Numeric values are decimal strings so JSON preserves 64-bit integers and
+  // exact floating-point values. Paths and editor metadata protect against
+  // accidentally loading a field ID reused by a different device schema.
+  function profileIdentity(field) {
+    const path = [];
+    for (let group = groups.get(field.group); group; group = groups.get(group.parent)) path.unshift(group.name);
+    return {id: field.id, name: field.name, path, type: field.type,
+      ...(field.type === types.profile ? {editor: field.editor, parameters: field.parameters.map(part => part.name)} : {})};
+  }
+
+  function profileRaw(field, value) {
+    if (field.type === types.boolean) {
+      if (typeof value !== 'boolean') throw new Error('Expected a Boolean value.');
+      return value;
+    }
+    if (field.type === types.profile) {
+      if (!Array.isArray(value) || value.length !== field.parameters.length || value.some(part => typeof part !== 'string'))
+        throw new Error('Invalid curve parameters.');
+      return value;
+    }
+    if (typeof value !== 'string' || !value.trim()) throw new Error('Expected a numeric string.');
+    return value;
+  }
+
+  function createProfile() {
+    return {format: 'lean-config', version: 1, fields: [...fields.values()].filter(field => !field.unsupported).map(field => {
+      let value;
+      try { value = drafts.has(field.id) ? parseDraft(field, drafts.get(field.id)) : field.value; }
+      catch (error) { throw new Error(`${field.name}: ${error.message}`); }
+      return {...profileIdentity(field), value: Array.isArray(value) ? value.map(String)
+        : typeof value === 'boolean' ? value : String(value)};
+    })};
+  }
+
+  function stageProfile(profile) {
+    if (!profile || profile.format !== 'lean-config' || profile.version !== 1 || !Array.isArray(profile.fields))
+      throw new Error('Invalid or unsupported Lean configuration profile.');
+    // Older profiles may omit new settings; newer ones may contain settings
+    // this dashboard/device cannot edit. Keep unrelated drafts in either case.
+    const next = new Map(drafts), seen = new Set();
+    let matched = 0, skipped = 0;
+    for (const entry of profile.fields) {
+      const field = entry && fields.get(entry.id);
+      if (!field || field.unsupported || seen.has(entry.id)) { skipped++; continue; }
+      const identity = profileIdentity(field);
+      // Type is required. Additional identity metadata, when present, must
+      // match; absent metadata is tolerated for older profile files.
+      if (entry.type !== field.type || Object.keys(identity).some(key => key in entry &&
+          JSON.stringify(identity[key]) !== JSON.stringify(entry[key]))) { skipped++; continue; }
+      seen.add(entry.id);
+      try {
+        const raw = profileRaw(field, entry.value);
+        const value = parseDraft(field, raw);
+        if (!equalValue(value, field.value)) next.set(field.id, raw);
+        else next.delete(field.id);
+        matched++;
+      } catch (error) { throw new Error(`${field.name}: ${error.message}`); }
+    }
+    // Commit only after every entry validates. No device requests are sent.
+    drafts = next;
+    return {matched, skipped};
+  }
+
+  async function profileRequest(route, body) {
+    const response = await fetch('/profiles/' + route, {method: 'POST', body,
+      headers: {'Content-Type': route === 'export' ? 'application/json' : 'application/zip'}});
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Could not process the profile file.');
+    }
+    return response;
+  }
+
+  async function saveProfile() {
+    await run(async () => {
+      const generation = link.generation;
+      const response = await profileRequest('export', JSON.stringify(createProfile()));
+      const blob = await response.blob();
+      if (generation !== link.generation) return;
+      const url = URL.createObjectURL(blob);
+      const anchor = element('a');
+      anchor.href = url;
+      anchor.download = `lean-config-${new Date().toISOString().replace(/[:.]/g, '-')}.lean`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status('Profile saved to a .lean file.');
+    });
+  }
+
+  async function loadProfile(file) {
+    await run(async () => {
+      if (!/\.lean$/i.test(file.name)) throw new Error('Choose a .lean profile file.');
+      if (file.size > 1024 * 1024) throw new Error('Profile files must be at most 1 MiB.');
+      const generation = link.generation;
+      const response = await profileRequest('import', file);
+      const profile = await response.json();
+      if (generation !== link.generation) return;
+      stageProfile(profile);
+      status('');
+    });
+  }
+
   function groupWithin(id, ancestor) {
     if (!ancestor) return true;
     for (let group = groups.get(id); group; group = groups.get(group.parent)) {
@@ -246,7 +354,17 @@
       reply.done();
       for (const field of fields.values()) if (groupWithin(field.group, id)) drafts.delete(field.id);
       await refreshValues();
-      status('Defaults applied to RAM. Save to keep them.');
+      if (!id) {
+        try {
+          const saved = await link.request(commands.save);
+          saved.done();
+        } catch (error) {
+          throw new Error(`Defaults applied to RAM, but saving to EEPROM failed: ${error.message}`);
+        }
+        status('Defaults saved to wheelchair. Settings marked for restart take effect at the next power-on.');
+      } else {
+        status('Defaults applied to RAM. Save to keep them.');
+      }
     });
   }
 
@@ -541,6 +659,7 @@
 
   function renderField(field) {
     const card = element('article', field.type === types.profile ? 'config-field profile-field' : 'config-field');
+    card.id = 'config-field-' + field.id;
     const title = element('div', 'config-field-title');
     const caption = field.name + (field.units ? ' (' + field.units + ')' : '');
     const name = element(field.type === types.profile || field.unsupported ? 'span' : 'label', '', caption);
@@ -567,6 +686,7 @@
     if (field.type === types.profile) renderProfile(field, card, error, disabled);
     else renderScalar(field, card, name, error, disabled);
     card.append(error);
+    card.classList.toggle('config-field-pending', drafts.has(field.id));
     return card;
   }
 
@@ -700,6 +820,13 @@
     status('Reverted to saved settings.');
   });
   byId('config-defaults').onclick = () => restoreDefaults();
+  byId('config-profile-save').onclick = saveProfile;
+  byId('config-profile-load').onclick = () => byId('config-profile-file').click();
+  byId('config-profile-file').onchange = event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (file) return loadProfile(file);
+  };
   window.addEventListener('resize', updatePidPlots);
   window.configurationConnectionChanged(null);
 })();

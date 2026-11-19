@@ -23,7 +23,7 @@ bool Protocol::queue(const uint8_t *packet, size_t size) {
     return true;
 }
 
-size_t Protocol::reply(uint8_t (&response)[MaxResponseSize], float leftCommandRPM, float rightCommandRPM) {
+size_t Protocol::reply(uint8_t (&response)[MaxResponseSize], bool disarmed) {
     if (!pending()) return 0;
     response[0] = ResponseTag;
     response[1] = ProtocolVersion;
@@ -34,7 +34,7 @@ size_t Protocol::reply(uint8_t (&response)[MaxResponseSize], float leftCommandRP
     Status result = Status::Version;
     if (pending_[1] == ProtocolVersion) {
         result = execute(static_cast<Command>(pending_[3]), pending_ + 4, pendingSize_ - 6,
-                         leftCommandRPM, rightCommandRPM, out);
+                         disarmed, out);
     }
     if (!out.good()) result = Status::TooLarge;
     pendingSize_ = 0;
@@ -48,13 +48,12 @@ size_t Protocol::reply(uint8_t (&response)[MaxResponseSize], float leftCommandRP
 }
 
 Status Protocol::execute(Command command, const uint8_t *body, size_t size,
-                         float leftCommandRPM, float rightCommandRPM, Writer &out) {
-    // Check at execution time, before touching RAM or EEPROM. Ordered <= checks
-    // accept both signs at exactly 1 RPM and reject nonfinite command values.
+                         bool disarmed, Writer &out) {
+    // Check the current mode at execution time, before touching RAM or EEPROM.
     const bool modifiesConfiguration = command == Command::Set || command == Command::Save ||
                                        command == Command::Revert || command == Command::Defaults;
-    if (modifiesConfiguration && !(std::fabs(leftCommandRPM) <= 1.0f && std::fabs(rightCommandRPM) <= 1.0f))
-        return Status::Moving;
+    if (modifiesConfiguration && !disarmed)
+        return Status::NotDisarmed;
 
     switch (command) {
     case Command::Hello:

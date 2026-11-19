@@ -115,7 +115,7 @@
       fields = nextFields;
       drafts = compatibleDrafts;
       loaded = true;
-      status('Stop the chair before changing settings. Apply updates RAM, and Save keeps the settings after power-off.');
+      status('Switch to DISARM mode before changing settings. Apply updates RAM, and Save keeps the settings after power-off.');
     });
   }
 

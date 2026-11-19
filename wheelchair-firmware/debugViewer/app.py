@@ -102,7 +102,7 @@ async def stop():
     for t in app.state.tasks: t.cancel()
     if proc and proc.returncode is None: proc.terminate()
 @app.get('/')
-async def index(): return HTMLResponse((ROOT/'index.html').read_text())
+async def index(): return HTMLResponse((ROOT/'index.html').read_text(encoding='utf-8'))
 @app.get('/bluetooth.js')
 async def bluetooth_script(): return FileResponse(ROOT/'bluetooth.js', media_type='text/javascript')
 @app.get('/config-protocol.js')

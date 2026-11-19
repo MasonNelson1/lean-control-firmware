@@ -362,11 +362,10 @@ static void replyToConfiguration()
         return;
 
     uint8_t response[config::MaxResponseSize];
-    // The protocol checks the latest smoothed wheel commands before writes.
+    // Configuration writes are permitted only while the current mode is DISARM.
     // Only successful runtime mutations require refreshing derived settings.
     const uint32_t revision = settings::protocol.revision();
-    const size_t length = settings::protocol.reply(response, motorTelemetry.leftSmoothedRPM,
-                                                   motorTelemetry.rightSmoothedRPM);
+    const size_t length = settings::protocol.reply(response, MODE == DISARM);
     if (settings::protocol.revision() != revision)
         applyRuntimeSettings();
     // The leading zero distinguishes PacketSerial responses from legacy CSV.

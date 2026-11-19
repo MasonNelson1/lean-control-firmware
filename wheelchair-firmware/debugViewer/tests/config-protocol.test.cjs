@@ -96,7 +96,7 @@ test('group preview metadata binds a graph to device-defined field IDs and limit
   assert.deepEqual([...descriptor.constants], [2.25, 2.875]);
 });
 
-test('Web Serial link matches request IDs and surfaces version, validation and moving errors', async () => {
+test('Web Serial link matches request IDs and surfaces version, validation and DISARM errors', async () => {
   const link = new wire.Link();
   const frames = [];
   link.attach({writable: new WritableStream({write(frame) { frames.push(frame); }})});
@@ -115,9 +115,9 @@ test('Web Serial link matches request IDs and surfaces version, validation and m
   await assert.rejects(invalid, /rejected the value/);
   assert.equal(link.dirty, false);
 
-  const moving = link.request(commands.set, wire.idBody(1));
+  const armed = link.request(commands.set, wire.idBody(1));
   link.receive(reply(2, commands.set, [], {status: 5, flags: 0}));
-  await assert.rejects(moving, /commanded above 1 RPM/);
+  await assert.rejects(armed, /DISARM mode/);
 
   const unsupported = link.request(commands.hello);
   link.receive(reply(3, commands.hello, [], {version: 2, status: 1}));

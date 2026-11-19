@@ -159,7 +159,7 @@ static void protocolHandling() {
     uint8_t response[MaxResponseSize];
 
     auto exchange = [&](Command command, const uint8_t *body, size_t size,
-                        float leftRPM = 0, float rightRPM = 0, uint8_t version = 1) {
+                        bool disarmed = true, uint8_t version = 1) {
         uint8_t request[MaxRequestSize];
         Writer out(request, sizeof(request));
         out.put(RequestTag);
@@ -169,7 +169,7 @@ static void protocolHandling() {
         if (size) out.bytes(body, size);
         out.put(crc16(request, out.size()));
         assert(out.good() && protocol.queue(request, out.size()));
-        const size_t length = protocol.reply(response, leftRPM, rightRPM);
+        const size_t length = protocol.reply(response, disarmed);
         assert(length >= 8 && response[0] == ResponseTag && response[2] == 42 &&
                response[3] == static_cast<uint8_t>(command));
         assert(read<uint16_t>(response + length - 2) == crc16(response, length - 2));
@@ -180,7 +180,7 @@ static void protocolHandling() {
     assert(!protocol.queue(legacy, sizeof(legacy)) && !protocol.pending());
     const uint8_t corrupt[] = {RequestTag, 1, 42, 1, 0, 0};
     assert(protocol.queue(corrupt, sizeof(corrupt)) && !protocol.pending());
-    assert(exchange(Command::Hello, nullptr, 0, 0, 0, 2) == Status::Version);
+    assert(exchange(Command::Hello, nullptr, 0, true, 2) == Status::Version);
     assert(exchange(Command::Hello, nullptr, 0) == Status::Ok);
     assert(read<uint16_t>(response + 6) == 1 && read<uint16_t>(response + 8) == 1);
     const uint8_t index[] = {0, 0};
@@ -199,29 +199,22 @@ static void protocolHandling() {
     assert(exchange(Command::Read, good, 2) == Status::Ok && response[6] == 8);
     assert(exchange(Command::Save, nullptr, 0) == Status::Ok && response[5] == 0);
     const uint8_t groupId[] = {1, 0};
-    assert(exchange(Command::Preview, groupId, sizeof(groupId), -20, 20) == Status::Ok);
+    assert(exchange(Command::Preview, groupId, sizeof(groupId), false) == Status::Ok);
     assert(response[6] == 7 && response[7] == 1 && read<uint16_t>(response + 8) == field.id);
     assert(response[10] == 1 && read<float>(response + 11) == 2.25f);
-    const float movingCommands[][2] = {
-        {1.01f, 0}, {-1.01f, 0}, {0, 1.01f}, {0, -1.01f},
-        {std::numeric_limits<float>::infinity(), 0},
-        {0, std::numeric_limits<float>::quiet_NaN()}
-    };
     const auto saved = storage.data;
     const uint32_t revision = protocol.revision();
-    for (const auto &rpm : movingCommands) {
-        assert(exchange(Command::Set, good, sizeof(good), rpm[0], rpm[1]) == Status::Moving);
-        assert(exchange(Command::Save, nullptr, 0, rpm[0], rpm[1]) == Status::Moving);
-        assert(exchange(Command::Revert, nullptr, 0, rpm[0], rpm[1]) == Status::Moving);
-        assert(exchange(Command::Defaults, groupId, sizeof(groupId), rpm[0], rpm[1]) == Status::Moving);
-        assert(field.get() == 8 && protocol.revision() == revision && storage.data == saved);
-        assert(!store.dirty());
-    }
-    assert(exchange(Command::Read, good, 2, -20, 20) == Status::Ok && response[6] == 8);
-    assert(exchange(Command::Hello, nullptr, 0, 20, -20) == Status::Ok);
-    assert(exchange(Command::Set, good, sizeof(good), -1, 1) == Status::Ok);
-    assert(exchange(Command::Defaults, groupId, sizeof(groupId), 1, -1) == Status::Ok && field.get() == 4);
-    assert(exchange(Command::Revert, nullptr, 0, -1, 1) == Status::Ok && field.get() == 8);
+    assert(exchange(Command::Set, good, sizeof(good), false) == Status::NotDisarmed);
+    assert(exchange(Command::Save, nullptr, 0, false) == Status::NotDisarmed);
+    assert(exchange(Command::Revert, nullptr, 0, false) == Status::NotDisarmed);
+    assert(exchange(Command::Defaults, groupId, sizeof(groupId), false) == Status::NotDisarmed);
+    assert(field.get() == 8 && protocol.revision() == revision && storage.data == saved);
+    assert(!store.dirty());
+    assert(exchange(Command::Read, good, 2, false) == Status::Ok && response[6] == 8);
+    assert(exchange(Command::Hello, nullptr, 0, false) == Status::Ok);
+    assert(exchange(Command::Set, good, sizeof(good), true) == Status::Ok);
+    assert(exchange(Command::Defaults, groupId, sizeof(groupId), true) == Status::Ok && field.get() == 4);
+    assert(exchange(Command::Revert, nullptr, 0, true) == Status::Ok && field.get() == 8);
 }
 
 int main() {

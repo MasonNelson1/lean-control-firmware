@@ -22,7 +22,7 @@ const ConfigWire = (() => {
     '', 'The wheelchair uses a different configuration protocol version.',
     'The wheelchair rejected the request format.', 'This setting or group is unavailable.',
     'The wheelchair rejected the value or a combination of settings.',
-    'Configuration rejected: a wheel is commanded above 1 RPM. Stop the chair and try again.',
+    'Configuration rejected: switch the wheelchair to DISARM mode and try again.',
     'The wheelchair could not save or restore the configuration.',
     'This schema entry exceeds the protocol limit.'
   ];

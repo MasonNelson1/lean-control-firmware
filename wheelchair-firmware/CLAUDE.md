@@ -18,6 +18,8 @@ design history; this file holds the durable facts.
 - Upload:  `pio run -t upload` / `pio run -e can_test -t upload`
 - Monitor: `pio device monitor`  (115200 baud; close it before uploading)
 - Always build before suggesting an upload. Report compile errors verbatim.
+- Revert any changes made to `Arduino.h` for testing before finishing your work,
+  including changes to `tests/native/config_stubs/Arduino.h`.
 - Upload uses the Teensy Loader GUI (`teensy-gui`). Its `[SUCCESS]` only means
   the loader opened, not that the board was flashed — confirm via the serial
   output. `teensy_loader_cli` is x86-only and won't run without Rosetta.

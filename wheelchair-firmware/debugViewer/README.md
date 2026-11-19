@@ -41,9 +41,9 @@ that updates as you edit their tuning.
   also commits it to EEPROM. **Revert to saved** discards edits and reloads the
   last saved configuration. Restore defaults is available for each group and
   for all settings.
-- Stop the chair before changing settings. Accepted runtime changes take
-  effect immediately. Changes and saves are rejected if either smoothed wheel
-  command exceeds 1 RPM in magnitude. The two VESC IDs must differ.
+- Switch the wheelchair to DISARM mode before changing settings. Accepted runtime
+  changes take effect immediately. Apply, Save, Revert, and Restore defaults are
+  rejected in other modes. The two VESC IDs must differ.
 - Startup mode selects the drive mode at the next power-on. Save it to keep
   that selection after restarting.
 

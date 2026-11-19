@@ -90,11 +90,11 @@ once. Individual fields can then use that type from their declaration.
 
 ## Applying settings
 
-Stop the chair before editing settings. Set, Save, Revert, and Restore Defaults
-return a `Moving` error when either smoothed wheel command has a magnitude above
-1 RPM. Commands at exactly ±1 RPM are accepted. The check uses the last
-PID-smoothed command sent toward each VESC. Reads and discovery remain
-available at any speed. Accepted commands execute as soon as they are serviced.
+Switch to DISARM mode before changing settings. Set, Save, Revert, and Restore
+Defaults return a `NotDisarmed` error (status 5) in every other mode, even when
+wheel commands are zero. The current mode is checked when the queued request
+executes; wheel RPM is not used. Reads and discovery remain available in every
+mode. Accepted commands execute as soon as they are serviced.
 Runtime settings, including VESC IDs and wheel circumference, take effect immediately.
 Save explicitly commits the current values to EEPROM.
 

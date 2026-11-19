@@ -22,7 +22,7 @@ static Status request(Command command, uint16_t id, const uint8_t *value = nullp
     if (size) out.bytes(value, size);
     out.put(crc16(data, out.size()));
     CHECK(settings::protocol.queue(data, out.size()));
-    CHECK(settings::protocol.reply(response, 0, 0) >= 8);
+    CHECK(settings::protocol.reply(response, true) >= 8);
     return static_cast<Status>(response[4]);
 }
 int main() {

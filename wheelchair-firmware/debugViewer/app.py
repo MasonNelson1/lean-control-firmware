@@ -1,8 +1,8 @@
-import asyncio, csv, json, os, time, argparse, sys
+import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib
 from collections import deque
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, Request, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse, Response
 
 try:
     import pty
@@ -102,7 +102,27 @@ async def stop():
     for t in app.state.tasks: t.cancel()
     if proc and proc.returncode is None: proc.terminate()
 @app.get('/')
-async def index(): return HTMLResponse((ROOT/'index.html').read_text())
+async def index():
+    html = (ROOT/'index.html').read_text(encoding='utf-8')
+    return HTMLResponse(html.replace('<head>', '<head><script>window.LEAN_LOCAL_BACKEND = true;</script>', 1))
+
+# Exact browser assets only; do not expose logs, environments, or recordings.
+@app.get('/pwa.js')
+async def pwa_script(): return FileResponse(ROOT/'pwa.js', media_type='text/javascript')
+@app.get('/profile-files.js')
+async def profile_files_script(): return FileResponse(ROOT/'profile-files.js', media_type='text/javascript')
+@app.get('/vendor/fflate-0.8.3.js')
+async def compression_script(): return FileResponse(ROOT/'vendor/fflate-0.8.3.js', media_type='text/javascript')
+@app.get('/manifest.webmanifest')
+async def app_manifest(): return FileResponse(ROOT/'manifest.webmanifest', media_type='application/manifest+json')
+@app.get('/icons/{size}.png')
+async def app_icon(size: str):
+    if size not in ('192', '512', '512-maskable'): raise HTTPException(404)
+    return FileResponse(ROOT/'icons'/f'{size}.png', media_type='image/png')
+@app.get('/assets/{name}.svg')
+async def app_logo(name: str):
+    if name not in ('lean-full', 'lean-wheelchair'): raise HTTPException(404)
+    return FileResponse(ROOT/'assets'/f'{name}.svg', media_type='image/svg+xml')
 @app.get('/bluetooth.js')
 async def bluetooth_script(): return FileResponse(ROOT/'bluetooth.js', media_type='text/javascript')
 @app.get('/config-protocol.js')
@@ -111,6 +131,61 @@ async def config_protocol_script(): return FileResponse(ROOT/'config-protocol.js
 async def configuration_script(): return FileResponse(ROOT/'configuration.js', media_type='text/javascript')
 @app.get('/pid-preview.js')
 async def pid_preview_script(): return FileResponse(ROOT/'pid-preview.js', media_type='text/javascript')
+
+# Profile files are handled only by the dashboard; these routes never access a
+# serial connection or change the running/saved wheelchair configuration.
+PROFILE_LIMIT = 1024 * 1024
+
+def profile_json(data):
+    try:
+        profile = json.loads(data)
+        if not isinstance(profile, dict) or profile.get('format') != 'lean-config' or \
+                type(profile.get('version')) is not int or profile['version'] != 1 or \
+                not isinstance(profile.get('fields'), list):
+            raise ValueError()
+        result = json.dumps(profile, ensure_ascii=False, allow_nan=False, indent=2).encode('utf-8')
+        if len(result) > PROFILE_LIMIT:
+            raise ValueError()
+        return result
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        raise HTTPException(400, 'Invalid or unsupported Lean configuration JSON.')
+
+async def profile_body(request):
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > PROFILE_LIMIT:
+            raise HTTPException(413, 'Profile files must be at most 1 MiB.')
+    return bytes(data)
+
+@app.post('/profiles/export')
+async def export_profile(request: Request):
+    data = profile_json(await profile_body(request))
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as profile:
+        profile.writestr('profile.json', data)
+    return Response(archive.getvalue(), media_type='application/zip',
+                    headers={'Content-Disposition': 'attachment; filename="configuration.lean"'})
+
+@app.post('/profiles/import')
+async def import_profile(request: Request):
+    data = await profile_body(request)
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            entries = archive.infolist()
+            if len(entries) != 1 or entries[0].filename != 'profile.json' or \
+                    entries[0].file_size > PROFILE_LIMIT or entries[0].flag_bits & 1 or \
+                    entries[0].compress_type != zipfile.ZIP_DEFLATED:
+                raise ValueError()
+            # Bound actual decompression too, rather than trusting ZIP metadata.
+            with archive.open(entries[0]) as source:
+                content = source.read(PROFILE_LIMIT + 1)
+            if len(content) > PROFILE_LIMIT:
+                raise ValueError()
+    except (ValueError, OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error):
+        raise HTTPException(400, 'Invalid .lean file. Expected a ZIP containing compressed profile.json.')
+    return Response(profile_json(content), media_type='application/json')
+
 # Fixed receiver only: never accept a command or address from the browser.
 @app.post('/bluetooth/disconnect')
 async def release_bluetooth(request: Request):
@@ -149,6 +224,8 @@ async def socket(ws:WebSocket):
                     try: proc.terminate()
                     except ProcessLookupError: pass
             elif command=='connect': connected=True
+    except WebSocketDisconnect:
+        pass
     finally: clients.discard(ws)
 if __name__=='__main__':
     p=argparse.ArgumentParser(); p.add_argument('--replay'); p.add_argument('--port'); p.add_argument('--baud',type=int,default=115200); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--http-port',type=int,default=8000); args=p.parse_args()

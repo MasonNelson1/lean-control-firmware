@@ -180,14 +180,18 @@ struct Fixture {
     Persistence persistence{registry, memory};
     Protocol protocol;
     explicit Fixture(bool (*validate)() = nullptr) : protocol(registry, persistence, validate) { persistence.load(); }
-    Status command(Command op, std::vector<uint8_t> body = {}, float left = 0, float right = 0) {
-        uint8_t packet[MaxRequestSize], response[MaxResponseSize];
+    void queue(Command op, const std::vector<uint8_t> &body = {}) {
+        uint8_t packet[MaxRequestSize];
         Writer writer(packet, sizeof(packet));
         writer.put(RequestTag); writer.put(ProtocolVersion); writer.put(uint8_t{91}); writer.put(static_cast<uint8_t>(op));
         if (!body.empty()) writer.bytes(body.data(), body.size());
         writer.put(crc16(packet, writer.size()));
         CHECK(writer.good() && protocol.queue(packet, writer.size()));
-        const size_t size = protocol.reply(response, left, right);
+    }
+    Status command(Command op, std::vector<uint8_t> body = {}, bool disarmed = true) {
+        queue(op, body);
+        uint8_t response[MaxResponseSize];
+        const size_t size = protocol.reply(response, disarmed);
         CHECK(size >= 8 && response[2] == 91 && response[3] == static_cast<uint8_t>(op));
         CHECK(crc16(response, size - 2) == read<uint16_t>(response + size - 2));
         return static_cast<Status>(response[4]);
@@ -250,6 +254,28 @@ static void registryAndStorage() {
 }
 
 static void protocolTests() {
+    static_assert(static_cast<uint8_t>(Status::NotDisarmed) == 5, "Keep the dashboard status identifier stable");
+    test("leaving DISARM before a queued write executes rejects the change", [] {
+        Fixture f;
+        bool disarmed = true;
+        f.queue(Command::Set, {10, 0, 42, 0});
+        CHECK(f.a.get() == 5 && f.protocol.pending());
+        disarmed = false;
+        uint8_t response[MaxResponseSize];
+        CHECK(f.protocol.reply(response, disarmed) == 8);
+        CHECK(response[4] == static_cast<uint8_t>(Status::NotDisarmed));
+        CHECK(f.a.get() == 5 && f.protocol.revision() == 0 && !f.persistence.dirty());
+    });
+    test("entering DISARM before a queued write executes allows the change", [] {
+        Fixture f;
+        bool disarmed = false;
+        f.queue(Command::Set, {10, 0, 42, 0});
+        disarmed = true;
+        uint8_t response[MaxResponseSize];
+        CHECK(f.protocol.reply(response, disarmed) > 8);
+        CHECK(response[4] == static_cast<uint8_t>(Status::Ok));
+        CHECK(f.a.get() == 42 && f.protocol.revision() == 1 && f.persistence.dirty());
+    });
     test("group default cross-validation failure restores the entire previous configuration", [] {
         Fixture f([] { return false; });
         CHECK(put(f.a, uint16_t{40}) && put(f.b, uint16_t{50}));
@@ -259,24 +285,36 @@ static void protocolTests() {
     const std::vector<std::pair<Command, std::vector<uint8_t>>> mutations = {
         {Command::Set, {10, 0, 42, 0}}, {Command::Save, {}}, {Command::Revert, {}}, {Command::Defaults, {0, 0}}
     };
-    const float nan = std::numeric_limits<float>::quiet_NaN();
-    const float inf = std::numeric_limits<float>::infinity();
-    const std::array<std::array<float, 2>, 8> moving = {{{1.01f, 0}, {-1.01f, 0}, {0, 1.01f}, {0, -1.01f}, {inf, 0}, {0, -inf}, {nan, 0}, {0, nan}}};
     for (const auto &operation : mutations) {
-        for (size_t i = 0; i < moving.size(); ++i) test("operation " + std::to_string(int(operation.first)) + " rejects motion case " + std::to_string(i), [&] {
+        test("operation " + std::to_string(int(operation.first)) + " rejects changes outside DISARM", [&] {
             Fixture f; const auto old = f.memory.data;
-            CHECK(f.command(operation.first, operation.second, moving[i][0], moving[i][1]) == Status::Moving);
+            CHECK(f.command(operation.first, operation.second, false) == Status::NotDisarmed);
             CHECK(f.a.get() == 5 && f.memory.data == old && f.protocol.revision() == 0);
+            CHECK(!f.persistence.dirty());
         });
-        for (const float rpm : {-1.0f, 0.0f, 1.0f}) test("operation " + std::to_string(int(operation.first)) + " accepts boundary " + std::to_string(rpm), [&] {
-            Fixture f; CHECK(f.command(operation.first, operation.second, rpm, -rpm) == Status::Ok);
+        test("operation " + std::to_string(int(operation.first)) + " accepts changes in DISARM", [&] {
+            Fixture f; CHECK(f.command(operation.first, operation.second, true) == Status::Ok);
+        });
+        test("operation " + std::to_string(int(operation.first)) + " preserves dirty RAM and EEPROM when armed", [&] {
+            Fixture f;
+            CHECK(f.command(Command::Set, {10, 0, 55, 0}) == Status::Ok);
+            const auto old = f.memory.data;
+            const auto revision = f.protocol.revision();
+            CHECK(f.command(operation.first, operation.second, false) == Status::NotDisarmed);
+            CHECK(f.a.get() == 55 && f.b.get() == 6 && f.memory.data == old);
+            CHECK(f.protocol.revision() == revision && f.persistence.dirty());
+        });
+        test("operation " + std::to_string(int(operation.first)) + " recovers after switching to DISARM", [&] {
+            Fixture f;
+            CHECK(f.command(operation.first, operation.second, false) == Status::NotDisarmed);
+            CHECK(f.command(operation.first, operation.second, true) == Status::Ok);
         });
     }
     const std::vector<std::pair<Command, std::vector<uint8_t>>> reads = {
         {Command::Hello, {}}, {Command::Group, {0, 0}}, {Command::Describe, {0, 0}}, {Command::Read, {10, 0}}
     };
-    for (const auto &operation : reads) test("read operation " + std::to_string(int(operation.first)) + " while moving", [&] {
-        Fixture f; CHECK(f.command(operation.first, operation.second, 20, -20) == Status::Ok);
+    for (const auto &operation : reads) test("read operation " + std::to_string(int(operation.first)) + " outside DISARM", [&] {
+        Fixture f; CHECK(f.command(operation.first, operation.second, false) == Status::Ok);
     });
     for (int op = 1; op <= 9; ++op) test("malformed request body for operation " + std::to_string(op), [=] {
         Fixture f; CHECK(f.command(static_cast<Command>(op), {0xff}) == Status::Malformed);
@@ -289,7 +327,7 @@ static void protocolTests() {
     test("set rejects wrong value width", [] { Fixture f; CHECK(f.command(Command::Set, {10, 0, 1}) == Status::Malformed); });
     test("unknown operation reports Unknown", [] { Fixture f; CHECK(f.command(static_cast<Command>(255)) == Status::Unknown); });
     test("save and revert restore acknowledged value", [] { Fixture f; CHECK(f.command(Command::Set, {10, 0, 42, 0}) == Status::Ok); CHECK(f.command(Command::Save) == Status::Ok); CHECK(f.command(Command::Set, {10, 0, 12, 0}) == Status::Ok); CHECK(f.command(Command::Revert) == Status::Ok && f.a.get() == 42); });
-    test("idle protocol produces no reply", [] { Fixture f; uint8_t response[MaxResponseSize]; CHECK(f.protocol.reply(response, 0, 0) == 0); });
+    test("idle protocol produces no reply", [] { Fixture f; uint8_t response[MaxResponseSize]; CHECK(f.protocol.reply(response, false) == 0); });
     for (size_t length = 0; length < 6; ++length) test("short packet length " + std::to_string(length), [=] {
         Fixture f; const uint8_t packet[] = {RequestTag, 1, 0, 1, 0, 0}; f.protocol.queue(packet, length); CHECK(!f.protocol.pending());
     });

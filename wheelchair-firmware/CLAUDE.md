@@ -5,6 +5,14 @@ basketball, driven hands-free by torso lean measured with seat force sensors.
 This repo is the Teensy 4.1 control firmware. `HANDOFF.md` holds the full
 design history; this file holds the durable facts.
 
+## Debug viewer and PWA
+
+Before changing the dashboard, read [debugViewer/ARCHITECTURE.md](debugViewer/ARCHITECTURE.md)
+for hosted/local behavior, transport ownership, profiles, caching, deployment,
+and verification. User installation and development commands are in
+[debugViewer/README.md](debugViewer/README.md). Dashboard changes must not modify
+firmware files or wire identifiers unless the user explicitly requests that work.
+
 ## Build / upload / monitor (PlatformIO)
 `pio` is not on the shell PATH here; use `~/.platformio/penv/bin/pio`.
 
@@ -18,6 +26,8 @@ design history; this file holds the durable facts.
 - Upload:  `pio run -t upload` / `pio run -e can_test -t upload`
 - Monitor: `pio device monitor`  (115200 baud; close it before uploading)
 - Always build before suggesting an upload. Report compile errors verbatim.
+- Revert any changes made to `Arduino.h` for testing before finishing your work,
+  including changes to `tests/native/config_stubs/Arduino.h`.
 - Upload uses the Teensy Loader GUI (`teensy-gui`). Its `[SUCCESS]` only means
   the loader opened, not that the board was flashed — confirm via the serial
   output. `teensy_loader_cli` is x86-only and won't run without Rosetta.

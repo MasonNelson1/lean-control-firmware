@@ -4,4 +4,7 @@
 .vscode/launch.json
 .vscode/*
 .venv/*
-debugViewer/.venv/*
+debugViewer/.venv/
+debugViewer/.venv-win/
+
+.profile-test-deps/

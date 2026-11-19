@@ -67,7 +67,7 @@ function response(currentWire, seq, command, status = 0, body = []) {
 }
 for (const [name, status, message] of [
   ['version', 1, /version/], ['malformed', 2, /format/], ['unknown field', 3, /unavailable/],
-  ['invalid value', 4, /rejected the value/], ['moving', 5, /1 RPM/],
+  ['invalid value', 4, /rejected the value/], ['not disarmed', 5, /DISARM mode/],
   ['EEPROM', 6, /save or restore/], ['oversized schema', 7, /protocol limit/],
   ['future error', 255, /rejected the request/]
 ]) test('serial link surfaces ' + name + ' errors', async () => {

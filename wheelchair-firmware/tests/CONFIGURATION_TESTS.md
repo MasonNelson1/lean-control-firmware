@@ -71,7 +71,7 @@ browser input sanitization, so that the helper's own contract is tested.
 - EEPROM CRC corruption, header corruption, fallback to a valid bank, and an
   interrupted save at each changed-byte write through the commit boundary.
 - All configuration operations, malformed requests, response CRCs, invalid IDs,
-  cross-field rollback, persistence actions, and the existing 1 RPM command gate.
+  cross-field rollback, persistence actions, and the DISARM-only configuration gate.
 - Actual settings declarations, discovery packet size, group hierarchy, PID
   preview references, CAN ID conflicts, and EEPROM reload behavior.
 - COBS boundaries, response parsing, serial timeouts, connection changes,

@@ -13,7 +13,7 @@ constexpr size_t MaxResponseSize = 400;
 
 // Preserve numeric values because config-protocol.js uses the same identifiers.
 enum class Command : uint8_t { Hello = 1, Group, Describe, Read, Set, Save, Revert, Defaults, Preview };
-enum class Status : uint8_t { Ok, Version, Malformed, Unknown, Invalid, Moving, Storage, TooLarge };
+enum class Status : uint8_t { Ok, Version, Malformed, Unknown, Invalid, NotDisarmed, Storage, TooLarge };
 
 // CRC-16/CCITT-FALSE. Covers the decoded packet except its final two CRC bytes.
 uint16_t crc16(const uint8_t *data, size_t size);
@@ -43,11 +43,11 @@ public:
 
     /**
      * Executes the queued request and returns the decoded reply length, or zero
-     * when idle. The caller supplies the latest PID-smoothed wheel commands.
-     * Set, Save, Revert, and Defaults return Moving above 1 RPM in magnitude.
-     * Reads and discovery are available independently of that check.
+     * when idle. The caller supplies whether the current mode is DISARM.
+     * Set, Save, Revert, and Defaults return NotDisarmed outside DISARM.
+     * Reads and discovery are available in every mode.
      */
-    size_t reply(uint8_t (&response)[MaxResponseSize], float leftCommandRPM, float rightCommandRPM);
+    size_t reply(uint8_t (&response)[MaxResponseSize], bool disarmed);
 
     // Changes after successful Set, Revert, or Defaults, allowing the caller to
     // refresh motor IDs, response exponents, and controller tuning once.
@@ -55,7 +55,7 @@ public:
 
 private:
     Status execute(Command command, const uint8_t *body, size_t size,
-                   float leftCommandRPM, float rightCommandRPM, Writer &out);
+                   bool disarmed, Writer &out);
     Status update(Field &field, const uint8_t *data, size_t size, Writer &out);
     Status defaults(const Group *group);
     void changed();

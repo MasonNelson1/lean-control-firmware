@@ -1,0 +1,13 @@
+{
+  "name": "lean-debug-viewer",
+  "private": true,
+  "scripts": {
+    "build": "node build-pages.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "fflate": "0.8.3"
+  }
+}

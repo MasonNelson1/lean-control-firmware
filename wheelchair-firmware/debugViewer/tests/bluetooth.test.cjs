@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'bluetooth.js'), 'utf8
 const row = (time = 1000, mode = 'LEAN') => `${time},100,200,300,400,1000,370,0.25,-0.1,10,20,9,19,1,${mode}`;
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-function harness({secure = true, openError = null} = {}) {
+function harness({secure = true, openError = null, backend = true} = {}) {
   const elements = new Map();
   const messages = [], frames = [], commands = [];
   let controller, now = 0, closed = false, requestOptions;
@@ -23,10 +23,11 @@ function harness({secure = true, openError = null} = {}) {
     window: {isSecureContext: secure},
     navigator: {serial: {async requestPort(options) { requestOptions = options; return port; }}},
     bluetoothActive: false, displayed: [], latest: [], lastRow: null,
-    connectionMode: 'bluetooth', usbConnected: false,
+    dashboardBackend: backend, connectionMode: 'bluetooth', usbConnected: false,
     ws: {readyState: 1, send: command => commands.push(command)},
     $: selector => {
-      if (!elements.has(selector)) elements.set(selector, {classList: {add() {}}, disabled: false, hidden: false});
+      if (!elements.has(selector)) elements.set(selector, {classList: {add() {}}, disabled: false, hidden: false,
+        querySelector: () => ({remove() {}})});
       return elements.get(selector);
     },
     graphs() {}, showMode() {}, sensors() {},
@@ -174,4 +175,14 @@ test('Linux cleanup runs before port open and after disconnect', async () => {
   await h.context.connectBluetooth();
   assert.equal(calls.length, 3);
   await h.context.disconnectBluetooth();
+});
+
+test('hosted Bluetooth connects without any Python cleanup or USB monitoring requests', async () => {
+  const h = harness({backend: false});
+  h.context.fetch = () => assert.fail('Hosted Bluetooth must not call Python');
+  await h.context.connectSelected();
+  assert.equal(h.context.bluetoothActive, true);
+  assert.deepEqual(h.commands, []);
+  await h.context.disconnectSelected();
+  assert.equal(h.closed, true);
 });

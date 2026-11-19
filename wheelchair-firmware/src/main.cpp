@@ -7,6 +7,7 @@
 #include "driveModes/LeanDriveMode.h"
 #include "driveModes/RemoteDriveMode.h"
 #include "driveModes/DisarmDriveMode.h"
+#include "driveModes/AssistDriveMode.h"
 #include "PacketSerial.h"
 #include "config/DriveSettings.h"
 #include "drive_knobs.h"
@@ -40,6 +41,7 @@ struct MotorSetup
 };
 
 static MotorSetup motors;
+static VescStatus measuredMotors[2]{};
 
 struct MotorCommandTelemetry
 {
@@ -73,6 +75,7 @@ void setMotorPower(double left, double right, float dt)
 
 mode MODE = REMOTE;
 LeanDriveMode leanMode;
+AssistDriveMode assistMode;
 
 PacketSerial packetSerial;
 RemoteDriveMode remoteMode;
@@ -132,6 +135,8 @@ const char *modeName(mode currentMode)
         return "REMOTE";
     case DISARM:
         return "DISARM";
+    case ASSIST:
+        return "ASSIST";
     default:
         return "UNKNOWN";
     }
@@ -339,19 +344,29 @@ static void updateDrive()
     case DISARM:
         targets = disarmMode.getTargets();
         break;
+    case ASSIST:
+        assistMode.loop(measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM,
+                        measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM,
+                        knobs::slewDown(0.0f, userMaxSpeedMS, MAX_ACCEL, dt));
+        targets = assistMode.getTargets();
     default:
         targets = {0.0f, 0.0f};
         Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
         break;
     }
-    if (MODE != DISARM)
+    if (MODE == LEAN || MODE == REMOTE)
     {
         setMotorPower(targets.left, targets.right, dt);
     }
-    else
+    else if (MODE == DISARM)
     {
         vescSetCurrent(can1, motors.leftId, 0.0f);
         vescSetCurrent(can1, motors.rightId, 0.0f);
+    }
+    else
+    {
+        vescSetCurrent(can1, motors.leftId, targets.left);
+        vescSetCurrent(can1, motors.rightId, targets.right);
     }
 }
 
@@ -378,6 +393,12 @@ void loop()
     setMode();
     updateKnobs();
     packetSerial.update();
+    CAN_message_t feedback;
+    for (int i = 0; i < 32 && can1.read(feedback); ++i)
+    {
+        vescHandleFrame(feedback, motors.leftId, measuredMotors[0]);
+        vescHandleFrame(feedback, motors.rightId, measuredMotors[1]);
+    }
     if (calibrateButton.isPressed() && MODE == LEAN)
         leanMode.calibrate();
 

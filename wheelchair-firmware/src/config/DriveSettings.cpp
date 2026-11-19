@@ -29,8 +29,9 @@ namespace settings
         Group normal(registry(), 10, "Normal operation", true, &pid);
         Group transition(registry(), 11, "Transitions (reserved)", true, &pid);
 
-        constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}};
+        constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}, {common::ASSIST, "ASSIST"}};
         constexpr float DefaultForewardBackKnee[] = {0.21f, 0.09f};
+        constexpr float DefaultAssistKnee[] = {0.44f, 0.61f};
         constexpr float DefaultLeftRightKnee[] = {0.35f, 0.20f};
         constexpr Parameter KneeBounds[] = {{"Knee input", 0.001f, 0.999f}, {"Knee output", 0.001f, 0.999f}};
         constexpr auto DefaultPid = RPMSetpointPID::defaultTuning();
@@ -49,7 +50,7 @@ namespace settings
     // field, and never reuse a retired ID. Add a declaration and consume its get()
     // value to expose a setting through discovery. Cached consumers also need their
     // derived values refreshed in main.cpp's applyRuntimeSettings().
-    EnumField<common::mode, 3> defaultMode(registry(), 1,
+    EnumField<common::mode, 4> defaultMode(registry(), 1,
                                            {drive, "Startup drive mode", "Drive mode selected at power-on. LEAN requires calibration and REMOTE requires a fresh controller command.", "", true},
                                            common::DISARM, Modes);
     ConfigField<float> deadband(registry(), 2,
@@ -77,11 +78,14 @@ namespace settings
     // The knee is one atomic value, so input/output constraints can be checked
     // together. LeanDriveMode derives its exponent from the accepted coordinates.
     ProfileField<2> leanForewardBackResponse(registry(), 30,
-                                 {response, "Lean foreward response", "Signed power curve for normalized speed after the deadband. Lower knee output softens small inputs."},
-                                 Editor::SignedPower, DefaultForewardBackKnee, KneeBounds);
+                                             {response, "Lean foreward response", "Signed power curve for normalized speed after the deadband. Lower knee output softens small inputs."},
+                                             Editor::SignedPower, DefaultForewardBackKnee, KneeBounds);
     ProfileField<2> leanSideToSideResponse(registry(), 31,
-                                 {response, "Lean turning response", "Signed power curve for normalized turn after the deadband. Lower knee output softens small inputs."},
-                                 Editor::SignedPower, DefaultLeftRightKnee, KneeBounds);
+                                           {response, "Lean turning response", "Signed power curve for normalized turn after the deadband. Lower knee output softens small inputs."},
+                                           Editor::SignedPower, DefaultLeftRightKnee, KneeBounds);
+    ProfileField<2> assistResponse(registry(), 32,
+                                   {response, "Assist response", "Signed power curve for normalized assist power "},
+                                   Editor::SignedPower, DefaultForewardBackKnee, KneeBounds);
 
     // These bounds keep the watchdog at or below its original timeout and the
     // control loop at 100 Hz or faster. Hard propulsion limits stay in drive_constants.h.

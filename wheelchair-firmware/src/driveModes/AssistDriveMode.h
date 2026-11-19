@@ -8,7 +8,6 @@ class AssistDriveMode : public DriveMode
 {
 private:
     float leftRPM, rightRPM;
-    uint32_t now;
     float maxRPM;
     PushAssist leftAssist, rightAssist;
 

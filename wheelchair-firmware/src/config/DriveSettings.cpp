@@ -86,6 +86,15 @@ namespace settings
     ProfileField<2> assistResponse(registry(), 32,
                                    {response, "Assist response", "Signed power curve for normalized assist power "},
                                    Editor::SignedPower, DefaultAssistKnee, KneeBounds);
+    ConfigField<float> assistMaxBoostAmps(registry(), 33,
+                                         {drive, "Assist max boost", "Maximum requested boost current per motor.", "A"},
+                                         25.0f, 5.0f, 30.0f);
+    ConfigField<float> assistSlowdownRPM(registry(), 34,
+                                        {drive, "Assist slowdown threshold", "Drop below the filtered wheel speed that triggers reduced boost on that wheel.", "RPM"},
+                                        4.0f, 1.0f, 5.0f);
+    ConfigField<float> assistSlowdownBoostFraction(registry(), 35,
+                                                  {drive, "Assist slowdown boost fraction", "Fraction of normal boost delivered to a slowing wheel. 0.3 delivers 30% of normal boost."},
+                                                  0.3f, 0.1f, 0.5f);
 
     // These bounds keep the watchdog at or below its original timeout and the
     // control loop at 100 Hz or faster. Hard propulsion limits stay in drive_constants.h.

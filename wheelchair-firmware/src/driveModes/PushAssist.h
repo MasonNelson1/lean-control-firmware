@@ -3,12 +3,6 @@
 #include <cmath>
 #include "../config/DriveSettings.h"
 
-struct AssistCurrents
-{
-    float left;
-    float right;
-};
-
 class PushAssist
 {
 
@@ -17,6 +11,7 @@ private:
     bool boosting = false;
     bool cooling = false;
     float filteredRPM = 0, direction = 0;
+    float baselineRPM = 0.0f;
     uint32_t lastMS = 0, pulseMS = 0, cooldownMs = 0;
     float amps = 0.0f;
     float minRpm = 1.0f;
@@ -29,6 +24,7 @@ private:
         const auto &knee = settings::assistResponse.get();
         const float responseExponent = logf(knee[1]) / logf(knee[0]);
         const float speedFraction = fminf(fabsf(currRpm) / maxRPM, 1.0f);
+        const float maxBoostAmps = settings::assistMaxBoostAmps.get();
         const float boostAmps = powf(speedFraction, responseExponent) * maxBoostAmps;
         if (!std::isfinite(boostAmps))
             return 0.0f;
@@ -36,15 +32,23 @@ private:
         return fminf(boostAmps, maxBoostAmps);
     }
 
-public:
-    static constexpr uint32_t pulseWidth = 20; // ms
-    static constexpr float duty = 0.5f;
-    static constexpr uint32_t boostMs = duty * pulseWidth;
-    static constexpr uint32_t coolMs = pulseWidth - boostMs;
-    static constexpr float maxBoostAmps = 30.0f;
+    bool updateSlowdown(float currRpm, uint32_t now)
+    {
+        constexpr float baselineTimeConstantMs = 100.0f;
+        const float speed = std::fabs(currRpm);
+        if (!initialized)
+        {
+            baselineRPM = speed;
+            return false;
+        }
 
-    AssistCurrents getAssistCurrents(float leftRPM, float rightRPM, uint32_t now, float maxRPM);
-    float update(float currRpm, uint32_t now, float maxRPM)
+        const float elapsedMs = now - lastMS;
+        const float alpha = elapsedMs / (baselineTimeConstantMs + elapsedMs);
+        baselineRPM += alpha * (speed - baselineRPM);
+        return baselineRPM - speed >= settings::assistSlowdownRPM.get();
+    }
+
+    float updateBoost(float currRpm, uint32_t now, float maxRPM)
     {
         if (!initialized)
         {
@@ -82,6 +86,18 @@ public:
             return direction * calcBoost(currRpm, maxRPM); // we are exiting cooling, so return something as we enter boost.
         }
         return 0.0f;
+    }
+
+public:
+    static constexpr uint32_t pulseWidth = 10; // ms
+    static constexpr float duty = 0.5f;
+    static constexpr uint32_t boostMs = duty * pulseWidth;
+    static constexpr uint32_t coolMs = pulseWidth - boostMs;
+
+    float update(float currRpm, uint32_t now, float maxRPM)
+    {
+        const float scale = updateSlowdown(currRpm, now) ? settings::assistSlowdownBoostFraction.get() : 1.0f;
+        return scale * updateBoost(currRpm, now, maxRPM);
     }
 
     void reset()

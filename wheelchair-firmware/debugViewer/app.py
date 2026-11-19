@@ -1,7 +1,7 @@
 import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib
 from collections import deque
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, Request, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, Response
 
 try:
@@ -102,7 +102,27 @@ async def stop():
     for t in app.state.tasks: t.cancel()
     if proc and proc.returncode is None: proc.terminate()
 @app.get('/')
-async def index(): return HTMLResponse((ROOT/'index.html').read_text(encoding='utf-8'))
+async def index():
+    html = (ROOT/'index.html').read_text(encoding='utf-8')
+    return HTMLResponse(html.replace('<head>', '<head><script>window.LEAN_LOCAL_BACKEND = true;</script>', 1))
+
+# Exact browser assets only; do not expose logs, environments, or recordings.
+@app.get('/pwa.js')
+async def pwa_script(): return FileResponse(ROOT/'pwa.js', media_type='text/javascript')
+@app.get('/profile-files.js')
+async def profile_files_script(): return FileResponse(ROOT/'profile-files.js', media_type='text/javascript')
+@app.get('/vendor/fflate-0.8.3.js')
+async def compression_script(): return FileResponse(ROOT/'vendor/fflate-0.8.3.js', media_type='text/javascript')
+@app.get('/manifest.webmanifest')
+async def app_manifest(): return FileResponse(ROOT/'manifest.webmanifest', media_type='application/manifest+json')
+@app.get('/icons/{size}.png')
+async def app_icon(size: str):
+    if size not in ('192', '512', '512-maskable'): raise HTTPException(404)
+    return FileResponse(ROOT/'icons'/f'{size}.png', media_type='image/png')
+@app.get('/assets/{name}.svg')
+async def app_logo(name: str):
+    if name not in ('lean-full', 'lean-wheelchair'): raise HTTPException(404)
+    return FileResponse(ROOT/'assets'/f'{name}.svg', media_type='image/svg+xml')
 @app.get('/bluetooth.js')
 async def bluetooth_script(): return FileResponse(ROOT/'bluetooth.js', media_type='text/javascript')
 @app.get('/config-protocol.js')
@@ -204,6 +224,8 @@ async def socket(ws:WebSocket):
                     try: proc.terminate()
                     except ProcessLookupError: pass
             elif command=='connect': connected=True
+    except WebSocketDisconnect:
+        pass
     finally: clients.discard(ws)
 if __name__=='__main__':
     p=argparse.ArgumentParser(); p.add_argument('--replay'); p.add_argument('--port'); p.add_argument('--baud',type=int,default=115200); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--http-port',type=int,default=8000); args=p.parse_args()

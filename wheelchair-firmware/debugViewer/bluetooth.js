@@ -50,6 +50,7 @@ let bluetoothRows = [], bluetoothLastRowAt = 0, bluetoothTimer = null;
 let connectionBusy = false;
 
 function syncUsbMonitoring() {
+  if (!dashboardBackend) return;
   if (ws?.readyState === 1) ws.send(connectionMode === 'usb' && usbConnected ? 'connect' : 'disconnect');
 }
 
@@ -71,6 +72,7 @@ function renderBluetooth() {
 }
 
 async function releaseLinuxBluetooth() {
+  if (!dashboardBackend) return;
   try {
     const response = await fetch('/bluetooth/disconnect', {
       method: 'POST', headers: {'X-Bluetooth-Cleanup': '1'},
@@ -170,7 +172,7 @@ async function changeConnectionMode() {
   syncUsbMonitoring();
   try {
     await disconnectBluetooth();
-    connectionMode = $('#connection-mode').value;
+    connectionMode = dashboardBackend ? $('#connection-mode').value : 'bluetooth';
     // A new source starts disconnected and never shows the old source's data.
     latest = []; displayed = []; lastRow = null;
     graphs(); sensors(null);
@@ -183,7 +185,7 @@ async function changeConnectionMode() {
 }
 
 async function connectSelected() {
-  if (connectionMode === 'bluetooth') return connectBluetooth();
+  if (!dashboardBackend || connectionMode === 'bluetooth') return connectBluetooth();
   usbConnected = true;
   syncUsbMonitoring();
   showDisconnected('USB / replay · waiting for telemetry');
@@ -209,5 +211,10 @@ async function disconnectSelected() {
 $('#connection-mode').onchange = changeConnectionMode;
 $('#connection-connect').onclick = connectSelected;
 $('#connection-disconnect').onclick = disconnectSelected;
+if (!dashboardBackend) {
+  $('#connection-mode').querySelector('option[value="usb"]').remove();
+  $('#connection-mode').value = 'bluetooth';
+  showDisconnected('Bluetooth disconnected');
+}
 updateConnectionButtons();
 syncUsbMonitoring();

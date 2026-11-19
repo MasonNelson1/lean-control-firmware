@@ -296,21 +296,11 @@
     return {matched, skipped};
   }
 
-  async function profileRequest(route, body) {
-    const response = await fetch('/profiles/' + route, {method: 'POST', body,
-      headers: {'Content-Type': route === 'export' ? 'application/json' : 'application/zip'}});
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || 'Could not process the profile file.');
-    }
-    return response;
-  }
-
   async function saveProfile() {
     await run(async () => {
       const generation = link.generation;
-      const response = await profileRequest('export', JSON.stringify(createProfile()));
-      const blob = await response.blob();
+      const bytes = await LeanProfiles.encode(createProfile());
+      const blob = new Blob([bytes], {type: 'application/zip'});
       if (generation !== link.generation) return;
       const url = URL.createObjectURL(blob);
       const anchor = element('a');
@@ -329,8 +319,7 @@
       if (!/\.lean$/i.test(file.name)) throw new Error('Choose a .lean profile file.');
       if (file.size > 1024 * 1024) throw new Error('Profile files must be at most 1 MiB.');
       const generation = link.generation;
-      const response = await profileRequest('import', file);
-      const profile = await response.json();
+      const profile = await LeanProfiles.decode(await file.arrayBuffer());
       if (generation !== link.generation) return;
       stageProfile(profile);
       status('');

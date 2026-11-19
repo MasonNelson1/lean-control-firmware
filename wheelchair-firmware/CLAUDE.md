@@ -5,6 +5,14 @@ basketball, driven hands-free by torso lean measured with seat force sensors.
 This repo is the Teensy 4.1 control firmware. `HANDOFF.md` holds the full
 design history; this file holds the durable facts.
 
+## Debug viewer and PWA
+
+Before changing the dashboard, read [debugViewer/ARCHITECTURE.md](debugViewer/ARCHITECTURE.md)
+for hosted/local behavior, transport ownership, profiles, caching, deployment,
+and verification. User installation and development commands are in
+[debugViewer/README.md](debugViewer/README.md). Dashboard changes must not modify
+firmware files or wire identifiers unless the user explicitly requests that work.
+
 ## Build / upload / monitor (PlatformIO)
 `pio` is not on the shell PATH here; use `~/.platformio/penv/bin/pio`.
 

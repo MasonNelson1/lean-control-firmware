@@ -60,7 +60,7 @@ function harness() {
   return {
     api: context.controlsUnderTest,
     link: context.window.configLink,
-    fetch(handler) { context.fetch = handler; },
+    codec(handler) { context.LeanProfiles = {decode: handler}; },
     node: id => document.getElementById(id),
     types: vm.runInContext('ConfigWire.types', context),
     prompts,
@@ -352,12 +352,8 @@ test('loading through the dashboard stages edits without sending any device requ
   profile.fields[0].value = '4';
   h.link.port = {};
   h.link.request = () => assert.fail('Profile load must not send requests to the wheelchair');
-  h.fetch(async (route, options) => {
-    assert.equal(route, '/profiles/import');
-    assert.equal(options.method, 'POST');
-    return {ok: true, json: async () => profile};
-  });
-  await h.api.loadProfile({name: 'settings.lean', size: 100});
+  h.codec(async () => profile);
+  await h.api.loadProfile({name: 'settings.lean', size: 100, arrayBuffer: async () => new ArrayBuffer(0)});
   assert.equal(h.api.draft(10), '4');
   assert.equal(c.field.value, 1);
   assert.equal(h.node('config-status').textContent, '');
@@ -368,11 +364,11 @@ test('a profile finishing after a connection change cannot edit the new device',
   const profile = h.api.createProfile();
   profile.fields[0].value = '4';
   h.link.port = {};
-  h.fetch(async () => {
+  h.codec(async () => {
     h.link.generation++;
-    return {ok: true, json: async () => profile};
+    return profile;
   });
-  await h.api.loadProfile({name: 'settings.lean', size: 100});
+  await h.api.loadProfile({name: 'settings.lean', size: 100, arrayBuffer: async () => new ArrayBuffer(0)});
   assert.equal(h.api.draft(10), undefined);
 });
 

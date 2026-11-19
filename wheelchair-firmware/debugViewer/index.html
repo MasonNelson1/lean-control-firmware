@@ -4,6 +4,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#174f70">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/lean-wheelchair.svg" type="image/svg+xml">
+  <script src="./pwa.js"></script>
   <title>Lean · Debug viewer</title>
   <style>
     :root {
@@ -108,6 +112,9 @@
       gap: 7px;
       flex-wrap: wrap
     }
+
+    .brand-title { display: flex; align-items: center; gap: 12px; }
+    .brand-logo { display: block; width: 170px; height: auto; }
 
     button,
     select {
@@ -771,7 +778,7 @@
     <div class="dashboard-content">
       <header>
         <div>
-          <h1>Lean <span style="font-weight:400;color:#8694a5">/ Debug viewer</span></h1>
+          <h1 class="brand-title"><img class="brand-logo" src="./assets/lean-full.svg" alt="Lean" width="406" height="139"><span style="font-weight:400;color:#8694a5">/ Debug viewer</span></h1>
         </div>
         <div class="controls"><select id="connection-mode" aria-label="Connection mode">
             <option value="usb">USB / replay</option>
@@ -910,7 +917,7 @@
     </div>
   </div>
   <script>
-    let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'usb', usbConnected = true;
+    let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = dashboardBackend ? 'usb' : 'bluetooth', usbConnected = dashboardBackend;
     const $ = s => document.querySelector(s);
     function appendConsole(line) { const p = $('pre'); p.textContent = (p.textContent + line + '\n').split('\n').slice(-400).join('\n'); if ($('#scroll').checked) p.scrollTop = p.scrollHeight }
     function applyTelemetry(rows, stale, source) { latest = rows; lastRow = latest.at(-1) || null; showMode(lastRow, stale); $('#status').textContent = `${source} · ${stale ? 'Waiting for telemetry' : 'Receiving telemetry'}`; $('#status').classList.toggle('off', stale); if (!paused) { displayed = latest; graphs() } sensors(lastRow) }
@@ -1024,12 +1031,14 @@
       drawDirection('smoothed-vector', smoothed);
     }
     function connect() { ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`); ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() }; ws.onclose = () => { if (connectionMode === 'usb') { showMode(lastRow, true); $('#status').textContent = 'Server disconnected'; $('#status').classList.add('off') } setTimeout(connect, 1000) }; ws.onmessage = e => { const d = JSON.parse(e.data); if (connectionMode !== 'usb' || !usbConnected) return; if (d.console) appendConsole(d.console); if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay') } }
-    $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); graphs(); sensors(null); connect();
+    $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); graphs(); sensors(null); if (dashboardBackend) connect();
   </script>
-  <script src="/config-protocol.js"></script>
-  <script src="/pid-preview.js"></script>
-  <script src="/configuration.js"></script>
-  <script src="/bluetooth.js"></script>
+  <script src="./vendor/fflate-0.8.3.js"></script>
+  <script src="./profile-files.js"></script>
+  <script src="./config-protocol.js"></script>
+  <script src="./pid-preview.js"></script>
+  <script src="./configuration.js"></script>
+  <script src="./bluetooth.js"></script>
 </body>
 
 </html>

@@ -16,6 +16,13 @@ static RPMSetpointPID::Tuning tuning() {
 int main() {
   constexpr float dt = .005f;
   const float designRPM = MAX_SPEED * LINEAR_TO_RPM;
+  // A current-to-velocity handoff starts from signed feedback and drops old history.
+  RPMSetpointPID handoff(tuning());
+  for (int k = 0; k < 200; ++k)
+    handoff.smoothRPM(60.0f, dt, MAX_SPEED, MAX_ACCEL);
+  handoff.seedRPM(-20.0f);
+  assert(handoff.smoothRPM(-20.0f, dt, MAX_SPEED, MAX_ACCEL) == -20.0f);
+
   // Above-design selections behave exactly like selections at design limits.
   RPMSetpointPID hard(tuning()), excessive(tuning());
   for (int k = 0; k < 4000; ++k) {

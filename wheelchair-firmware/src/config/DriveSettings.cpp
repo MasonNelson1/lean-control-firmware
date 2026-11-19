@@ -56,6 +56,9 @@ namespace settings
     ConfigField<float> deadband(registry(), 2,
                                 {drive, "Lean deadband", "Normalized lean input below this magnitude is treated as zero before shaping."},
                                 0.05f, 0.01f, 1.0f);
+    ConfigField<float> leanAssistThreshold(registry(), 3,
+                                           {lean, "Lean assist threshold", "Absolute mixed lean command below which a wheel uses current assist. Set to zero to disable."},
+                                           0.1f, 0.0f, 1.0f);
 
     ConfigField<float> frontGain(registry(), 10,
                                  {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor.", "×"}, 2, 0.01f, 100);

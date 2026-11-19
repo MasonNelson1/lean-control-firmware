@@ -53,7 +53,7 @@ int main() {
     });
     test("every exported declaration is discoverable under its own ID", [] {
         const std::vector<const Field *> exported = {
-            &settings::defaultMode, &settings::deadband,
+            &settings::defaultMode, &settings::deadband, &settings::leanAssistThreshold,
             &settings::frontGain, &settings::rearGain, &settings::leftGain, &settings::rightGain,
             &settings::frontWeight, &settings::rearWeight, &settings::leftWeight, &settings::rightWeight,
             &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse,

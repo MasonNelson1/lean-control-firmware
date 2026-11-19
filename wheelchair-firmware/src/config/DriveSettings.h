@@ -20,6 +20,7 @@ namespace settings
 
     extern config::EnumField<common::mode, 4> defaultMode;
     extern config::ConfigField<float> deadband;
+    extern config::ConfigField<float> leanAssistThreshold;
     extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain;
     extern config::ConfigField<float> frontWeight, rearWeight, leftWeight, rightWeight;
     extern config::ProfileField<2> leanForewardBackResponse;

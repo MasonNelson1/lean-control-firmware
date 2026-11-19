@@ -86,6 +86,33 @@ MotorTargets LeanDriveMode::getTargets()
     return {speed + turn, speed - turn};
 }
 
+LeanDriveMode::WheelCommand LeanDriveMode::WheelAssist::command(
+    float input, bool useAssist, float measuredRPM, float maxRPM, uint32_t now)
+{
+    if (!useAssist)
+    {
+        active = false;
+        return {input};
+    }
+
+    constexpr PushAssist::Tuning tuning{10.0f, 4.0f, 0.3f, 0.44f, 0.61f};
+    if (!active)
+        boost.reset();
+    active = true;
+    return {boost.update(measuredRPM, now, maxRPM, tuning), true};
+}
+
+LeanDriveMode::WheelCommands LeanDriveMode::getWheelCommands(
+    float leftRPM, float rightRPM, float maxRPM, uint32_t now)
+{
+    const MotorTargets targets = getTargets();
+    const float threshold = settings::leanAssistThreshold.get();
+    return {leftAssist.command(targets.left, !telemetry.stopped && fabsf(targets.left) < threshold,
+                               leftRPM, maxRPM, now),
+            rightAssist.command(targets.right, !telemetry.stopped && fabsf(targets.right) < threshold,
+                                rightRPM, maxRPM, now)};
+}
+
 void LeanDriveMode::calibrate()
 {
 

@@ -43,20 +43,52 @@ struct MotorSetup
 static MotorSetup motors;
 static VescStatus measuredMotors[2]{};
 
+struct WheelCommandTelemetry
+{
+    float targetRPM;
+    float smoothedRPM;
+};
+
 struct MotorCommandTelemetry
 {
-    float leftTargetRPM;
-    float rightTargetRPM;
-    float leftSmoothedRPM;
-    float rightSmoothedRPM;
+    WheelCommandTelemetry left;
+    WheelCommandTelemetry right;
 };
 
 static MotorCommandTelemetry motorTelemetry{};
 
-// This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
-// where the value is the percentage of the speed-knob max speed (full input = selected top speed).
-// PID smoothing is applied prior to using the setpoints.
-void setMotorPower(double left, double right, float dt)
+static bool leftNeedsVelocitySeed = false;
+static bool rightNeedsVelocitySeed = false;
+
+static float measuredWheelRPM(const VescStatus &motor)
+{
+    return motor.erpm / VESC_ERPM_PER_WHEEL_RPM;
+}
+
+static WheelCommandTelemetry updateWheel(uint8_t motorId, const VescStatus &feedback,
+                                         RPMSetpointPID &smoother, bool &needsVelocitySeed,
+                                         LeanDriveMode::WheelCommand command, float speedLimitMS,
+                                         float dt)
+{
+    if (command.currentControl)
+    {
+        needsVelocitySeed = true;
+        vescSetCurrent(can1, motorId, command.value);
+        return {};
+    }
+
+    if (needsVelocitySeed)
+    {
+        smoother.seedRPM(measuredWheelRPM(feedback));
+        needsVelocitySeed = false;
+    }
+    const float targetRPM = constrain(command.value, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
+    const float smoothedRPM = smoother.smoothRPM(targetRPM, dt, speedLimitMS, userMaxAccelMS2);
+    vescSetWheelRPM(can1, motorId, smoothedRPM);
+    return {targetRPM, smoothedRPM};
+}
+
+static void setMotorPower(const LeanDriveMode::WheelCommands &commands, float dt)
 {
     // Turning the speed knob up takes effect at once (the PID still limits
     // acceleration). Turning it down lowers the cap no faster than the design
@@ -64,13 +96,10 @@ void setMotorPower(double left, double right, float dt)
     static float speedLimitMS = 0.0f;
     speedLimitMS = knobs::slewDown(speedLimitMS, userMaxSpeedMS, MAX_ACCEL, dt);
 
-    const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-    const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-    const float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
-    const float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
-    vescSetWheelRPM(can1, motors.leftId, leftRpms);
-    vescSetWheelRPM(can1, motors.rightId, rightRpms);
-    motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};
+    motorTelemetry.left = updateWheel(motors.leftId, measuredMotors[0], leftRPMSetpointPID,
+                                     leftNeedsVelocitySeed, commands.left, speedLimitMS, dt);
+    motorTelemetry.right = updateWheel(motors.rightId, measuredMotors[1], rightRPMSetpointPID,
+                                      rightNeedsVelocitySeed, commands.right, speedLimitMS, dt);
 }
 
 mode MODE = REMOTE;
@@ -364,23 +393,31 @@ static void updateDrive()
     }
     tSend = now;
 
+    if (MODE != LEAN && MODE != REMOTE)
+    {
+        leftNeedsVelocitySeed = false;
+        rightNeedsVelocitySeed = false;
+    }
+
     const float dt = period / 1000.0f;
     MotorTargets targets;
     switch (MODE)
     {
     case LEAN:
-        targets = leanMode.getTargets();
-        break;
+        setMotorPower(leanMode.getWheelCommands(measuredWheelRPM(measuredMotors[0]),
+                                               measuredWheelRPM(measuredMotors[1]),
+                                               userMaxSpeedMS * LINEAR_TO_RPM, now), dt);
+        return;
 
     case REMOTE:
         targets = remoteMode.getTargets();
-        break;
+        setMotorPower({{targets.left}, {targets.right}}, dt);
+        return;
     case DISARM:
         targets = disarmMode.getTargets();
         break;
     case ASSIST:
-        assistMode.loop(measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM,
-                        measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM,
+        assistMode.loop(measuredWheelRPM(measuredMotors[0]), measuredWheelRPM(measuredMotors[1]),
                         userMaxSpeedMS * LINEAR_TO_RPM);
         targets = assistMode.getTargets();
         break;
@@ -389,11 +426,7 @@ static void updateDrive()
         Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
         break;
     }
-    if (MODE == LEAN || MODE == REMOTE)
-    {
-        setMotorPower(targets.left, targets.right, dt);
-    }
-    else if (MODE == DISARM)
+    if (MODE == DISARM)
     {
         vescSetCurrent(can1, motors.leftId, 0.0f);
         vescSetCurrent(can1, motors.rightId, 0.0f);
@@ -470,8 +503,8 @@ void loop()
                                    static_cast<unsigned long>(now),
                                    lean.front, lean.back, lean.left, lean.right, total,
                                    leanMode.getUserWeightEstimate(), lean.speed, lean.turn,
-                                   commands.leftTargetRPM, commands.rightTargetRPM,
-                                   commands.leftSmoothedRPM, commands.rightSmoothedRPM,
+                                   commands.left.targetRPM, commands.right.targetRPM,
+                                   commands.left.smoothedRPM, commands.right.smoothedRPM,
                                    stopped ? 1 : 0, modeName(MODE));
     if (rowLength <= 0 || rowLength >= static_cast<int>(sizeof(row)))
         return;

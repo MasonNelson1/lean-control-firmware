@@ -5,6 +5,15 @@
 
 class PushAssist
 {
+public:
+    struct Tuning
+    {
+        float maxBoostAmps;
+        float slowdownThresholdRPM;
+        float slowdownBoostFraction;
+        float kneeInput;
+        float kneeOutput;
+    };
 
 private:
     bool initialized = false;
@@ -16,15 +25,14 @@ private:
     float amps = 0.0f;
     float minRpm = 1.0f;
 
-    float calcBoost(float currRpm, float maxRPM)
+    float calcBoost(float currRpm, float maxRPM, const Tuning &tuning)
     {
         if (!std::isfinite(currRpm) || !std::isfinite(maxRPM) || maxRPM <= 0.0f)
             return 0.0f;
 
-        const auto &knee = settings::assistResponse.get();
-        const float responseExponent = logf(knee[1]) / logf(knee[0]);
+        const float responseExponent = logf(tuning.kneeOutput) / logf(tuning.kneeInput);
         const float speedFraction = fminf(fabsf(currRpm) / maxRPM, 1.0f);
-        const float maxBoostAmps = settings::assistMaxBoostAmps.get();
+        const float maxBoostAmps = tuning.maxBoostAmps;
         const float boostAmps = powf(speedFraction, responseExponent) * maxBoostAmps;
         if (!std::isfinite(boostAmps))
             return 0.0f;
@@ -32,7 +40,7 @@ private:
         return fminf(boostAmps, maxBoostAmps);
     }
 
-    bool updateSlowdown(float currRpm, uint32_t now)
+    bool updateSlowdown(float currRpm, uint32_t now, float thresholdRPM)
     {
         constexpr float baselineTimeConstantMs = 100.0f;
         const float speed = std::fabs(currRpm);
@@ -45,10 +53,10 @@ private:
         const float elapsedMs = now - lastMS;
         const float alpha = elapsedMs / (baselineTimeConstantMs + elapsedMs);
         baselineRPM += alpha * (speed - baselineRPM);
-        return baselineRPM - speed >= settings::assistSlowdownRPM.get();
+        return baselineRPM - speed >= thresholdRPM;
     }
 
-    float updateBoost(float currRpm, uint32_t now, float maxRPM)
+    float updateBoost(float currRpm, uint32_t now, float maxRPM, const Tuning &tuning)
     {
         if (!initialized)
         {
@@ -67,7 +75,7 @@ private:
         {
             if (now - pulseMS < boostMs)
             {
-                return direction * calcBoost(currRpm, maxRPM);
+                return direction * calcBoost(currRpm, maxRPM, tuning);
             }
             boosting = false;
             cooling = true;
@@ -83,7 +91,7 @@ private:
             cooling = false;
             boosting = true;
             pulseMS = now;
-            return direction * calcBoost(currRpm, maxRPM); // we are exiting cooling, so return something as we enter boost.
+            return direction * calcBoost(currRpm, maxRPM, tuning);
         }
         return 0.0f;
     }
@@ -96,8 +104,17 @@ public:
 
     float update(float currRpm, uint32_t now, float maxRPM)
     {
-        const float scale = updateSlowdown(currRpm, now) ? settings::assistSlowdownBoostFraction.get() : 1.0f;
-        return scale * updateBoost(currRpm, now, maxRPM);
+        const auto &knee = settings::assistResponse.get();
+        return update(currRpm, now, maxRPM,
+                      {settings::assistMaxBoostAmps.get(), settings::assistSlowdownRPM.get(),
+                       settings::assistSlowdownBoostFraction.get(), knee[0], knee[1]});
+    }
+
+    float update(float currRpm, uint32_t now, float maxRPM, const Tuning &tuning)
+    {
+        const float scale = updateSlowdown(currRpm, now, tuning.slowdownThresholdRPM)
+                                ? tuning.slowdownBoostFraction : 1.0f;
+        return scale * updateBoost(currRpm, now, maxRPM, tuning);
     }
 
     void reset()

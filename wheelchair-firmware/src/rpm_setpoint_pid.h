@@ -177,7 +177,13 @@ public:
    */
   void reset()
   {
-    rpm_ = 0.0f;
+    seedRPM(0.0f);
+  }
+
+  /** Start from measured wheel RPM with fresh controller history. */
+  void seedRPM(float measuredRPM)
+  {
+    rpm_ = isfinite(measuredRPM) ? measuredRPM : 0.0f;
     acceleration_ = 0.0f;
     integral_ = 0.0f;
     filteredRate_ = 0.0f;

@@ -1,5 +1,5 @@
 // Host test (does not command hardware):
-// g++ -std=c++11 -Wall -Wextra -Werror -I tests/native/arduino_stub -I src tests/native/rpm_setpoint_pid_test.cpp -o /tmp/rpm_pid_test
+// g++ -std=c++17 -Wall -Wextra -Werror -I src tests/native/rpm_setpoint_pid_test.cpp -o /tmp/rpm_pid_test
 // /tmp/rpm_pid_test
 #include "rpm_setpoint_pid.h"
 #include <cassert>
@@ -10,10 +10,7 @@
 using namespace DriveConstants;
 
 static RPMSetpointPID::Tuning tuning() {
-  return {RPM_PID_LOW_SPEED_TAU_S, RPM_PID_HIGH_SPEED_TAU_S,
-          RPM_PID_KI, RPM_PID_KD, RPM_PID_DERIVATIVE_FILTER_S,
-          RPM_PID_LOW_SPEED_ACCEL_MS2, RPM_PID_HIGH_SPEED_ACCEL_MS2,
-          RPM_PID_MAX_JERK_RPM_PER_S2};
+  return RPMSetpointPID::defaultTuning();
 }
 
 int main() {
@@ -29,7 +26,8 @@ int main() {
     assert(std::fabs(a) <= designRPM);
   }
 
-  // Low selections constrain both signed output RPM and acceleration.
+  // Low selections constrain signed output RPM and speeding-up acceleration.
+  // Braking toward zero is limited only by the design cap.
   RPMSetpointPID low(tuning());
   float previous = 0.0f;
   for (int k = 0; k < 2000; ++k) {
@@ -37,9 +35,34 @@ int main() {
     assert(std::fabs(rpm) <= 1.0f * LINEAR_TO_RPM);
     // Skip a hard output-boundary crossing: that clamp has higher priority.
     if (std::fabs(rpm) < LINEAR_TO_RPM && std::fabs(previous) < LINEAR_TO_RPM) {
-      assert(std::fabs(rpm - previous) / dt / LINEAR_TO_RPM <= .3001f);
+      const float accel = std::fabs(rpm - previous) / dt / LINEAR_TO_RPM;
+      const bool speedingUp = std::fabs(rpm) > std::fabs(previous) && rpm * previous >= 0.0f;
+      assert(accel <= (speedingUp ? .3001f : MAX_ACCEL + .0001f));
     }
     previous = rpm;
+  }
+
+  // A gentle acceleration knob does not slow braking: from top speed, a zero
+  // request decelerates near the design limit in both directions.
+  for (float sign : {1.0f, -1.0f}) {
+    RPMSetpointPID braking(tuning());
+    float rpm = 0.0f;
+    for (int k = 0; k < 4000; ++k)
+      rpm = braking.smoothRPM(sign * 1000.0f, dt, MAX_SPEED, .3f);
+    assert(std::fabs(rpm) > designRPM * .99f);
+    const float start = std::fabs(rpm);
+    float maxDecel = 0.0f;
+    int steps = 0;
+    while (std::fabs(rpm) > start * .05f && steps < 2000) {
+      const float before = rpm;
+      rpm = braking.smoothRPM(0.0f, dt, MAX_SPEED, .3f);
+      const float decel = (std::fabs(before) - std::fabs(rpm)) / dt / LINEAR_TO_RPM;
+      assert(decel <= MAX_ACCEL + .0001f);
+      if (decel > maxDecel) maxDecel = decel;
+      ++steps;
+    }
+    assert(maxDecel > 2.0f);        // well above the .3 m/s^2 knob setting
+    assert(steps * dt < 2.5f);      // ~14 s if braking were knob-limited
   }
 
   // An acceleration knob reduction acts immediately, despite stored acceleration.
@@ -60,7 +83,7 @@ int main() {
   const float oldAccelRPM = (afterAccelReduction - previous) / dt;
   const float raisedRPM = changing.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL);
   const float newAccelRPM = (raisedRPM - afterAccelReduction) / dt;
-  assert(std::fabs(newAccelRPM - oldAccelRPM) <= RPM_PID_MAX_JERK_RPM_PER_S2 * dt + .001f);
+  assert(std::fabs(newAccelRPM - oldAccelRPM) <= tuning().maxJerkRPMPerS2 * dt + .001f);
   // Lower speed bounds apply to the returned value immediately in either direction.
   const float afterSpeedReduction = changing.smoothRPM(1000.0f, dt, .2f, .1f);
   assert(std::fabs(afterSpeedReduction) <= .2f * LINEAR_TO_RPM);
@@ -98,4 +121,29 @@ int main() {
   assert(right.smoothRPM(0.0f, dt, MAX_SPEED, MAX_ACCEL) == 0.0f);
   left.reset();
   assert(left.smoothRPM(0.0f, dt, MAX_SPEED, MAX_ACCEL) == 0.0f);
+
+  RPMSetpointPID nominal(tuning());
+  for (int k = 0; k < 2000; ++k)
+    nominal.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL);
+  // Selecting another profile does not reset accumulated motion state.
+  auto retuned = tuning();
+  retuned.kd = 1.0f;
+  assert(nominal.setTuning(retuned));
+  assert(nominal.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL) > designRPM * .9f);
+
+  // Updating the shared conversion affects an existing controller immediately.
+  const float defaultConversion = LINEAR_TO_RPM;
+  LINEAR_TO_RPM = 60.0f / 2.0f;
+  assert(nominal.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL) <= MAX_SPEED * LINEAR_TO_RPM);
+  LINEAR_TO_RPM = 60.0f / 1.8f;
+  RPMSetpointPID updated(tuning());
+  float updatedRPM = 0.0f;
+  for (int k = 0; k < 2000; ++k) {
+    const float previousRPM = updatedRPM;
+    updatedRPM = updated.smoothRPM(1000.0f, dt, MAX_SPEED, MAX_ACCEL);
+    assert(updatedRPM <= MAX_SPEED * LINEAR_TO_RPM);
+    assert(std::fabs(updatedRPM - previousRPM) / dt <= MAX_ACCEL * LINEAR_TO_RPM + .001f);
+  }
+  assert(updatedRPM > designRPM);
+  LINEAR_TO_RPM = defaultConversion;
 }

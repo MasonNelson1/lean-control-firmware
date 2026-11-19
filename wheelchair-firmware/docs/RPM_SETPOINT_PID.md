@@ -311,16 +311,19 @@ The deadband is not remapped to a new zero-to-one interval. For example, an inpu
 ### Wheel mixing and current runtime selections
 
 ```cpp
-leftTargetRPM  = constrain(speed + turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
-rightTargetRPM = constrain(speed - turn, -1.0f, 1.0f) * speedToRPM(MAX_SPEED);
+speedLimitMS = knobs::slewDown(speedLimitMS, userMaxSpeedMS, MAX_ACCEL, dt);
+leftTargetRPM  = constrain(left,  -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
+rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
 
-leftRpms  = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
-rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, MAX_SPEED, MAX_ACCEL);
+leftRpms  = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
+rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
 ```
 
 Positive speed requests both wheels forward. Positive turn increases the left target relative to the right. The components are normalized translation/turn commands, not physical velocity and yaw-rate measurements.
 
-`userMaxSpeedMS` and `userMaxAccelMS2` exist and are initialized to the design limits, but **the active calls currently pass `MAX_SPEED` and `MAX_ACCEL` directly**. Changing those runtime variables alone will not change operation until the caller uses them. Knob reading is not implemented here. Targets are currently scaled by design speed as well; using a smaller output cap alone would clip high demand instead of rescaling the complete input range to the selected maximum.
+`userMaxSpeedMS` and `userMaxAccelMS2` come from the speed and acceleration knobs (`src/drive_knobs.h`, sampled every 20 ms in `main.cpp`): 25/50/75/100 % of `MAX_SPEED` / `MAX_ACCEL`, slowest on a knob fault. Targets are rescaled, so full input always means the selected top speed. The speed limit passed to the smoother rises immediately but falls no faster than `MAX_ACCEL`, so turning the speed knob down while moving never triggers the controller's immediate speed-limit clip.
+
+`maxAccelMS2` limits only speeding up (|RPM| increasing). Braking toward zero always uses the tuned limits capped at `MAX_ACCEL`, so a gentle acceleration setting never lengthens a stop.
 
 The controller itself leaves `requestedRPM` unclipped. The caller's normalized `speed ± turn` clipping is a separate wheel-mixing operation.
 

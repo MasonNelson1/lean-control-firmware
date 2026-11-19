@@ -1,8 +1,13 @@
-import asyncio, csv, json, os, pty, time, argparse
+import asyncio, csv, json, os, time, argparse, sys
 from collections import deque
 from pathlib import Path
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
+
+try:
+    import pty
+except ImportError:
+    pty = None
 
 ROOT = Path(__file__).parent
 FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped'.split()
@@ -19,7 +24,7 @@ def parse(line):
             if not all(math.isfinite(v) for v in values): raise ValueError()
             names = FIELDS if len(values) == 14 else FIELDS[:11]+['stopped']
             row = dict(zip(names, values))
-            row['mode'] = mode if mode in ('LEAN', 'REMOTE') else 'UNKNOWN'
+            row['mode'] = mode if mode in ('LEAN', 'REMOTE', 'DISARM') else 'UNKNOWN'
             return 'data', row
         except ValueError: pass
     return 'text', line
@@ -55,11 +60,14 @@ async def acquire():
                     previous=row['time_ms']
                 await line_received(line)
             await asyncio.sleep(2)
+    if pty is None:
+        await note('Wired monitoring requires Linux or WSL. Use Bluetooth or start the viewer with --replay.')
+        return
     while True:
         if not connected: await asyncio.sleep(.3); continue
         master,slave=pty.openpty()
         try:
-            cmd=['pio','device','monitor','-d',str(ROOT.parent),'-e','simple','-b',str(args.baud)]
+            cmd=['pio','device','monitor','-d',str(ROOT.parent),'-e','teensy41','-b',str(args.baud)]
             if args.port: cmd+=['-p',args.port]
             proc=await asyncio.create_subprocess_exec(*cmd,stdin=slave,stdout=slave,stderr=slave,cwd=ROOT,start_new_session=True)
             os.close(slave); slave=None
@@ -97,6 +105,36 @@ async def stop():
 async def index(): return HTMLResponse((ROOT/'index.html').read_text())
 @app.get('/bluetooth.js')
 async def bluetooth_script(): return FileResponse(ROOT/'bluetooth.js', media_type='text/javascript')
+@app.get('/config-protocol.js')
+async def config_protocol_script(): return FileResponse(ROOT/'config-protocol.js', media_type='text/javascript')
+@app.get('/configuration.js')
+async def configuration_script(): return FileResponse(ROOT/'configuration.js', media_type='text/javascript')
+@app.get('/pid-preview.js')
+async def pid_preview_script(): return FileResponse(ROOT/'pid-preview.js', media_type='text/javascript')
+# Fixed receiver only: never accept a command or address from the browser.
+@app.post('/bluetooth/disconnect')
+async def release_bluetooth(request: Request):
+    if request.client.host not in ('127.0.0.1', '::1') or request.headers.get('x-bluetooth-cleanup') != '1':
+        raise HTTPException(403, 'Bluetooth cleanup requires a local dashboard connection.')
+    if sys.platform != 'linux':
+        return {'message': 'Linux Bluetooth cleanup skipped on this platform.'}
+    try:
+        cleanup = await asyncio.create_subprocess_exec(
+            'bluetoothctl', 'disconnect', '98:DA:60:0A:41:3C',
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            stdout, stderr = await asyncio.wait_for(cleanup.communicate(), 8)
+        except asyncio.TimeoutError:
+            cleanup.kill()
+            await cleanup.communicate()
+            raise HTTPException(504, 'Bluetooth disconnect timed out.')
+    except FileNotFoundError:
+        raise HTTPException(503, 'bluetoothctl is not installed on the dashboard server.')
+    output = (stdout + stderr).decode(errors='replace').strip()
+    if cleanup.returncode and 'org.bluez.Error.NotConnected' not in output:
+        raise HTTPException(503, output or 'Linux Bluetooth disconnect failed.')
+    return {'message': 'Linux receiver connection released.'}
+
 @app.websocket('/ws')
 async def socket(ws:WebSocket):
     global connected

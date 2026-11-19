@@ -18,6 +18,7 @@ function harness({secure = true, openError = null} = {}) {
     async close() { assert.equal(port.readable.locked, false); closed = true; },
   };
   const context = vm.createContext({
+    fetch: async () => ({ok: true, json: async () => ({})}),
     TextDecoder, performance: {now: () => now},
     window: {isSecureContext: secure},
     navigator: {serial: {async requestPort(options) { requestOptions = options; return port; }}},
@@ -37,7 +38,7 @@ function harness({secure = true, openError = null} = {}) {
   return {
     context, elements, frames, messages, commands,
     run: code => vm.runInContext(code, context),
-    send: text => controller.enqueue(new TextEncoder().encode(text)),
+    send: value => controller.enqueue(typeof value === 'string' ? new TextEncoder().encode(value) : value),
     fail: () => controller.error(new Error('out of range')),
     setNow: value => { now = value; },
     get closed() { return closed; },
@@ -49,6 +50,7 @@ test('parses current and legacy telemetry; rejects headers and damaged rows', ()
   const h = harness();
   const parse = line => h.context.parseBluetoothLine(line);
   assert.equal(parse(row()).mode, 'LEAN');
+  assert.equal(parse(row(1000, 'DISARM')).mode, 'DISARM');
   assert.equal(parse(row()).rightSmoothedRPM, 19);
   assert.equal(parse(row().split(',').slice(0, 14).join(',')).mode, 'UNKNOWN');
   assert.equal(parse('1,2,3,4,5,6,7,0,0,10,20,1').stopped, 1);
@@ -98,6 +100,23 @@ test('Bluetooth loss releases reader and allows reconnecting', async () => {
   assert.equal(h.elements.get('#connection-disconnect').disabled, true);
 });
 
+test('configuration replies and CSV share the Bluetooth reader without leaking binary into telemetry', async () => {
+  const h = harness();
+  const replies = [];
+  h.context.window.configLink = {receive: frame => replies.push([...frame])};
+  await h.context.connectBluetooth();
+  h.send(row() + '\n');
+  h.send(Uint8Array.of(0, 2, 10));
+  h.send(Uint8Array.of(9, 13, 0));
+  h.send(row(1050) + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  assert.deepEqual(replies, [[2, 10, 9, 13]]);
+  assert.equal(h.frames.at(-1).rows.length, 2);
+  assert.equal(h.messages.some(message => message.includes('\u0000')), false);
+  await h.context.disconnectBluetooth();
+});
+
 test('insecure origins and failed opens do not start a Bluetooth connection', async () => {
   const insecure = harness({secure: false});
   await insecure.context.connectBluetooth();
@@ -135,4 +154,24 @@ test('dropdown stops USB retries and connects only the selected transport', asyn
   await h.context.disconnectSelected();
   assert.equal(h.commands.at(-1), 'disconnect');
   assert.equal(h.context.usbConnected, false);
+});
+
+
+test('Linux cleanup runs before port open and after disconnect', async () => {
+  const h = harness();
+  const calls = [];
+  h.context.fetch = async (url, options) => {
+    calls.push({url, method: options.method, active: h.context.bluetoothActive});
+    return {ok: true, json: async () => ({})};
+  };
+  await h.context.connectBluetooth();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].active, false);
+  assert.equal(calls[0].url, '/bluetooth/disconnect');
+  assert.equal(calls[0].method, 'POST');
+  await h.context.disconnectBluetooth();
+  assert.equal(calls.length, 2);
+  await h.context.connectBluetooth();
+  assert.equal(calls.length, 3);
+  await h.context.disconnectBluetooth();
 });

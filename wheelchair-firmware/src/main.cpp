@@ -231,10 +231,14 @@ void setup()
 
 void setMode()
 {
-
+    constexpr uint32_t assistHoldMs = 500;
+    constexpr uint32_t assistBlinkMs = 500;
     static bool leanPressPending = false;
     static bool remotePressPending = false;
     static bool disarmPressPending = false;
+    static bool assistHoldPending = false;
+    static uint32_t disarmPressedAt = 0;
+    static uint32_t assistEnteredAt = 0;
 
     noInterrupts();
     const bool leanEdge = leanEdgePending;
@@ -258,35 +262,58 @@ void setMode()
     const bool leanPressed = leanModeButton.isPressed() && leanPressPending;
     const bool remotePressed = remoteModeButton.isPressed() && remotePressPending;
     const bool disarmPressed = disarmModeButton.isPressed() && disarmPressPending;
-
+     
+    const uint32_t now = millis();
     if (leanPressed)
         leanPressPending = false;
     if (remotePressed)
         remotePressPending = false;
-    if (disarmPressed)
+    if (disarmPressed) {
         disarmPressPending = false;
+        disarmPressedAt = now;
+    }
+       
     if (leanModeButton.isReleased())
         leanPressPending = false;
     if (remoteModeButton.isReleased())
         remotePressPending = false;
     if (disarmModeButton.isReleased())
-        disarmPressPending = false;
-
-    if (leanPressed && (MODE != LEAN))
     {
+        disarmPressPending = false;
+        assistHoldPending = false;
+    }
+
+    if (disarmPressed)
+    {
+        // A press that exits Assist cannot reenter it until the next press.
+        assistHoldPending = MODE != ASSIST;
+        if (MODE != DISARM)
+        {
+            MODE = DISARM;
+            printMode();
+        }
+    }
+    else if (leanPressed && (MODE != LEAN))
+    {
+        assistHoldPending = false;
         MODE = LEAN;
         leanMode.reset();
         printMode();
     }
     else if (remotePressed && (MODE != REMOTE))
     {
+        assistHoldPending = false;
         MODE = REMOTE;
         remoteMode.reset();
         printMode();
     }
-    else if (disarmPressed && (MODE != DISARM))
+    else if (assistHoldPending &&
+             now - disarmPressedAt >= assistHoldMs)
     {
-        MODE = DISARM;
+        assistHoldPending = false;
+        assistEnteredAt = now;
+        assistMode.reset();
+        MODE = ASSIST;
         printMode();
     }
 
@@ -309,6 +336,13 @@ void setMode()
     case DISARM:
         digitalWrite(common::PIN_LEAN_LED, LOW);
         digitalWrite(common::PIN_DISARM_LED, HIGH);
+        digitalWrite(common::PIN_REMOTE_LED, LOW);
+        digitalWrite(common::PIN_CAL_LED, LOW);
+        break;
+    case ASSIST:
+        digitalWrite(common::PIN_LEAN_LED, LOW);
+        digitalWrite(common::PIN_DISARM_LED,
+                     ((now - assistEnteredAt) / assistBlinkMs) % 2 == 0 ? HIGH : LOW);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
         digitalWrite(common::PIN_CAL_LED, LOW);
         break;
@@ -347,8 +381,9 @@ static void updateDrive()
     case ASSIST:
         assistMode.loop(measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM,
                         measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM,
-                        knobs::slewDown(0.0f, userMaxSpeedMS, MAX_ACCEL, dt));
+                        userMaxSpeedMS * LINEAR_TO_RPM);
         targets = assistMode.getTargets();
+        break;
     default:
         targets = {0.0f, 0.0f};
         Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");

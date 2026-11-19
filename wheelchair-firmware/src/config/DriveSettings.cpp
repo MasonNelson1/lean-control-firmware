@@ -85,7 +85,7 @@ namespace settings
                                            Editor::SignedPower, DefaultLeftRightKnee, KneeBounds);
     ProfileField<2> assistResponse(registry(), 32,
                                    {response, "Assist response", "Signed power curve for normalized assist power "},
-                                   Editor::SignedPower, DefaultForewardBackKnee, KneeBounds);
+                                   Editor::SignedPower, DefaultAssistKnee, KneeBounds);
 
     // These bounds keep the watchdog at or below its original timeout and the
     // control loop at 100 Hz or faster. Hard propulsion limits stay in drive_constants.h.

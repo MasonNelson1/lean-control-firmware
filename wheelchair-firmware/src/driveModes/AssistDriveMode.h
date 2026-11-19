@@ -14,6 +14,12 @@ private:
 
 public:
     MotorTargets getTargets() override;
+    void reset()
+    {
+        leftAssist.reset();
+        rightAssist.reset();
+    }
+
     void loop(float leftRPM, float rightRPM, float maxRPM)
     {
         AssistDriveMode::leftRPM = leftRPM;

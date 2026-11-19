@@ -21,18 +21,24 @@ private:
     float amps = 0.0f;
     float minRpm = 1.0f;
 
-    const float (&knee)[2] = settings::assistResponse.get();
-    const float responseExponent = logf(knee[1]) / logf(knee[0]);
-
     float calcBoost(float currRpm, float maxRPM)
     {
-        float temp = map(std::fabs(currRpm) / maxRPM, 0.0f, maxRPM, 0.0f, 1.0f); // consider replacing this with an empherically derived mapping that gives you the actual current needed to reach a certain rpm
-        return powf(fabsf(temp), responseExponent) * maxBoostAmps;               // apply response curve
+        if (!std::isfinite(currRpm) || !std::isfinite(maxRPM) || maxRPM <= 0.0f)
+            return 0.0f;
+
+        const auto &knee = settings::assistResponse.get();
+        const float responseExponent = logf(knee[1]) / logf(knee[0]);
+        const float speedFraction = fminf(fabsf(currRpm) / maxRPM, 1.0f);
+        const float boostAmps = powf(speedFraction, responseExponent) * maxBoostAmps;
+        if (!std::isfinite(boostAmps))
+            return 0.0f;
+
+        return fminf(boostAmps, maxBoostAmps);
     }
 
 public:
     static constexpr uint32_t pulseWidth = 20; // ms
-    static constexpr uint32_t duty = 0.5f;
+    static constexpr float duty = 0.5f;
     static constexpr uint32_t boostMs = duty * pulseWidth;
     static constexpr uint32_t coolMs = pulseWidth - boostMs;
     static constexpr float maxBoostAmps = 30.0f;
@@ -75,6 +81,7 @@ public:
             pulseMS = now;
             return direction * calcBoost(currRpm, maxRPM); // we are exiting cooling, so return something as we enter boost.
         }
+        return 0.0f;
     }
 
     void reset()

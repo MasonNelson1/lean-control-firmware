@@ -16,11 +16,10 @@ hosted mode. Do not add API calls to hosted startup.
 
 | Behavior | Static/PWA | Python local server |
 | --- | --- | --- |
-| Initial source | Bluetooth, disconnected | USB/replay |
+| Initial source | Bluetooth, disconnected | Bluetooth, disconnected |
 | Bluetooth | Browser Web Serial | Same browser Web Serial |
 | USB/replay | Not offered | Python monitor/replay via `/ws` |
-| Linux receiver cleanup | Never requested | `/bluetooth/disconnect` |
-| Profiles | Browser ZIP codec | Same browser ZIP codec |
+| Profiles | Wheelchair EEPROM over Web Serial | Same onboard storage |
 | Service worker | Registered on page load | Not registered |
 
 `index.html` owns telemetry plots and the optional server WebSocket.
@@ -31,18 +30,15 @@ CSV/configuration stream. It delivers configuration frames to `configLink`.
 Keep a single serial reader: adding another reader breaks configuration/CSV
 demultiplexing. Disconnecting discards the connection-specific schema and drafts.
 
-The firmware remains authoritative for applying configuration. It permits Set,
-Save, Revert, and Defaults only in DISARM. Browsers may stage edits in other
-modes; stale telemetry is not an authorization signal. Loading a profile sends
-no configuration writes. Keep amber draft highlights, existing tooltips, quiet
-profile loading, and the one-row action toolbar. Restore all defaults restores
-RAM then saves EEPROM; group defaults remain RAM-only.
+The firmware requires Disarm for active configuration writes and profile uploads.
+The browser can edit drafts, stage defaults, and load onboard profiles in every
+mode. On connection the browser queries only the profile catalog. An explicit
+load fetches the selected slot's values over Web Serial.
 
-## Profile files and compatibility
+## Legacy profile file codec
 
 `profile-files.js` exposes asynchronous `LeanProfiles.encode(profile)` returning
-ZIP bytes and `LeanProfiles.decode(bytes)` returning the parsed profile. Both
-environments use this module, with the vendored, pinned fflate implementation.
+ZIP bytes and `LeanProfiles.decode(bytes)` returning the parsed profile. The legacy codec uses the vendored, pinned fflate implementation.
 There is no runtime CDN or npm dependency. See vendor/README.md for provenance
 and how to update the library. npm dependencies are development tools only.
 

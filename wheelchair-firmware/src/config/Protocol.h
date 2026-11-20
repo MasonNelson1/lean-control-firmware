@@ -12,7 +12,7 @@ constexpr size_t MaxRequestSize = 48;
 constexpr size_t MaxResponseSize = 400;
 
 // Preserve numeric values because config-protocol.js uses the same identifiers.
-enum class Command : uint8_t { Hello = 1, Group, Describe, Read, Set, Save, Revert, Defaults, Preview };
+enum class Command : uint8_t { Hello = 1, Group, Describe, Read, Set, Save, Revert, Defaults, Preview, ProfileList, ProfileRead, ProfileBegin, ProfileChunk, ProfileCommit };
 enum class Status : uint8_t { Ok, Version, Malformed, Unknown, Invalid, NotDisarmed, Storage, TooLarge };
 
 // CRC-16/CCITT-FALSE. Covers the decoded packet except its final two CRC bytes.
@@ -39,6 +39,10 @@ public:
      * that slot is occupied. The browser therefore waits for each reply.
      */
     bool queue(const uint8_t *packet, size_t size);
+    void tick(uint32_t now, bool disarmed) {
+        if (!disarmed || now - uploadActivity_ >= 10000) uploadLength_ = 0;
+        now_ = now;
+    }
     bool pending() const { return pendingSize_ != 0; }
 
     /**
@@ -59,6 +63,13 @@ private:
     Status update(Field &field, const uint8_t *data, size_t size, Writer &out);
     Status defaults(const Group *group);
     void changed();
+    Status profiles(Command command, const uint8_t *body, size_t size, Writer &out);
+
+    uint8_t upload_[Persistence::ProfileCapacity];
+    uint8_t uploadName_[Persistence::ProfileNameSize];
+    uint16_t uploadLength_ = 0, uploadReceived_ = 0;
+    uint8_t uploadSlot_ = 0;
+    uint32_t now_ = 0, uploadActivity_ = 0;
 
     Registry &registry_;
     Persistence &persistence_;

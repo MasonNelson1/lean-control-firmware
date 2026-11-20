@@ -10,6 +10,10 @@
   const link = new ConfigWire.Link();
   window.configLink = link; // BluetoothReceiver delivers decoded configuration frames here.
   let groups = new Map(), fields = new Map(), drafts = new Map();
+  let profiles = [];
+  let canWrite = false;
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
   const pidPlots = new Map();
   let page = 'telemetry', loaded = false, busy = false;
 
@@ -35,15 +39,17 @@
 
   function updateToolbar() {
     const editable = loaded && !busy;
+    const writable = editable && canWrite;
     const hasDrafts = drafts.size > 0;
     byId('config-reload').disabled = !link.port || busy;
-    byId('config-apply').disabled = !editable || !hasDrafts;
-    byId('config-save').disabled = !editable || !(link.dirty || hasDrafts);
-    byId('config-revert').disabled = busy || !(hasDrafts || (editable && link.dirty));
+    byId('config-apply').disabled = !writable || !hasDrafts;
+    byId('config-save').disabled = !writable || !(link.dirty || hasDrafts);
+    byId('config-revert').disabled = busy || !(hasDrafts || (writable && link.dirty));
     byId('config-defaults').disabled = !editable;
-    byId('config-profile-save').disabled = !editable;
-    byId('config-profile-load').disabled = !editable;
-    byId('config-profile-file').disabled = !editable;
+    const slot = byId('config-profiles').value;
+    byId('config-profiles').disabled = !editable || !profiles.length;
+    byId('config-profile-save').disabled = !writable || slot === '';
+    byId('config-profile-load').disabled = !editable || !profiles[slot];
     byId('config-summary').textContent = loaded
       ? [
           hasDrafts ? `${drafts.size} unapplied ${drafts.size === 1 ? 'edit' : 'edits'}` : '',
@@ -233,96 +239,113 @@
     }
   }
 
-  // Numeric values are decimal strings so JSON preserves 64-bit integers and
-  // exact floating-point values. Paths and editor metadata protect against
-  // accidentally loading a field ID reused by a different device schema.
-  function profileIdentity(field) {
-    const path = [];
-    for (let group = groups.get(field.group); group; group = groups.get(group.parent)) path.unshift(group.name);
-    return {id: field.id, name: field.name, path, type: field.type,
-      ...(field.type === types.profile ? {editor: field.editor, parameters: field.parameters.map(part => part.name)} : {})};
+  function rawValue(value) {
+    return Array.isArray(value) ? value.map(String) :
+      typeof value === 'boolean' ? value : String(value);
   }
 
-  function profileRaw(field, value) {
-    if (field.type === types.boolean) {
-      if (typeof value !== 'boolean') throw new Error('Expected a Boolean value.');
-      return value;
-    }
-    if (field.type === types.profile) {
-      if (!Array.isArray(value) || value.length !== field.parameters.length || value.some(part => typeof part !== 'string'))
-        throw new Error('Invalid curve parameters.');
-      return value;
-    }
-    if (typeof value !== 'string' || !value.trim()) throw new Error('Expected a numeric string.');
-    return value;
+  function requireDisarm() {
+    if (!canWrite) throw new Error('Switch the wheelchair to Disarm to write settings.');
   }
 
-  function createProfile() {
-    return {format: 'lean-config', version: 1, fields: [...fields.values()].filter(field => !field.unsupported).map(field => {
-      let value;
-      try { value = drafts.has(field.id) ? parseDraft(field, drafts.get(field.id)) : field.value; }
-      catch (error) { throw new Error(`${field.name}: ${error.message}`); }
-      return {...profileIdentity(field), value: Array.isArray(value) ? value.map(String)
-        : typeof value === 'boolean' ? value : String(value)};
-    })};
-  }
-
-  function stageProfile(profile) {
-    if (!profile || profile.format !== 'lean-config' || profile.version !== 1 || !Array.isArray(profile.fields))
-      throw new Error('Invalid or unsupported Lean configuration profile.');
-    // Older profiles may omit new settings; newer ones may contain settings
-    // this dashboard/device cannot edit. Keep unrelated drafts in either case.
-    const next = new Map(drafts), seen = new Set();
-    let matched = 0, skipped = 0;
-    for (const entry of profile.fields) {
-      const field = entry && fields.get(entry.id);
-      if (!field || field.unsupported || seen.has(entry.id)) { skipped++; continue; }
-      const identity = profileIdentity(field);
-      // Type is required. Additional identity metadata, when present, must
-      // match; absent metadata is tolerated for older profile files.
-      if (entry.type !== field.type || Object.keys(identity).some(key => key in entry &&
-          JSON.stringify(identity[key]) !== JSON.stringify(entry[key]))) { skipped++; continue; }
-      seen.add(entry.id);
-      try {
-        const raw = profileRaw(field, entry.value);
-        const value = parseDraft(field, raw);
-        if (!equalValue(value, field.value)) next.set(field.id, raw);
-        else next.delete(field.id);
-        matched++;
-      } catch (error) { throw new Error(`${field.name}: ${error.message}`); }
+  async function listProfiles() {
+    const generation = link.generation;
+    const select = byId('config-profiles');
+    const selected = select.value;
+    let next = [];
+    try {
+      const reply = await link.request(commands.profileList);
+      const count = reply.u8();
+      if (count !== 7) throw new Error('Unexpected profile slot count.');
+      next = Array.from({length: count}, () => {
+        if (!reply.u8()) return '';
+        const end = reply.offset + 24;
+        const name = decoder.decode(reply.bytes.subarray(reply.offset, end)).split(String.fromCharCode(0))[0];
+        reply.offset = end;
+        return name;
+      });
+      reply.done();
+    } catch (error) {
+      if (error.status !== 3) throw error;
     }
-    // Commit only after every entry validates. No device requests are sent.
-    drafts = next;
-    return {matched, skipped};
+    if (generation !== link.generation) return;
+    profiles = next;
+    select.replaceChildren(...profiles.map((name, index) => {
+      const option = element('option', '', (index + 1) + '. ' + (name || 'Empty slot'));
+      option.value = String(index);
+      return option;
+    }));
+    if (selected !== '' && profiles[selected] !== undefined) select.value = selected;
   }
 
   async function saveProfile() {
     await run(async () => {
-      const generation = link.generation;
-      const bytes = await LeanProfiles.encode(createProfile());
-      const blob = new Blob([bytes], {type: 'application/zip'});
-      if (generation !== link.generation) return;
-      const url = URL.createObjectURL(blob);
-      const anchor = element('a');
-      anchor.href = url;
-      anchor.download = `lean-config-${new Date().toISOString().replace(/[:.]/g, '-')}.lean`;
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      status('Profile saved to a .lean file.');
+      requireDisarm();
+      const slot = Number(byId('config-profiles').value);
+      const name = window.prompt('Profile name', profiles[slot] || '')?.trim();
+      if (!name) return;
+      const nameBytes = encoder.encode(name);
+      if (nameBytes.length > 24 || name.includes(String.fromCharCode(0)))
+        throw new Error('Use a profile name of up to 24 UTF-8 bytes.');
+      if (profiles[slot] && !window.confirm('Overwrite ' + profiles[slot] + '?')) return;
+      const bytes = [];
+      for (const field of fields.values()) {
+        if (field.unsupported) throw new Error('Update the dashboard to save this configuration.');
+        const value = drafts.has(field.id) ? parseDraft(field, drafts.get(field.id)) : field.value;
+        const record = ConfigWire.setBody(field, value);
+        bytes.push(record[0], record[1], field.type, record.length - 2, ...record.subarray(2));
+      }
+      if (!bytes.length || bytes.length > 415) throw new Error('Configuration exceeds the profile slot capacity.');
+      const begin = new Uint8Array(27);
+      begin.set([slot, bytes.length & 255, bytes.length >> 8]);
+      begin.set(nameBytes, 3);
+      (await link.request(commands.profileBegin, begin)).done();
+      for (let offset = 0; offset < bytes.length; offset += 40) {
+        (await link.request(commands.profileChunk, Uint8Array.of(
+          offset & 255, offset >> 8, ...bytes.slice(offset, offset + 40)))).done();
+      }
+      (await link.request(commands.profileCommit)).done();
+      await listProfiles();
+      status('Profile saved on the wheelchair.');
     });
   }
 
-  async function loadProfile(file) {
+  async function loadProfile() {
     await run(async () => {
-      if (!/\.lean$/i.test(file.name)) throw new Error('Choose a .lean profile file.');
-      if (file.size > 1024 * 1024) throw new Error('Profile files must be at most 1 MiB.');
+      const slot = Number(byId('config-profiles').value);
+      if (!profiles[slot] || (drafts.size && !window.confirm('Replace unapplied edits with this profile?'))) return;
       const generation = link.generation;
-      const profile = await LeanProfiles.decode(await file.arrayBuffer());
+      const bytes = [];
+      let total;
+      do {
+        const offset = bytes.length;
+        const reply = await link.request(commands.profileRead, Uint8Array.of(slot, offset & 255, offset >> 8));
+        const length = reply.u16();
+        const chunk = reply.bytes.subarray(reply.offset);
+        if (!length || length > 415 || (total !== undefined && total !== length) ||
+            !chunk.length || offset + chunk.length > length) throw new Error('Invalid profile response.');
+        total = length;
+        bytes.push(...chunk);
+      } while (bytes.length < total);
+
+      const next = new Map();
+      for (let offset = 0; offset < bytes.length;) {
+        const id = bytes[offset] | (bytes[offset + 1] << 8);
+        const type = bytes[offset + 2], width = bytes[offset + 3];
+        const end = offset + 4 + width;
+        if (!width || !Number.isInteger(end) || end > bytes.length) throw new Error('Invalid profile record.');
+        const field = fields.get(id);
+        if (field && !field.unsupported && field.type === type) {
+          const reader = new ConfigWire.Reader(Uint8Array.from(bytes.slice(offset + 4, end)));
+          const raw = rawValue(ConfigWire.readValue(field, reader));
+          reader.done();
+          if (!equalValue(parseDraft(field, raw), field.value)) next.set(id, raw);
+        }
+        offset = end;
+      }
       if (generation !== link.generation) return;
-      stageProfile(profile);
-      status('');
+      drafts = next;
+      status('Profile loaded into dashboard edits.');
     });
   }
 
@@ -337,24 +360,13 @@
   async function restoreDefaults(id = 0) {
     const name = id ? groups.get(id).name : 'all settings';
     if (!window.confirm('Restore firmware defaults for ' + name + '?')) return;
-    await run(async () => {
-      status('Restoring defaults…');
-      const reply = await link.request(commands.defaults, ConfigWire.idBody(id));
-      reply.done();
-      for (const field of fields.values()) if (groupWithin(field.group, id)) drafts.delete(field.id);
-      await refreshValues();
-      if (!id) {
-        try {
-          const saved = await link.request(commands.save);
-          saved.done();
-        } catch (error) {
-          throw new Error(`Defaults applied to RAM, but saving to EEPROM failed: ${error.message}`);
-        }
-        status('Defaults saved to wheelchair. Settings marked for restart take effect at the next power-on.');
-      } else {
-        status('Defaults applied to RAM. Save to keep them.');
-      }
-    });
+    for (const field of fields.values()) {
+      if (field.unsupported || !groupWithin(field.group, id)) continue;
+      if (equalValue(field.default, field.value)) drafts.delete(field.id);
+      else drafts.set(field.id, rawValue(field.default));
+    }
+    status('Defaults staged as dashboard edits.');
+    render();
   }
 
   function numericControl(type, min, max, value) {
@@ -720,7 +732,7 @@
     const section = element('section', 'config-group');
     const header = element('div', 'config-group-head');
     const restore = button('Restore defaults', () => restoreDefaults(group.id));
-    restore.title = 'Apply the firmware defaults to this group and its nested groups in RAM. Use Save to keep them after power-off.';
+    restore.title = 'Stage firmware defaults for this group and its nested groups as dashboard edits.';
     restore.disabled = busy;
     restore.setAttribute('aria-label', 'Restore defaults for ' + group.name);
     header.append(element('h3', '', group.name), restore);
@@ -780,18 +792,32 @@
     loaded = false;
     busy = false;
     status(port ? 'Ready to discover settings.' : 'Connect to the wheelchair over Bluetooth to view settings.');
-    if (port && page !== 'telemetry') discover();
+    profiles = [];
+    byId('config-profiles').replaceChildren();
+    canWrite = false;
+    if (port) run(listProfiles).then(() => {
+      if (link.port === port && page !== 'telemetry' && !loaded) discover();
+    });
     render();
     return closing;
   };
 
+  window.configurationModeChanged = mode => {
+    canWrite = mode === 'DISARM';
+    updateToolbar();
+  };
   for (const item of document.querySelectorAll('[data-page]')) item.onclick = () => selectPage(item.dataset.page);
-  byId('config-reload').onclick = discover;
+  byId('config-reload').onclick = async () => {
+    await run(listProfiles);
+    await discover();
+  };
   byId('config-apply').onclick = () => run(async () => {
+    requireDisarm();
     await applyDrafts();
     status('Changes applied to RAM. Save to keep them.');
   });
   byId('config-save').onclick = () => run(async () => {
+    requireDisarm();
     await applyDrafts();
     status('Saving configuration…');
     const reply = await link.request(commands.save);
@@ -799,23 +825,21 @@
     status('Configuration saved. Settings marked for restart take effect at the next power-on.');
   });
   byId('config-revert').onclick = () => run(async () => {
-    if (link.dirty) {
+    if (link.dirty && canWrite && !drafts.size) {
       status('Reverting configuration…');
       const reply = await link.request(commands.revert);
       reply.done();
       await refreshValues();
+      status('Reverted to saved settings.');
+      return;
     }
     drafts.clear();
-    status('Reverted to saved settings.');
+    status('Dashboard edits cleared.');
   });
   byId('config-defaults').onclick = () => restoreDefaults();
   byId('config-profile-save').onclick = saveProfile;
-  byId('config-profile-load').onclick = () => byId('config-profile-file').click();
-  byId('config-profile-file').onchange = event => {
-    const file = event.target.files[0];
-    event.target.value = '';
-    if (file) return loadProfile(file);
-  };
+  byId('config-profile-load').onclick = loadProfile;
+  byId('config-profiles').onchange = updateToolbar;
   window.addEventListener('resize', updatePidPlots);
   window.configurationConnectionChanged(null);
 })();

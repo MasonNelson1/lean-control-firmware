@@ -458,6 +458,7 @@ static void updateDrive()
 static void replyToConfiguration()
 {
     constexpr size_t MaxPacketBytes = config::MaxResponseSize + config::MaxResponseSize / 254 + 3;
+    settings::protocol.tick(millis(), MODE == DISARM);
     if (!settings::protocol.pending() || Serial1.availableForWrite() < static_cast<int>(MaxPacketBytes))
         return;
 
@@ -524,7 +525,8 @@ void loop()
     if (rowLength <= 0 || rowLength >= static_cast<int>(sizeof(row)))
         return;
 
-    Serial.write(reinterpret_cast<const uint8_t *>(row), rowLength);
+    // Serial.write(reinterpret_cast<const uint8_t *>(row), rowLength);
+    Serial.println(measuredMotors[1].inputVoltage);
     // Serial.println(digitalRead(common::PIN_CAL_BUTTON));
 
     // The HC-06 shares Serial1 with the remote controller.

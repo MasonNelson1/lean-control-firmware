@@ -3,7 +3,6 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const mockSerial = require('./mock-serial.cjs');
-const {codec} = require('../profile-codec-helper.cjs');
 
 test('hosted subpath loads with logo and no Python or third-party requests', async ({page}) => {
   const failures = [], errors = [], requests = [];
@@ -101,20 +100,20 @@ test('Bluetooth settings and profiles work without a server and retain edit high
   await expect(page.locator('#field-10')).toHaveValue('2');
   await page.locator('#field-10').fill('4.25');
   await expect(page.locator('#config-field-10')).toHaveClass(/config-field-pending/);
-  const downloaded = page.waitForEvent('download');
+  expect(await page.evaluate(() => serialTestCommands.includes(11))).toBe(false);
+  await page.evaluate(() => serialTestMode('DISARM'));
+  page.once('dialog', dialog => dialog.accept('Rider'));
   await page.locator('#config-profile-save').click();
-  const download = await downloaded;
-  expect(download.suggestedFilename()).toMatch(/\.lean$/);
-  const profile = await codec.decode(fs.readFileSync(await download.path()));
-  expect(profile.fields.find(f => f.id === 10).value).toBe('4.25');
-  expect(profile.fields.some(f => f.id === 60)).toBe(true); // Includes hidden Advanced settings.
+  await expect(page.locator('#config-profiles option').first()).toHaveText('1. Rider');
   await page.getByRole('button', {name: 'Reset Front gain to current value', exact: true}).click();
   await expect(page.locator('#config-field-10')).not.toHaveClass(/config-field-pending/);
-  profile.fields.push({id: 9999, type: 250, value: 'future'});
-  await page.locator('#config-profile-file').setInputFiles({name: 'old-profile.lean', mimeType: 'application/zip', buffer: Buffer.from(await codec.encode(profile))});
+  await page.evaluate(() => serialTestMode('ASSIST'));
+  await expect(page.locator('#config-apply')).toBeDisabled();
+  await page.locator('#config-profile-load').click();
   await expect(page.locator('#field-10')).toHaveValue('4.25');
   await expect(page.locator('#config-field-10')).toHaveClass(/config-field-pending/);
   expect(await page.evaluate(() => serialTestCommands.includes(5))).toBe(false);
+  await page.evaluate(() => serialTestMode('DISARM'));
   await page.locator('#config-apply').click();
   await expect(page.locator('#config-field-10')).not.toHaveClass(/config-field-pending/);
   expect(await page.evaluate(() => serialTestCommands.includes(5))).toBe(true);
@@ -125,9 +124,9 @@ test('Bluetooth settings and profiles work without a server and retain edit high
 
 test('local Python mode preserves USB/replay and does not register a service worker', async ({page}) => {
   await page.goto('http://127.0.0.1:8124');
-  await expect(page.locator('#connection-mode')).toHaveValue('usb');
+  await expect(page.locator('#connection-mode')).toHaveValue('bluetooth');
   await expect(page.locator('#connection-mode option')).toHaveCount(2);
-  await expect(page.locator('#status')).toContainText('USB / replay');
+  await expect(page.locator('#status')).toContainText('Bluetooth');
   expect(await page.evaluate(() => dashboardBackend)).toBe(true);
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
   expect(await page.locator('.brand-logo').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);

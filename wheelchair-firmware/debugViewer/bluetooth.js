@@ -8,7 +8,7 @@ function parseBluetoothLine(line) {
   if (numeric.some(value => value === '' || !Number.isFinite(Number(value)))) return null;
   const fields = numeric.length === 14 ? telemetryFields : [...telemetryFields.slice(0, 11), 'stopped'];
   const row = Object.fromEntries(fields.map((field, i) => [field, Number(numeric[i])]));
-  row.mode = parts.length === 15 && ['LEAN', 'REMOTE', 'DISARM'].includes(parts[14]) ? parts[14] : 'UNKNOWN';
+  row.mode = parts.length === 15 && ['LEAN', 'REMOTE', 'DISARM', 'ASSIST'].includes(parts[14]) ? parts[14] : 'UNKNOWN';
   return row;
 }
 
@@ -68,20 +68,9 @@ function showDisconnected(message) {
 }
 
 function renderBluetooth() {
-  applyTelemetry(bluetoothRows, !bluetoothRows.length || performance.now() - bluetoothLastRowAt > 2000, 'Bluetooth');
-}
-
-async function releaseLinuxBluetooth() {
-  if (!dashboardBackend) return;
-  try {
-    const response = await fetch('/bluetooth/disconnect', {
-      method: 'POST', headers: {'X-Bluetooth-Cleanup': '1'},
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || 'Bluetooth cleanup failed');
-  } catch (error) {
-    appendConsole(`Linux Bluetooth cleanup: ${error.message}`);
-  }
+  const stale = !bluetoothRows.length || performance.now() - bluetoothLastRowAt > 2000;
+  window.configurationModeChanged?.(stale ? null : bluetoothRows.at(-1).mode);
+  if (connectionMode === 'bluetooth') applyTelemetry(bluetoothRows, stale, 'Bluetooth');
 }
 
 async function readBluetooth(port) {
@@ -95,25 +84,34 @@ async function readBluetooth(port) {
     } else if (line.trim() && !line.startsWith('time_ms')) appendConsole(line);
   }, frame => window.configLink?.receive(frame));
   try {
-    bluetoothReader = port.readable.getReader();
-    while (bluetoothActive) {
-      const {value, done} = await bluetoothReader.read();
-      if (done) break;
-      receiver.push(value);
+    while (bluetoothActive && port.readable) {
+      const stream = port.readable;
+      const reader = stream.getReader();
+      bluetoothReader = reader;
+      try {
+        while (bluetoothActive) {
+          const {value, done} = await reader.read();
+          if (done) return;
+          receiver.push(value);
+        }
+      } catch (error) {
+        if (bluetoothActive) appendConsole(`Bluetooth read interrupted: ${error.message}`);
+      } finally {
+        reader.releaseLock();
+        bluetoothReader = null;
+      }
+      if (bluetoothActive && port.readable === stream) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-  } catch (error) {
-    if (bluetoothActive) appendConsole(`Bluetooth read failed: ${error.message}`);
   } finally {
-    bluetoothReader?.releaseLock();
-    bluetoothReader = null;
     clearInterval(bluetoothTimer);
     await window.configurationConnectionChanged?.(null);
     try { await port.close(); } catch (error) { appendConsole(`Bluetooth close: ${error.message}`); }
-    await releaseLinuxBluetooth();
     bluetoothPort = null;
     bluetoothActive = false;
     updateConnectionButtons();
-    showDisconnected('Bluetooth disconnected');
+    if (connectionMode === 'bluetooth') showDisconnected('Bluetooth disconnected');
     appendConsole('Bluetooth disconnected. Choose a connection mode and click Connect to reconnect.');
   }
 }
@@ -129,7 +127,6 @@ async function connectBluetooth() {
   try {
     // Standard Serial Port Profile services are allowed by default.
     port = await navigator.serial.requestPort({filters: [{bluetoothServiceClassId: 0x1101}]});
-    await releaseLinuxBluetooth();
     await port.open({baudRate: 115200, bufferSize: 4096});
     bluetoothPort = port;
     bluetoothActive = true;
@@ -156,10 +153,7 @@ async function connectBluetooth() {
 }
 
 async function disconnectBluetooth() {
-  if (!bluetoothPort) {
-    if (connectionMode === 'bluetooth') await releaseLinuxBluetooth();
-    return;
-  }
+  if (!bluetoothPort) return;
   bluetoothActive = false;
   await bluetoothReader?.cancel();
   await bluetoothReadTask;
@@ -171,13 +165,13 @@ async function changeConnectionMode() {
   usbConnected = false;
   syncUsbMonitoring();
   try {
-    await disconnectBluetooth();
     connectionMode = dashboardBackend ? $('#connection-mode').value : 'bluetooth';
     // A new source starts disconnected and never shows the old source's data.
     latest = []; displayed = []; lastRow = null;
     graphs(); sensors(null);
     $('pre').textContent = '';
-    showDisconnected(`${connectionMode === 'bluetooth' ? 'Bluetooth' : 'USB / replay'} disconnected · click Connect`);
+    if (connectionMode === 'bluetooth' && bluetoothActive) renderBluetooth();
+    else showDisconnected(`${connectionMode === 'bluetooth' ? 'Bluetooth' : 'USB / replay'} disconnected · click Connect`);
   } finally {
     connectionBusy = false;
     updateConnectionButtons();

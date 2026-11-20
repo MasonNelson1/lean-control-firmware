@@ -20,7 +20,7 @@ public:
         data[address] = value;
     }
 
-    std::array<uint8_t, 2 * Persistence::SlotSize> data;
+    std::array<uint8_t, Persistence::StorageSize> data;
     int writesLeft = -1;
 };
 
@@ -122,7 +122,7 @@ static void persistenceAndMigration() {
         interrupted.writesLeft = budget;
         const bool success = store.save();
         store.load();
-        assert(reordered.get() == (success ? 42 : 28));
+        assert(reordered.get() == (success ? 42 : budget == 0 ? 28 : 6));
     }
 
     assert(set(reordered, uint16_t{45}));
@@ -134,9 +134,9 @@ static void persistenceAndMigration() {
     assert(!currentStore.save()); // A stale but valid destination is not a successful write.
     currentStore.load();
     assert(reordered.get() == 45);
-    storage.data[Persistence::SlotSize + Persistence::HeaderSize + 4] ^= 1;
+    storage.data[Persistence::HeaderSize + 4] ^= 1;
     currentStore.load();
-    assert(reordered.get() == 28); // The previous bank survived corruption of the latest one.
+    assert(reordered.get() == 6); // A corrupt active record loads firmware defaults.
 }
 
 static bool crossValidationAccepted = true;

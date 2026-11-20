@@ -23,8 +23,7 @@ public:
 };
 
 /**
- * Explicit persistence using alternating EEPROM banks with CRC-32 integrity.
- * The caller supplies storage covering at least two SlotSize banks.
+ * Explicit persistence using one active EEPROM bank and optional named profiles.
  *
  * Field identity comes from the TLV ID and type. Renaming or reordering fields
  * preserves their values. Missing or incompatible records use current defaults.
@@ -40,6 +39,15 @@ public:
     Persistence(Registry &registry, Storage &storage, void (*repair)() = nullptr)
         : registry_(registry), storage_(storage), repair_(repair) {}
 
+    static constexpr size_t ProfileCount = 7;
+    static constexpr size_t ProfileSlotSize = 447;
+    static constexpr size_t ProfileNameSize = 24;
+    static constexpr size_t ProfileHeaderSize = 32;
+    static constexpr size_t ProfileCapacity = ProfileSlotSize - ProfileHeaderSize;
+    static constexpr size_t StorageSize = SlotSize + ProfileCount * ProfileSlotSize;
+    size_t readProfile(uint8_t slot, uint8_t *name, uint8_t *payload) const;
+    bool writeProfile(uint8_t slot, const uint8_t *name, const uint8_t *payload, size_t length);
+
     void load(); // Loads the newest valid bank and establishes the dirty baseline.
     bool save(); // Synchronous explicit save. Returns false if writing or verification fails.
     void refreshDirty(); // Call after changing RAM values, before deciding whether to save.
@@ -47,12 +55,11 @@ public:
 
 private:
     struct Slot {
-        uint32_t generation;
         uint16_t length;
         bool valid;
     };
 
-    Slot inspect(int slot, uint8_t *payload) const;
+    Slot inspect(uint8_t *payload) const;
 
     Registry &registry_;
     Storage &storage_;

@@ -51,11 +51,21 @@ Status Protocol::execute(Command command, const uint8_t *body, size_t size,
                          bool disarmed, Writer &out) {
     // Check the current mode at execution time, before touching RAM or EEPROM.
     const bool modifiesConfiguration = command == Command::Set || command == Command::Save ||
-                                       command == Command::Revert || command == Command::Defaults;
-    if (modifiesConfiguration && !disarmed)
-        return Status::NotDisarmed;
+                                       command == Command::Revert || command == Command::Defaults ||
+                                       command == Command::ProfileBegin || command == Command::ProfileChunk ||
+                                       command == Command::ProfileCommit;
+    if (!disarmed) {
+        uploadLength_ = 0;
+        if (modifiesConfiguration) return Status::NotDisarmed;
+    }
 
     switch (command) {
+    case Command::ProfileList:
+    case Command::ProfileRead:
+    case Command::ProfileBegin:
+    case Command::ProfileChunk:
+    case Command::ProfileCommit:
+        return profiles(command, body, size, out);
     case Command::Hello:
         if (size != 0) return Status::Malformed;
         out.put(registry_.groupCount());
@@ -128,6 +138,84 @@ Status Protocol::execute(Command command, const uint8_t *body, size_t size,
     }
     }
     return Status::Unknown;
+}
+
+Status Protocol::profiles(Command command, const uint8_t *body, size_t size, Writer &out) {
+    if (command == Command::ProfileList || command == Command::ProfileRead) {
+        uint8_t name[Persistence::ProfileNameSize], payload[Persistence::ProfileCapacity];
+        if (command == Command::ProfileList) {
+            if (size) return Status::Malformed;
+            out.put(static_cast<uint8_t>(Persistence::ProfileCount));
+            for (uint8_t slot = 0; slot < Persistence::ProfileCount; ++slot) {
+                const bool present = persistence_.readProfile(slot, name, payload) != 0;
+                out.put(static_cast<uint8_t>(present));
+                if (present) out.bytes(name, sizeof(name));
+            }
+            return Status::Ok;
+        }
+        if (size != 3) return Status::Malformed;
+        const size_t length = persistence_.readProfile(body[0], name, payload);
+        if (!length) return Status::Unknown;
+        const size_t offset = read<uint16_t>(body + 1);
+        if (offset >= length) return Status::Invalid;
+        const size_t remaining = length - offset;
+        out.put(static_cast<uint16_t>(length));
+        out.bytes(payload + offset, remaining < 384 ? remaining : 384);
+        return Status::Ok;
+    }
+
+    uploadActivity_ = now_;
+    if (command == Command::ProfileBegin) {
+        uploadLength_ = 0;
+        if (size != 3 + sizeof(uploadName_)) return Status::Malformed;
+        const auto length = read<uint16_t>(body + 1);
+        if (body[0] >= Persistence::ProfileCount || !length || length > sizeof(upload_) || !body[3])
+            return Status::Invalid;
+        uploadSlot_ = body[0];
+        uploadLength_ = length;
+        uploadReceived_ = 0;
+        memcpy(uploadName_, body + 3, sizeof(uploadName_));
+        return Status::Ok;
+    }
+    if (!uploadLength_) return Status::Invalid;
+    if (command == Command::ProfileChunk) {
+        if (size <= 2 || read<uint16_t>(body) != uploadReceived_ ||
+            size - 2 > static_cast<size_t>(uploadLength_ - uploadReceived_)) {
+            uploadLength_ = 0;
+            return Status::Malformed;
+        }
+        memcpy(upload_ + uploadReceived_, body + 2, size - 2);
+        uploadReceived_ += size - 2;
+        return Status::Ok;
+    }
+
+    const size_t length = uploadLength_;
+    uploadLength_ = 0;
+    if (size || uploadReceived_ != length || !validTlvs(upload_, length)) return Status::Malformed;
+    uint8_t old[Persistence::PayloadCapacity];
+    const size_t oldLength = snapshot(registry_, old, sizeof(old));
+    if (!oldLength) return Status::Storage;
+
+    // Validate the candidate synchronously, then restore the active registry
+    // before touching EEPROM or returning to the control loop.
+    size_t fields = 0;
+    uint16_t seen[Persistence::ProfileCapacity / 5];
+    bool valid = true;
+    for (size_t offset = 0; offset < length && valid;) {
+        const auto id = read<uint16_t>(upload_ + offset);
+        auto *field = registry_.find(id);
+        const auto width = upload_[offset + 3];
+        for (size_t i = 0; i < fields; ++i)
+            if (seen[i] == id) valid = false;
+        seen[fields++] = id;
+        valid = valid && field && static_cast<uint8_t>(field->type) == upload_[offset + 2] &&
+                field->update(upload_ + offset + 4, width);
+        offset += 4 + width;
+    }
+    valid = valid && fields == registry_.fieldCount() && (!validate_ || validate_());
+    applyTlvs(registry_, old, oldLength);
+    if (!valid) return Status::Invalid;
+    return persistence_.writeProfile(uploadSlot_, uploadName_, upload_, length) ? Status::Ok : Status::Storage;
 }
 
 Status Protocol::update(Field &field, const uint8_t *data, size_t size, Writer &out) {

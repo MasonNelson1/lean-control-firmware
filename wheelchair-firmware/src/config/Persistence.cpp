@@ -4,7 +4,7 @@ namespace config {
 namespace {
 constexpr uint8_t Committed = 0xA5;
 constexpr uint32_t Magic = 0x47464357; // WCFG
-constexpr uint8_t Version = 1;
+constexpr uint8_t Version = 2;
 constexpr size_t TlvHeaderSize = 4;
 
 // Running CRC state is left uncomplemented so header and payload can be hashed
@@ -18,11 +18,6 @@ uint32_t crc32(const uint8_t *data, size_t size, uint32_t crc = UINT32_MAX) {
     return crc;
 }
 
-bool newer(uint32_t first, uint32_t second) {
-    // Compare adjacent generations correctly when the uint32_t counter wraps.
-    const uint32_t distance = first - second;
-    return distance != 0 && distance < 0x80000000u;
-}
 } // namespace
 
 size_t snapshot(const Registry &registry, uint8_t *data, size_t capacity) {
@@ -59,36 +54,27 @@ void applyTlvs(Registry &registry, const uint8_t *data, size_t size) {
     }
 }
 
-Persistence::Slot Persistence::inspect(int slot, uint8_t *payload) const {
+Persistence::Slot Persistence::inspect(uint8_t *payload) const {
     // Header offsets are 0 commit, 1 magic, 5 format version, 6 generation,
     // 10 payload length, and 12 CRC. CRC covers header bytes 1..11 and payload.
-    const size_t start = slot * SlotSize;
     uint8_t header[HeaderSize];
-    for (size_t i = 0; i < sizeof(header); ++i) header[i] = storage_.read(start + i);
+    for (size_t i = 0; i < sizeof(header); ++i) header[i] = storage_.read(i);
 
     const uint16_t length = read<uint16_t>(header + 10);
     if (header[0] != Committed || read<uint32_t>(header + 1) != Magic ||
         header[5] != Version || length > PayloadCapacity) return {};
 
-    for (size_t i = 0; i < length; ++i) payload[i] = storage_.read(start + HeaderSize + i);
+    for (size_t i = 0; i < length; ++i) payload[i] = storage_.read(HeaderSize + i);
     const uint32_t crc = ~crc32(payload, length, crc32(header + 1, 11));
     if (crc != read<uint32_t>(header + 12) || !validTlvs(payload, length)) return {};
-    return {read<uint32_t>(header + 6), length, true};
+    return {length, true};
 }
 
 void Persistence::load() {
     uint8_t payload[PayloadCapacity];
-    const Slot first = inspect(0, payload);
-    const Slot second = inspect(1, payload);
+    const Slot active = inspect(payload);
     registry_.defaults();
-    if (second.valid && (!first.valid || newer(second.generation, first.generation))) {
-        applyTlvs(registry_, payload, second.length);
-    } else if (first.valid) {
-        // Inspecting the second bank reused the payload buffer. Read the selected
-        // first bank again before applying its records.
-        inspect(0, payload);
-        applyTlvs(registry_, payload, first.length);
-    }
+    if (active.valid) applyTlvs(registry_, payload, active.length);
     if (repair_) repair_();
 
     // Compare later edits against the loaded values after migration and repair.
@@ -105,42 +91,68 @@ void Persistence::refreshDirty() {
 
 bool Persistence::save() {
     uint8_t payload[PayloadCapacity];
-    const Slot first = inspect(0, payload);
-    const Slot second = inspect(1, payload);
-    const bool latestIsSecond = second.valid && (!first.valid || newer(second.generation, first.generation));
-    const Slot latest = latestIsSecond ? second : first;
-    if (latest.valid && !dirty_) return true; // Avoid unnecessary emulated EEPROM writes.
+    if (inspect(payload).valid && !dirty_) return true;
 
     const uint16_t length = snapshot(registry_, payload, sizeof(payload));
     if (length == 0 && registry_.fieldCount() != 0) return false;
     const uint32_t signature = crc32(payload, length);
-    const uint32_t generation = latest.valid ? latest.generation + 1 : 0;
-    const size_t start = latest.valid && !latestIsSecond ? SlotSize : 0;
-
     uint8_t header[HeaderSize];
     Writer out(header, sizeof(header));
     out.put(Committed);
     out.put(Magic);
     out.put(Version);
-    out.put(generation);
+    out.put(uint32_t{0});
     out.put(length);
     out.put(~crc32(payload, length, crc32(header + 1, 11)));
 
-    // Write the other bank, preserving the newest committed bank throughout.
-    // Committing last makes an interrupted destination fail inspection at boot.
-    storage_.update(start, 0);
-    for (size_t i = 1; i < sizeof(header); ++i) storage_.update(start + i, header[i]);
-    for (size_t i = 0; i < length; ++i) storage_.update(start + HeaderSize + i, payload[i]);
-    storage_.update(start, Committed);
+    storage_.update(0, 0);
+    for (size_t i = 1; i < sizeof(header); ++i) storage_.update(i, header[i]);
+    for (size_t i = 0; i < length; ++i) storage_.update(HeaderSize + i, payload[i]);
+    storage_.update(0, Committed);
 
-    // Check the intended generation and contents as well as the bank's CRC.
-    // An old valid destination must not be mistaken for a successful save.
-    const Slot committed = inspect(start / SlotSize, payload);
-    if (!committed.valid || committed.generation != generation || committed.length != length ||
+    const Slot committed = inspect(payload);
+    if (!committed.valid || committed.length != length ||
         crc32(payload, length) != signature) return false;
     savedSignature_ = signature;
     dirty_ = false;
     return true;
+}
+
+size_t Persistence::readProfile(uint8_t slot, uint8_t *name, uint8_t *payload) const {
+    if (slot >= ProfileCount) return 0;
+    const size_t address = SlotSize + slot * ProfileSlotSize;
+    uint8_t header[ProfileHeaderSize];
+    for (size_t i = 0; i < sizeof(header); ++i) header[i] = storage_.read(address + i);
+    const size_t length = read<uint16_t>(header + 2);
+    if (header[0] != Committed || header[1] != 'P' || !header[4] ||
+        !length || length > ProfileCapacity) return 0;
+    for (size_t i = 0; i < length; ++i)
+        payload[i] = storage_.read(address + sizeof(header) + i);
+    if (crc32(payload, length, crc32(header + 1, 27)) !=
+        read<uint32_t>(header + 28) || !validTlvs(payload, length)) return 0;
+    memcpy(name, header + 4, ProfileNameSize);
+    return length;
+}
+
+bool Persistence::writeProfile(uint8_t slot, const uint8_t *name, const uint8_t *payload, size_t length) {
+    if (slot >= ProfileCount || !name[0] || !length || length > ProfileCapacity ||
+        !validTlvs(payload, length)) return false;
+    const size_t address = SlotSize + slot * ProfileSlotSize;
+    uint8_t header[ProfileHeaderSize] = {};
+    Writer out(header, sizeof(header));
+    out.put(Committed);
+    out.put(uint8_t{'P'}); // Profile format marker, version 1.
+    out.put(static_cast<uint16_t>(length));
+    out.bytes(name, ProfileNameSize);
+    out.put(crc32(payload, length, crc32(header + 1, 27)));
+    storage_.update(address, 0);
+    for (size_t i = 1; i < sizeof(header); ++i) storage_.update(address + i, header[i]);
+    for (size_t i = 0; i < length; ++i) storage_.update(address + sizeof(header) + i, payload[i]);
+    storage_.update(address, Committed);
+    uint8_t savedName[ProfileNameSize], savedPayload[ProfileCapacity];
+    return readProfile(slot, savedName, savedPayload) == length &&
+           memcmp(savedName, name, ProfileNameSize) == 0 &&
+           memcmp(savedPayload, payload, length) == 0;
 }
 
 } // namespace config

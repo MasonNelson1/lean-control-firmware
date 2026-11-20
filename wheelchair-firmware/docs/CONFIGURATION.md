@@ -123,11 +123,12 @@ be changed in the firmware source before rebuilding.
 
 ## EEPROM and migration
 
-EEPROM addresses 0–2047 hold two 1024-byte banks. Each bank contains a commit
-marker, magic, storage version, generation, payload length, and CRC-32 over the
-metadata and payload. A save invalidates the destination, writes the payload and
-header, then commits the marker last. The firmware loads the newest valid bank
-and falls back to the previous bank if a save was interrupted.
+EEPROM addresses 0–1023 hold the active configuration. Active format version 2
+starts from firmware defaults when upgrading from the previous two-bank format.
+Addresses 1024–4152 hold seven independent 447-byte profile slots. Each slot
+supports a 24-byte UTF-8 name and 415 bytes of settings. Both record types use
+CRC-32 and write their commit marker last. An interrupted active save can revert
+to defaults, and an interrupted profile overwrite can leave that slot empty.
 
 The payload stores little-endian `[field ID u16, type u8, length u8, value]`
 records. Keep IDs stable when renaming or moving fields and never reuse retired
@@ -135,6 +136,11 @@ IDs. Unknown records are skipped, and incompatible type, width, or range
 changes use the new field default. Saving a change stores values for the
 current schema.
 Group names, help, ranges, and editor metadata are compiled into the firmware.
+
+The dashboard lists onboard profile names at Bluetooth connection. Loading a
+profile stages its settings locally. Saving a named profile includes draft
+values and leaves the active configuration untouched. All device writes
+require Disarm.
 
 ## PacketSerial protocol v1
 
@@ -162,6 +168,12 @@ are reserved and sent as zero.
 | 7 Revert | Empty | Empty |
 | 8 Restore Defaults | Group ID u16, or 0 for all | Empty |
 | 9 Preview | Group ID u16 | Preview type u8, field count u8, field IDs u16[], constant count u8, float32 constants[] |
+
+| 10 Profile List | Empty | Slot count u8, then per slot a presence u8 and 24 name bytes when present |
+| 11 Profile Read | Slot u8, offset u16 | Total size u16, up to 384 payload bytes |
+| 12 Profile Begin | Slot u8, total size u16, 24 zero-padded name bytes | Empty |
+| 13 Profile Chunk | Offset u16, up to 40 payload bytes | Empty |
+| 14 Profile Commit | Empty | Empty |
 
 Strings are UTF-8 with a one-byte length prefix. Scalar metadata is default,
 minimum, maximum, in the same encoding as the value. Booleans supply only a

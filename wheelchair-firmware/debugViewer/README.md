@@ -61,12 +61,8 @@ to read the setting's description. PID groups show a simulated step response
 that updates as you edit their tuning.
 
 - **Apply changes** updates the running configuration. **Save to wheelchair**
-  also commits it to EEPROM. **Revert to saved** discards edits and reloads the
-  last saved configuration. Restore defaults is available for each group and
-  for all settings.
-- Switch the wheelchair to DISARM mode before changing settings. Accepted runtime
-  changes take effect immediately. Apply, Save, Revert, and Restore defaults are
-  rejected in other modes. The two VESC IDs must differ.
+  commits it to EEPROM. Both require Disarm. You can edit drafts, stage firmware
+  defaults, and discard local edits in any mode.
 - Startup mode selects the drive mode at the next power-on. Save it to keep
   that selection after restarting.
 
@@ -78,40 +74,11 @@ EEPROM compatibility, and the protocol. Desktop Chrome uses
 
 ### Configuration profiles
 
-With settings loaded from the wheelchair, **Save profile** downloads a `.lean`
-file containing all supported Configuration and Advanced settings, including
-valid pending edits. **Load profile** stages recognized values as browser edits.
-Review the amber highlights before using **Apply changes** or
-**Save to wheelchair**. Saving or loading a profile sends no configuration writes
-to the wheelchair. A highlight clears when the edit is applied or reset to the
-current wheelchair value.
+The dashboard lists the wheelchair's seven profile slots after Bluetooth connects.
+Select a saved profile and click **Load profile** to stage its values for review.
+Select a slot and click **Save profile** while disarmed to store the dashboard's
+settings, including unapplied edits, independently of the active configuration.
 
-The `.lean` format is a standard ZIP with one DEFLATE-compressed UTF-8
-`profile.json` entry (rename a copy to `.zip` to inspect it). Its JSON structure is:
-
-```json
-{
-  "format": "lean-config",
-  "version": 1,
-  "fields": [
-    {"id": 10, "name": "Front gain", "path": ["Sensor gains"], "type": 1, "value": "1.25"}
-  ]
-}
-```
-
-IDs and numeric type codes come from the existing device schema. All numeric
-values use decimal strings to preserve precision, including 64-bit integers;
-Boolean values use JSON booleans. Curves use arrays of numeric strings plus an
-`editor` code and a `parameters` array of parameter names. Extra JSON properties
-are ignored. Unknown fields, unsupported types/editors, and incompatible identity
-metadata are skipped and counted. Missing fields keep their current values and
-any existing browser edits. Older entries may omit identity metadata other than
-`id` and `type`. Recognized fields still undergo the dashboard's normal range and
-curve validation; an invalid recognized value leaves all existing edits intact.
-Archive and expanded JSON sizes are limited to 1 MiB. The browser compresses and
-decompresses files in memory with a bundled ZIP library. Profiles from older
-Python-server versions remain compatible; the existing Python profile endpoints
-are retained for older clients. Profiles require no firmware changes.
 
 ## Development and GitHub Pages deployment
 

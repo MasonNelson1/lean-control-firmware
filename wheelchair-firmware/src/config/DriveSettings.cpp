@@ -43,7 +43,7 @@ namespace settings
             uint8_t read(size_t address) const override { return EEPROM.read(address); }
             void update(size_t address, uint8_t value) override { EEPROM.update(address, value); }
         } eeprom;
-        static_assert(E2END + 1 >= 2 * Persistence::SlotSize, "Configuration slots exceed EEPROM capacity");
+        static_assert(E2END + 1 >= Persistence::StorageSize, "Configuration slots exceed EEPROM capacity");
     } // namespace
 
     // IDs are part of the storage format. Keep them stable when moving or renaming a

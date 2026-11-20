@@ -15,7 +15,7 @@ function harness({secure = true, openError = null, backend = true} = {}) {
   const port = {
     readable: new ReadableStream({start(value) { controller = value; }}),
     async open(options) { assert.equal(options.baudRate, 115200); if (openError) throw openError; },
-    async close() { assert.equal(port.readable.locked, false); closed = true; },
+    async close() { assert.ok(!port.readable?.locked); closed = true; },
   };
   const context = vm.createContext({
     fetch: async () => ({ok: true, json: async () => ({})}),
@@ -33,14 +33,22 @@ function harness({secure = true, openError = null, backend = true} = {}) {
     graphs() {}, showMode() {}, sensors() {},
     appendConsole: line => messages.push(line),
     applyTelemetry: (rows, stale, source) => frames.push({rows: rows.slice(), stale, source}),
-    setInterval() { return 1; }, clearInterval() {},
+    setInterval() { return 1; }, clearInterval() {}, setTimeout,
   });
   vm.runInContext(source, context);
   return {
     context, elements, frames, messages, commands,
     run: code => vm.runInContext(code, context),
     send: value => controller.enqueue(typeof value === 'string' ? new TextEncoder().encode(value) : value),
-    fail: () => controller.error(new Error('out of range')),
+    fail() {
+      port.readable = null;
+      controller.error(new Error('out of range'));
+    },
+    interrupt() {
+      const old = controller;
+      port.readable = new ReadableStream({start(value) { controller = value; }});
+      old.error(new Error('serial overrun'));
+    },
     setNow: value => { now = value; },
     get closed() { return closed; },
     get requestOptions() { return requestOptions; },
@@ -101,6 +109,19 @@ test('Bluetooth loss releases reader and allows reconnecting', async () => {
   assert.equal(h.elements.get('#connection-disconnect').disabled, true);
 });
 
+test('recovers a transient read error without closing Bluetooth', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  h.interrupt();
+  await settle();
+  h.send(row(1000, 'ASSIST') + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  assert.equal(h.frames.at(-1).rows[0].mode, 'ASSIST');
+  assert.equal(h.closed, false);
+  await h.context.disconnectBluetooth();
+});
+
 test('configuration replies and CSV share the Bluetooth reader without leaking binary into telemetry', async () => {
   const h = harness();
   const replies = [];
@@ -131,7 +152,7 @@ test('insecure origins and failed opens do not start a Bluetooth connection', as
   assert.ok(failed.messages.some(message => message.includes('finish pairing')));
 });
 
-test('dropdown stops USB retries and connects only the selected transport', async () => {
+test('dropdown preserves Bluetooth while viewing legacy USB', async () => {
   const h = harness();
   h.run("connectionMode = 'usb'; usbConnected = true");
   h.elements.get('#connection-mode').value = 'bluetooth';
@@ -145,7 +166,7 @@ test('dropdown stops USB retries and connects only the selected transport', asyn
   assert.equal(h.elements.get('#connection-connect').disabled, true);
   h.elements.get('#connection-mode').value = 'usb';
   await h.context.changeConnectionMode();
-  assert.equal(h.closed, true);
+  assert.equal(h.closed, false);
   assert.equal(h.context.connectionMode, 'usb');
   assert.equal(h.context.usbConnected, false);
   assert.equal(h.commands.at(-1), 'disconnect');
@@ -158,23 +179,13 @@ test('dropdown stops USB retries and connects only the selected transport', asyn
 });
 
 
-test('Linux cleanup runs before port open and after disconnect', async () => {
+test('Bluetooth connects and disconnects without forcing Linux cleanup', async () => {
   const h = harness();
-  const calls = [];
-  h.context.fetch = async (url, options) => {
-    calls.push({url, method: options.method, active: h.context.bluetoothActive});
-    return {ok: true, json: async () => ({})};
-  };
+  h.context.fetch = () => assert.fail('Bluetooth must not invoke OS cleanup');
   await h.context.connectBluetooth();
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].active, false);
-  assert.equal(calls[0].url, '/bluetooth/disconnect');
-  assert.equal(calls[0].method, 'POST');
+  assert.equal(h.context.bluetoothActive, true);
   await h.context.disconnectBluetooth();
-  assert.equal(calls.length, 2);
-  await h.context.connectBluetooth();
-  assert.equal(calls.length, 3);
-  await h.context.disconnectBluetooth();
+  assert.equal(h.closed, true);
 });
 
 test('hosted Bluetooth connects without any Python cleanup or USB monitoring requests', async () => {

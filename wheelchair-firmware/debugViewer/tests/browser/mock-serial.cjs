@@ -9,6 +9,11 @@ module.exports = async function mockSerial(page) {
     ];
     let saved = fields.map(f => structuredClone(f.value));
     window.serialTestCommands = [];
+    const profiles = Array(7).fill(null);
+    let upload;
+    window.serialTestMode = mode => controller.enqueue(new TextEncoder().encode(
+      '1000,100,200,300,400,1000,370,0,0,0,0,0,0,1,' + mode + '\n'));
+
     const text = value => { const bytes = new TextEncoder().encode(value); return [bytes.length, ...bytes]; };
     const u16 = value => [value & 255, value >> 8];
     const f32 = value => { const b = new Uint8Array(4); new DataView(b.buffer).setFloat32(0, value, true); return [...b]; };
@@ -44,12 +49,20 @@ module.exports = async function mockSerial(page) {
           } else if (command === 6) { saved = fields.map(f => structuredClone(f.value)); dirty = false; }
           else if (command === 7) { fields.forEach((f, i) => { f.value = structuredClone(saved[i]); }); dirty = false; }
           else if (command === 8) { fields.filter(f => !id || f.group === id).forEach(f => { f.value = structuredClone(f.default); }); dirty = true; }
+          else if (command === 10) content = [7, ...profiles.flatMap(p => p ? [1, ...p.name] : [0])];
+          else if (command === 11) {
+            const profile = profiles[body[0]];
+            if (profile) content = [...u16(profile.bytes.length), ...profile.bytes.slice(body[1] | (body[2] << 8))];
+            else status = 3;
+          } else if (command === 12) upload = {slot: body[0], name: [...body.slice(3)], bytes: []};
+          else if (command === 13) upload.bytes.push(...body.slice(2));
+          else if (command === 14) profiles[upload.slot] = upload;
           else status = 3;
           const reply = Uint8Array.from([0xc2, 1, raw[2], command, status, dirty ? 2 : 0, ...content, 0, 0]);
           new DataView(reply.buffer).setUint16(reply.length - 2, ConfigWire.crc16(reply.subarray(0, -2)), true);
           controller.enqueue(Uint8Array.from([0, ...ConfigWire.encodeFrame(reply)]));
         }});
-        controller.enqueue(new TextEncoder().encode('1000,100,200,300,400,1000,370,0,0,0,0,0,0,1,DISARM\n'));
+        window.serialTestMode('DISARM');
       },
       async close() {}
     };

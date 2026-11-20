@@ -26,7 +26,7 @@ static void test(const std::string &name, const std::function<void()> &body) {
 
 class Memory : public Storage {
 public:
-    std::array<uint8_t, 2 * Persistence::SlotSize> data{};
+    std::array<uint8_t, Persistence::StorageSize> data{};
     int budget = -1;
     size_t writes = 0;
     Memory() { data.fill(0xff); }
@@ -237,6 +237,25 @@ static void registryAndStorage() {
         Registry r; Group g(r, 1, "g"); ConfigField<uint16_t> field(r, 10, {g, "a", ""}, 3, 0, 10);
         Persistence p(r, f.memory); p.load(); CHECK(field.get() == 3);
     });
+    test("seven profiles survive reload and a damaged slot is skipped", [] {
+        Fixture f;
+        uint8_t payload[Persistence::ProfileCapacity], buffer[Persistence::ProfileCapacity];
+        uint8_t name[Persistence::ProfileNameSize] = "Rider", actual[Persistence::ProfileNameSize];
+        const size_t size = snapshot(f.registry, payload, sizeof(payload));
+        for (uint8_t slot = 0; slot < Persistence::ProfileCount; ++slot)
+            CHECK(f.persistence.writeProfile(slot, name, payload, size));
+        CHECK(!f.persistence.writeProfile(Persistence::ProfileCount, name, payload, size));
+        Persistence rebooted(f.registry, f.memory);
+        rebooted.load();
+        for (uint8_t slot = 0; slot < Persistence::ProfileCount; ++slot) {
+            CHECK(rebooted.readProfile(slot, actual, buffer) == size);
+            CHECK(memcmp(name, actual, sizeof(name)) == 0);
+            CHECK(memcmp(payload, buffer, size) == 0);
+        }
+        f.memory.data[Persistence::SlotSize + Persistence::ProfileHeaderSize] ^= 1;
+        CHECK(!rebooted.readProfile(0, actual, buffer));
+        CHECK(rebooted.readProfile(1, actual, buffer) == size);
+    });
     Fixture saved; put(saved.a, uint16_t{42}); saved.persistence.refreshDirty(); CHECK(saved.persistence.save());
     for (size_t offset = 0; offset < 28; ++offset) test("CRC rejects damaged bank byte " + std::to_string(offset), [&, offset] {
         Fixture f; f.memory.data = saved.memory.data; f.memory.data[offset] ^= 1; f.persistence.load(); CHECK(f.a.get() == 5);
@@ -249,11 +268,29 @@ static void registryAndStorage() {
         Fixture f; f.memory.data = saved.memory.data; f.persistence.load();
         put(f.a, uint16_t{65}); f.persistence.refreshDirty(); f.memory.budget = static_cast<int>(cutoff);
         const bool success = f.persistence.save(); f.persistence.load();
-        CHECK(f.a.get() == (success ? 65 : 42)); CHECK(success == (cutoff == required));
+        CHECK(f.a.get() == (success ? 65 : cutoff == 0 ? 42 : 5)); CHECK(success == (cutoff == required));
     });
 }
 
 static void protocolTests() {
+    test("profile chunks require Disarm and a successful upload leaves active settings alone", [] {
+        Fixture f;
+        std::vector<uint8_t> begin(27);
+        begin[1] = 12;
+        begin[3] = 'R';
+        const std::vector<uint8_t> chunk{0, 0, 10, 0, uint8_t(Type::U16), 2, 42, 0,
+                                         20, 0, uint8_t(Type::U16), 2, 6, 0};
+        CHECK(f.command(Command::ProfileList, {}, false) == Status::Ok);
+        CHECK(f.command(Command::ProfileBegin, begin, false) == Status::NotDisarmed);
+        CHECK(f.command(Command::ProfileBegin, begin) == Status::Ok);
+        CHECK(f.command(Command::ProfileChunk, chunk, false) == Status::NotDisarmed);
+        CHECK(f.command(Command::ProfileCommit) == Status::Invalid);
+        CHECK(f.command(Command::ProfileBegin, begin) == Status::Ok);
+        CHECK(f.command(Command::ProfileChunk, chunk) == Status::Ok);
+        CHECK(f.command(Command::ProfileCommit) == Status::Ok);
+        CHECK(f.a.get() == 5 && f.protocol.revision() == 0 && !f.persistence.dirty());
+        CHECK(f.command(Command::ProfileRead, {0, 0, 0}, false) == Status::Ok);
+    });
     static_assert(static_cast<uint8_t>(Status::NotDisarmed) == 5, "Keep the dashboard status identifier stable");
     test("leaving DISARM before a queued write executes rejects the change", [] {
         Fixture f;

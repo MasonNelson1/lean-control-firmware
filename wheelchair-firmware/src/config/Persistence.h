@@ -48,6 +48,8 @@ public:
     size_t readProfile(uint8_t slot, uint8_t *name, uint8_t *payload) const;
     bool writeProfile(uint8_t slot, const uint8_t *name, const uint8_t *payload, size_t length);
 
+    bool swapProfiles(uint8_t first, uint8_t second);
+
     void load(); // Loads the newest valid bank and establishes the dirty baseline.
     bool save(); // Synchronous explicit save. Returns false if writing or verification fails.
     void refreshDirty(); // Call after changing RAM values, before deciding whether to save.

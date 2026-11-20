@@ -291,6 +291,23 @@ static void protocolTests() {
         CHECK(f.a.get() == 5 && f.protocol.revision() == 0 && !f.persistence.dirty());
         CHECK(f.command(Command::ProfileRead, {0, 0, 0}, false) == Status::Ok);
     });
+    test("move swaps adjacent profiles, requires Disarm, and selects into RAM", [] {
+        Fixture f;
+        uint8_t payload[Persistence::ProfileCapacity];
+        uint8_t first[Persistence::ProfileNameSize] = "First", second[Persistence::ProfileNameSize] = "Second";
+        CHECK(f.persistence.writeProfile(3, first, payload, snapshot(f.registry, payload, sizeof(payload))));
+        CHECK(put(f.a, uint16_t{42}));
+        CHECK(f.persistence.writeProfile(4, second, payload, snapshot(f.registry, payload, sizeof(payload))));
+        f.persistence.load();
+        CHECK(f.command(Command::ProfileMove, {4, 3}, false) == Status::NotDisarmed);
+        CHECK(f.command(Command::ProfileMove, {4, 2}) == Status::Invalid);
+        CHECK(f.command(Command::ProfileMove, {4, 3}) == Status::Ok);
+        CHECK(f.a.get() == 5);
+        CHECK(f.protocol.selectProfile(3) && f.a.get() == 42);
+        CHECK(f.protocol.selectProfile(4) && f.a.get() == 5);
+        CHECK(f.command(Command::ProfileMove, {4, 5}) == Status::Ok);
+        CHECK(!f.protocol.selectProfile(4) && f.protocol.selectProfile(5));
+    });
     static_assert(static_cast<uint8_t>(Status::NotDisarmed) == 5, "Keep the dashboard status identifier stable");
     test("leaving DISARM before a queued write executes rejects the change", [] {
         Fixture f;

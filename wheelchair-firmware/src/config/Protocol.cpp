@@ -53,13 +53,19 @@ Status Protocol::execute(Command command, const uint8_t *body, size_t size,
     const bool modifiesConfiguration = command == Command::Set || command == Command::Save ||
                                        command == Command::Revert || command == Command::Defaults ||
                                        command == Command::ProfileBegin || command == Command::ProfileChunk ||
-                                       command == Command::ProfileCommit;
+                                       command == Command::ProfileCommit || command == Command::ProfileMove;
     if (!disarmed) {
         uploadLength_ = 0;
         if (modifiesConfiguration) return Status::NotDisarmed;
     }
 
     switch (command) {
+    case Command::ProfileMove:
+        if (size != 2) return Status::Malformed;
+        if (body[0] >= Persistence::ProfileCount || body[1] >= Persistence::ProfileCount ||
+            (body[0] + 1 != body[1] && body[1] + 1 != body[0])) return Status::Invalid;
+        uploadLength_ = 0;
+        return persistence_.swapProfiles(body[0], body[1]) ? Status::Ok : Status::Storage;
     case Command::ProfileList:
     case Command::ProfileRead:
     case Command::ProfileBegin:
@@ -138,6 +144,22 @@ Status Protocol::execute(Command command, const uint8_t *body, size_t size,
     }
     }
     return Status::Unknown;
+}
+
+bool Protocol::selectProfile(uint8_t slot) {
+    uint8_t name[Persistence::ProfileNameSize], payload[Persistence::ProfileCapacity];
+    const size_t length = persistence_.readProfile(slot, name, payload);
+    if (!length) return false;
+    uint8_t old[Persistence::PayloadCapacity];
+    const size_t oldLength = snapshot(registry_, old, sizeof(old));
+    if (!oldLength) return false;
+    applyTlvs(registry_, payload, length);
+    if (validate_ && !validate_()) {
+        applyTlvs(registry_, old, oldLength);
+        return false;
+    }
+    changed();
+    return true;
 }
 
 Status Protocol::profiles(Command command, const uint8_t *body, size_t size, Writer &out) {

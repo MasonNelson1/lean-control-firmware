@@ -174,6 +174,7 @@ are reserved and sent as zero.
 | 12 Profile Begin | Slot u8, total size u16, 24 zero-padded name bytes | Empty |
 | 13 Profile Chunk | Offset u16, up to 40 payload bytes | Empty |
 | 14 Profile Commit | Empty | Empty |
+| 15 Profile Move | Source slot u8, adjacent destination slot u8 | Empty |
 
 Strings are UTF-8 with a one-byte length prefix. Scalar metadata is default,
 minimum, maximum, in the same encoding as the value. Booleans supply only a

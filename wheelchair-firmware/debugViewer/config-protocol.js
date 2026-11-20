@@ -8,7 +8,7 @@
  */
 const ConfigWire = (() => {
   const version = 1;
-  const commands = Object.freeze({hello: 1, group: 2, describe: 3, read: 4, set: 5, save: 6, revert: 7, defaults: 8, preview: 9, profileList: 10, profileRead: 11, profileBegin: 12, profileChunk: 13, profileCommit: 14});
+  const commands = Object.freeze({hello: 1, group: 2, describe: 3, read: 4, set: 5, save: 6, revert: 7, defaults: 8, preview: 9, profileList: 10, profileRead: 11, profileBegin: 12, profileChunk: 13, profileCommit: 14, profileMove: 15});
   const types = Object.freeze({f32: 1, f64: 2, i8: 3, u8: 4, i16: 5, u16: 6, i32: 7, u32: 8, i64: 9, u64: 10, boolean: 11, enum: 12, profile: 13});
   const editors = Object.freeze({signedPower: 1, piecewiseLinear: 2});
   // Each scalar type maps to its byte width and DataView accessor suffix.
@@ -269,7 +269,7 @@ const ConfigWire = (() => {
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           this.finish(new Error('No configuration reply. Check the connection and wheelchair firmware.'));
-        }, (command === commands.save || command === commands.profileCommit) ? 8000 : 2500);
+        }, (command === commands.save || command === commands.profileCommit || command === commands.profileMove) ? 8000 : 2500);
         const pending = {seq, command, resolve, reject, timer};
         this.pending = pending;
         // Serialize writer ownership even if a reply arrives before the previous

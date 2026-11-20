@@ -4,7 +4,7 @@
 
 #include "drive_constants.h"
 
-// Speed and acceleration selector knobs (C&K A10403RNCQ: 4-position SP4T,
+// Speed and profile selector knobs (C&K A10403RNCQ: 4-position SP4T,
 // non-shorting / break-before-make). Each knob's common goes to one analog pin
 // with a 4.7 kOhm pull-up to 3.3 V; each position grounds it through its own
 // resistor (1k, 2.2k, 4.7k, 10k). Nominal 12-bit readings: 718, 1306, 2048,
@@ -119,6 +119,7 @@ namespace knobs
         }
 
         int position() const { return position_; } // always 0..Positions-1
+        bool settled() const { return count_ >= StableReads && !faulted_; }
         bool faulted() const { return faulted_; }
         uint16_t lastRaw() const { return raw_; }
 

@@ -50,6 +50,8 @@
     byId('config-profiles').disabled = !editable || !profiles.length;
     byId('config-profile-save').disabled = !writable || slot === '';
     byId('config-profile-load').disabled = !editable || !profiles[slot];
+    byId('config-profile-up').disabled = !writable || !profiles[slot] || Number(slot) === 0;
+    byId('config-profile-down').disabled = !writable || !profiles[slot] || Number(slot) === profiles.length - 1;
     byId('config-summary').textContent = loaded
       ? [
           hasDrafts ? `${drafts.size} unapplied ${drafts.size === 1 ? 'edit' : 'edits'}` : '',
@@ -270,11 +272,15 @@
     }
     if (generation !== link.generation) return;
     profiles = next;
-    select.replaceChildren(...profiles.map((name, index) => {
+    const knobSlots = element('optgroup'), otherSlots = element('optgroup');
+    knobSlots.label = 'Wheelchair knob · positions 1–4';
+    otherSlots.label = 'Dashboard only · slots 5–7';
+    profiles.forEach((name, index) => {
       const option = element('option', '', (index + 1) + '. ' + (name || 'Empty slot'));
       option.value = String(index);
-      return option;
-    }));
+      (index < 4 ? knobSlots : otherSlots).append(option);
+    });
+    select.replaceChildren(...(profiles.length ? [knobSlots, otherSlots] : []));
     if (selected !== '' && profiles[selected] !== undefined) select.value = selected;
   }
 
@@ -307,6 +313,19 @@
       (await link.request(commands.profileCommit)).done();
       await listProfiles();
       status('Profile saved on the wheelchair.');
+    });
+  }
+
+  async function moveProfile(direction) {
+    await run(async () => {
+      requireDisarm();
+      const select = byId('config-profiles');
+      const from = Number(select.value), to = from + direction;
+      if (!profiles[from] || to < 0 || to >= profiles.length) return;
+      (await link.request(commands.profileMove, Uint8Array.of(from, to))).done();
+      await listProfiles();
+      select.value = String(to);
+      status('Profile moved to slot ' + (to + 1) + '.');
     });
   }
 
@@ -840,6 +859,8 @@
   byId('config-profile-save').onclick = saveProfile;
   byId('config-profile-load').onclick = loadProfile;
   byId('config-profiles').onchange = updateToolbar;
+  byId('config-profile-up').onclick = () => moveProfile(-1);
+  byId('config-profile-down').onclick = () => moveProfile(1);
   window.addEventListener('resize', updatePidPlots);
   window.configurationConnectionChanged(null);
 })();

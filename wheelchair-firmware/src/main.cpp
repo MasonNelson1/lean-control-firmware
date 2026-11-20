@@ -17,9 +17,12 @@ using namespace common;
 // Runtime knob selections, set by updateKnobs(). Start at the gentlest
 // position until the knobs are read in setup().
 knobs::RotarySwitch speedKnob;
-knobs::RotarySwitch accelKnob;
+knobs::RotarySwitch profileKnob;
+static int lastProfilePosition = knobs::Invalid;
+static int pendingProfile = knobs::Invalid;
+static int activeProfile = knobs::Invalid;
 float userMaxSpeedMS = knobs::speedLimitMS(0);
-float userMaxAccelMS2 = knobs::accelLimitMS2(0);
+const float userMaxAccelMS2 = knobs::accelLimitMS2(0);
 // TODO: a stop/fault should bypass smoothing and reset BOTH PID instances.
 
 // MISC CONSTANTS and vars
@@ -156,16 +159,15 @@ void printMode()
 static void applyKnobs()
 {
     userMaxSpeedMS = knobs::speedLimitMS(speedKnob.position());
-    userMaxAccelMS2 = knobs::accelLimitMS2(accelKnob.position());
 
     // this only prints when the knobs are moved, not all the time.
     char line[160];
     const int length = snprintf(line, sizeof(line),
-                                "Knobs: speed %d/%d (%.2f m/s, raw %u)%s, accel %d/%d (%.2f m/s2, raw %u)%s\n",
+                                "Knobs: speed %d/%d (%.2f m/s, raw %u)%s, profile %d/%d (raw %u)%s\n",
                                 speedKnob.position() + 1, knobs::Positions, userMaxSpeedMS,
                                 static_cast<unsigned>(speedKnob.lastRaw()), speedKnob.faulted() ? " FAULT->slowest" : "",
-                                accelKnob.position() + 1, knobs::Positions, userMaxAccelMS2,
-                                static_cast<unsigned>(accelKnob.lastRaw()), accelKnob.faulted() ? " FAULT->slowest" : "");
+                                profileKnob.position() + 1, knobs::Positions,
+                                static_cast<unsigned>(profileKnob.lastRaw()), profileKnob.faulted() ? " FAULT" : "");
     if (length <= 0 || length >= static_cast<int>(sizeof(line)))
         return;
     Serial.write(reinterpret_cast<const uint8_t *>(line), length);
@@ -173,8 +175,49 @@ static void applyKnobs()
         Serial1.write(reinterpret_cast<const uint8_t *>(line), length);
 }
 
-// Sample both knobs every knobs::SampleMs; an invalid (open/shorted) knob
-// falls back to its slowest position after knobs::FaultHoldMs.
+static bool activateProfile(int slot)
+{
+    if (!settings::protocol.selectProfile(slot))
+        return false;
+    activeProfile = slot;
+    applyRuntimeSettings();
+    leanMode.reset();
+    assistMode.reset();
+    leftRPMSetpointPID.reset();
+    rightRPMSetpointPID.reset();
+    motorTelemetry = {};
+    for (auto &motor : measuredMotors)
+        motor = {};
+    return true;
+}
+
+static void updateProfileLED()
+{
+    constexpr uint32_t pulseMs = 200;
+    constexpr uint32_t gapMs = 2000;
+    static bool wasSelecting = false;
+    static int displayedProfile = knobs::Invalid;
+    static uint32_t cycleStart = 0;
+    const uint32_t now = millis();
+    const bool selecting = pendingProfile != knobs::Invalid;
+    if (displayedProfile != activeProfile || (wasSelecting && !selecting))
+    {
+        displayedProfile = activeProfile;
+        cycleStart = now;
+    }
+    wasSelecting = selecting;
+
+    bool ledOn = selecting;
+    if (!selecting && activeProfile != knobs::Invalid)
+    {
+        const uint32_t burstMs = (2 * (activeProfile + 1) - 1) * pulseMs;
+        const uint32_t phase = (now - cycleStart) % (burstMs + gapMs);
+        cycleStart = now - phase;
+        ledOn = phase < burstMs && phase % (2 * pulseMs) < pulseMs;
+    }
+    digitalWrite(PIN_CONNECTED_LED, ledOn ? HIGH : LOW);
+}
+
 static void updateKnobs()
 {
     static uint32_t lastSampleMs = 0;
@@ -184,8 +227,13 @@ static void updateKnobs()
     lastSampleMs = now;
 
     const bool speedChanged = speedKnob.update(analogRead(PIN_SPEED), now);
-    const bool accelChanged = accelKnob.update(analogRead(PIN_ACCEL), now);
-    if (speedChanged || accelChanged)
+    const bool profileChanged = profileKnob.update(analogRead(PIN_ACCEL), now);
+    if (profileKnob.settled() && profileKnob.position() != lastProfilePosition)
+    {
+        lastProfilePosition = profileKnob.position();
+        pendingProfile = lastProfilePosition;
+    }
+    if (speedChanged || profileChanged)
         applyKnobs();
 }
 void setup()
@@ -219,7 +267,11 @@ void setup()
     // Take the knobs' power-on positions before the first drive tick. An
     // invalid reading leaves that knob at its slowest position.
     speedKnob.seed(analogRead(PIN_SPEED), millis());
-    accelKnob.seed(analogRead(PIN_ACCEL), millis());
+    const auto profileRaw = analogRead(PIN_ACCEL);
+    profileKnob.seed(profileRaw, millis());
+    lastProfilePosition = knobs::classify(profileRaw);
+    if (lastProfilePosition != knobs::Invalid)
+        activateProfile(lastProfilePosition);
     applyKnobs();
     // ezButton configures the pins as INPUT_PULLUP: pressing connects to GND.
 
@@ -242,6 +294,8 @@ void setMode()
     static bool disarmPressPending = false;
     static bool assistHoldPending = false;
     static uint32_t disarmPressedAt = 0;
+    static uint32_t profilePressedAt = 0;
+    static int confirmingProfile = knobs::Invalid;
 
     noInterrupts();
     const bool leanEdge = leanEdgePending;
@@ -263,7 +317,13 @@ void setMode()
     calibrationPending |= calibrateButton.isPressed() && selectedMode == LEAN;
     disarmModeButton.loop();
 
-    if (leanPressPending || remotePressPending || disarmPressPending || assistHoldPending)
+    // A confirmation belongs to one stable detent and one continuous press.
+    if (confirmingProfile != pendingProfile || !profileKnob.settled() ||
+        leanModeButton.getStateRaw() != LOW || MODE != DISARM || selectedMode != DISARM)
+        confirmingProfile = knobs::Invalid;
+
+    if (leanPressPending || remotePressPending || disarmPressPending || assistHoldPending ||
+        confirmingProfile != knobs::Invalid)
     {
         leanMode.sampleSensors(/*seatOnly=*/true);
         if (!leanMode.isSeated())
@@ -272,6 +332,7 @@ void setMode()
             remotePressPending = false;
             disarmPressPending = false;
             assistHoldPending = false;
+            confirmingProfile = knobs::Invalid;
             return;
         }
     }
@@ -300,13 +361,29 @@ void setMode()
         assistHoldPending = false;
     }
 
+    const bool profilePress = leanPressed && pendingProfile != knobs::Invalid;
+    if (profilePress && profileKnob.settled() && MODE == DISARM && selectedMode == DISARM)
+    {
+        confirmingProfile = pendingProfile;
+        profilePressedAt = now;
+    }
+    if (disarmPressed || remotePressed || assistHoldPending)
+        confirmingProfile = knobs::Invalid;
+    if (confirmingProfile != knobs::Invalid && now - profilePressedAt >= 2000)
+    {
+        if (!activateProfile(confirmingProfile))
+            Serial.printf("Profile %d unavailable; keeping current settings.\n", confirmingProfile + 1);
+        pendingProfile = knobs::Invalid;
+        confirmingProfile = knobs::Invalid;
+    }
+
     if (disarmPressed)
     {
         // A press that exits Assist cannot reenter it until the next press.
         assistHoldPending = selectedMode != ASSIST;
         selectedMode = DISARM;
     }
-    else if (leanPressed && selectedMode != LEAN)
+    else if (leanPressed && !profilePress && selectedMode != LEAN)
     {
         assistHoldPending = false;
         selectedMode = LEAN;
@@ -476,8 +553,8 @@ static void replyToConfiguration()
 
 void loop()
 {
-    setMode();
     updateKnobs();
+    setMode();
     packetSerial.update();
     CAN_message_t feedback;
     for (int i = 0; i < 32 && can1.read(feedback); ++i)
@@ -487,6 +564,7 @@ void loop()
     }
     updateDrive();
     updateModeLEDs();
+    updateProfileLED();
     replyToConfiguration();
 
     // Keep sensor telemetry at 20 Hz in every mode.

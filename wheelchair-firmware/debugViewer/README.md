@@ -78,6 +78,10 @@ The dashboard lists the wheelchair's seven profile slots after Bluetooth connect
 Select a saved profile and click **Load profile** to stage its values for review.
 Select a slot and click **Save profile** while disarmed to store the dashboard's
 settings, including unapplied edits, independently of the active configuration.
+Slots 1–4 correspond to the wheelchair's profile knob. Use **Move profile up**
+or **Move profile down** in Disarm to swap with the adjacent slot. Turning the
+knob stages a profile. Hold Lean for two seconds while seated and disarmed to
+apply it.
 
 
 ## Development and GitHub Pages deployment

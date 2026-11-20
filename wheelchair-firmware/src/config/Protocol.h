@@ -12,7 +12,7 @@ constexpr size_t MaxRequestSize = 48;
 constexpr size_t MaxResponseSize = 400;
 
 // Preserve numeric values because config-protocol.js uses the same identifiers.
-enum class Command : uint8_t { Hello = 1, Group, Describe, Read, Set, Save, Revert, Defaults, Preview, ProfileList, ProfileRead, ProfileBegin, ProfileChunk, ProfileCommit };
+enum class Command : uint8_t { Hello = 1, Group, Describe, Read, Set, Save, Revert, Defaults, Preview, ProfileList, ProfileRead, ProfileBegin, ProfileChunk, ProfileCommit, ProfileMove };
 enum class Status : uint8_t { Ok, Version, Malformed, Unknown, Invalid, NotDisarmed, Storage, TooLarge };
 
 // CRC-16/CCITT-FALSE. Covers the decoded packet except its final two CRC bytes.
@@ -43,6 +43,7 @@ public:
         if (!disarmed || now - uploadActivity_ >= 10000) uploadLength_ = 0;
         now_ = now;
     }
+    bool selectProfile(uint8_t slot);
     bool pending() const { return pendingSize_ != 0; }
 
     /**

@@ -155,4 +155,17 @@ bool Persistence::writeProfile(uint8_t slot, const uint8_t *name, const uint8_t 
            memcmp(savedPayload, payload, length) == 0;
 }
 
+bool Persistence::swapProfiles(uint8_t first, uint8_t second) {
+    if (first >= ProfileCount || second >= ProfileCount || first == second) return false;
+    uint8_t firstName[ProfileNameSize], secondName[ProfileNameSize];
+    uint8_t firstPayload[ProfileCapacity], secondPayload[ProfileCapacity];
+    const size_t firstLength = readProfile(first, firstName, firstPayload);
+    const size_t secondLength = readProfile(second, secondName, secondPayload);
+    if (!firstLength || !writeProfile(second, firstName, firstPayload, firstLength)) return false;
+    if (secondLength) return writeProfile(first, secondName, secondPayload, secondLength);
+    const size_t address = SlotSize + first * ProfileSlotSize;
+    storage_.update(address, 0);
+    return storage_.read(address) == 0;
+}
+
 } // namespace config

@@ -55,6 +55,7 @@ struct MotorCommandTelemetry
 };
 
 static MotorCommandTelemetry motorTelemetry{};
+static MotorTargets assistBoostCurrent{};
 
 // This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
 // where the value is the percentage of the speed-knob max speed (full input = selected top speed).
@@ -516,6 +517,7 @@ static void updateDrive()
         Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
         break;
     }
+    assistBoostCurrent = MODE == ASSIST ? targets : MotorTargets{};
     if (MODE == LEAN || MODE == REMOTE)
     {
         setMotorPower(targets.left, targets.right, dt);
@@ -578,7 +580,8 @@ void loop()
     if (!headerPrinted)
     {
         Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,"
-                       "leftSmoothedRPM,rightSmoothedRPM,stopped,mode");
+                       "leftSmoothedRPM,rightSmoothedRPM,stopped,leftActualRPM,rightActualRPM,"
+                       "leftBoostCurrent,rightBoostCurrent,mode");
         headerPrinted = true;
     }
 
@@ -588,18 +591,26 @@ void loop()
         leanMode.sampleSensors();
     const LeanTelemetry lean = leanMode.getTelemetry();
     const bool stopped = MODE == DISARM || (leanActive ? lean.stopped : remoteMode.getTelemetry().stopped);
-    const MotorCommandTelemetry commands = MODE == DISARM ? MotorCommandTelemetry{} : motorTelemetry;
+    const bool rpmControl = MODE == LEAN || MODE == REMOTE;
+    const MotorCommandTelemetry commands = rpmControl
+        ? motorTelemetry : MotorCommandTelemetry{NAN, NAN, NAN, NAN};
+    const auto actualRPM = [now](const VescStatus &motor) {
+        constexpr uint32_t feedbackTimeoutMs = 500;
+        return motor.rpmFrames && now - motor.lastRpmMs <= feedbackTimeoutMs
+            ? motor.erpm / VESC_ERPM_PER_WHEEL_RPM : NAN;
+    };
     const int total = lean.front + lean.back + lean.left + lean.right;
 
     char row[256];
     const int rowLength = snprintf(row, sizeof(row),
-                                   "%lu,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%s\n",
+                                   "%lu,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.4f,%.4f,%.4f,%.4f,%s\n",
                                    static_cast<unsigned long>(now),
                                    lean.front, lean.back, lean.left, lean.right, total,
                                    leanMode.getUserWeightEstimate(), lean.speed, lean.turn,
                                    commands.leftTargetRPM, commands.rightTargetRPM,
                                    commands.leftSmoothedRPM, commands.rightSmoothedRPM,
-                                   stopped ? 1 : 0, modeName(MODE));
+                                   stopped ? 1 : 0, actualRPM(measuredMotors[0]), actualRPM(measuredMotors[1]),
+                                   assistBoostCurrent.left, assistBoostCurrent.right, modeName(MODE));
     if (rowLength <= 0 || rowLength >= static_cast<int>(sizeof(row)))
         return;
 

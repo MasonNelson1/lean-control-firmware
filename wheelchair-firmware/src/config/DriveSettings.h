@@ -25,6 +25,7 @@ namespace settings
     extern config::ProfileField<2> leanForewardBackResponse;
     extern config::ProfileField<2> leanSideToSideResponse;
     extern config::ProfileField<2> assistResponse;
+    extern config::ProfileField<6> leanTurnMix;
     extern config::ConfigField<float> assistMaxBoostAmps, assistSlowdownRPM, assistSlowdownBoostFraction;
 
     extern config::ConfigField<unsigned long> controllerTimeout, buttonDebounce;

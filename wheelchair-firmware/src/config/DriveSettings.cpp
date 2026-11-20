@@ -33,6 +33,14 @@ namespace settings
         constexpr float DefaultForewardBackKnee[] = {0.21f, 0.09f};
         constexpr float DefaultAssistKnee[] = {0.44f, 0.61f};
         constexpr float DefaultLeftRightKnee[] = {0.35f, 0.20f};
+        // Fit two segments to (speed + 0.1)^0.47 over positive speed.
+        constexpr float FullSpeedTurnGain = 1.0458f;
+        constexpr float DefaultTurnMix[] = {0.0f, 0.3388f, 0.293f, 0.6447f, 1.0f, FullSpeedTurnGain};
+        constexpr Parameter TurnMixBounds[] = {
+            {"Zero speed", 0.0f, 0.0f}, {"Turn gain at zero speed", 0.0f, FullSpeedTurnGain},
+            {"Knee speed", 0.001f, 0.999f}, {"Knee gain", 0.0f, FullSpeedTurnGain},
+            {"Full speed", 1.0f, 1.0f}, {"Full-speed gain", FullSpeedTurnGain, FullSpeedTurnGain}
+        };
         constexpr Parameter KneeBounds[] = {{"Knee input", 0.001f, 0.999f}, {"Knee output", 0.001f, 0.999f}};
         constexpr auto DefaultPid = RPMSetpointPID::defaultTuning();
 
@@ -95,6 +103,10 @@ namespace settings
     ConfigField<float> assistSlowdownBoostFraction(registry(), 35,
                                                   {drive, "Assist slowdown boost fraction", "Fraction of normal boost delivered to a slowing wheel. 0.3 delivers 30% of normal boost."},
                                                   0.3f, 0.1f, 0.5f);
+
+    ProfileField<6> leanTurnMix(registry(), 36,
+                               {response, "Lean turn mixing", "Turn multiplier versus absolute shaped speed. The point on the vertical axis sets the turn gain at zero speed."},
+                               Editor::PiecewiseLinear, DefaultTurnMix, TurnMixBounds);
 
     // These bounds keep the watchdog at or below its original timeout and the
     // control loop at 100 Hz or faster. Hard propulsion limits stay in drive_constants.h.

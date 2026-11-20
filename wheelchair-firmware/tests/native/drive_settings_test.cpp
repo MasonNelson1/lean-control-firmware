@@ -56,7 +56,7 @@ int main() {
             &settings::defaultMode, &settings::deadband,
             &settings::frontGain, &settings::rearGain, &settings::leftGain, &settings::rightGain,
             &settings::frontWeight, &settings::rearWeight, &settings::leftWeight, &settings::rightWeight,
-            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse,
+            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse, &settings::leanTurnMix,
             &settings::assistMaxBoostAmps, &settings::assistSlowdownRPM, &settings::assistSlowdownBoostFraction,
             &settings::controllerTimeout, &settings::buttonDebounce,
             &settings::controlPeriod, &settings::calibrationSamples, &settings::defaultFloor,

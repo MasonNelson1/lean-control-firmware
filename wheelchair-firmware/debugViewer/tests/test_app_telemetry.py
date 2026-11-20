@@ -132,3 +132,14 @@ class AssetTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExtendedTelemetryTest(unittest.TestCase):
+    def test_assist_current_and_unavailable_rpm(self):
+        kind, sample = viewer.parse('1,2,3,4,5,6,7,0,0,nan,nan,nan,nan,1,nan,-12,3.25,4.5,ASSIST')
+        self.assertEqual(kind, 'data')
+        self.assertEqual(sample['mode'], 'ASSIST')
+        self.assertNotIn('leftActualRPM', sample)
+        self.assertEqual(sample['rightActualRPM'], -12)
+        self.assertEqual(sample['leftBoostCurrent'], 3.25)
+        self.assertEqual(sample['rightBoostCurrent'], 4.5)

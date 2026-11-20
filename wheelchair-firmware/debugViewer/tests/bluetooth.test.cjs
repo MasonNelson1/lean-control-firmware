@@ -68,6 +68,20 @@ test('parses current and legacy telemetry; rejects headers and damaged rows', ()
   }
 });
 
+test('parses measured wheel RPM and requested assist current', () => {
+  const parse = harness().context.parseBluetoothLine;
+  const sample = parse(row().replace(/LEAN$/, '12,-8,3.25,4.5,ASSIST'));
+  assert.equal(sample.leftActualRPM, 12);
+  assert.equal(sample.rightActualRPM, -8);
+  assert.equal(sample.leftBoostCurrent, 3.25);
+  assert.equal(sample.rightBoostCurrent, 4.5);
+  assert.equal(sample.mode, 'ASSIST');
+  const missing = parse('1,2,3,4,5,6,7,0,0,nan,nan,nan,nan,1,nan,0,0,0,DISARM');
+  assert.equal(missing.leftActualRPM, undefined);
+  assert.equal(missing.rightActualRPM, 0);
+  assert.equal(missing.leftSmoothedRPM, undefined);
+});
+
 test('reads fragmented lines, marks stale data, clears history after device reboot, and disconnects cleanly', async () => {
   const h = harness();
   await h.context.connectBluetooth();

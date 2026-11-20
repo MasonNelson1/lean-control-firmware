@@ -548,6 +548,11 @@
     };
   }
 
+  function movableProfilePoint(field, index) {
+    const x = field.parameters[index], y = field.parameters[index + 1];
+    return x.min !== x.max || y.min !== y.max;
+  }
+
   function drawProfile(canvas, field, values, scale) {
     const {pad, x, y, xMin, xMax, yMin, yMax} = scale;
     const g = canvas.getContext('2d');
@@ -594,6 +599,7 @@
     g.stroke();
     g.fillStyle = '#146db0';
     for (let i = 0; i < values.length; i += 2) {
+      if (!movableProfilePoint(field, i)) continue;
       g.beginPath();
       g.arc(x(values[i]), y(values[i + 1]), 6, 0, 2 * Math.PI);
       g.fill();
@@ -622,7 +628,7 @@
       label.htmlFor = number.input.id;
       number.slider.setAttribute('aria-label', field.name + ' ' + parameter.name);
       label.append(number.container);
-      controls.append(label);
+      if (parameter.min !== parameter.max) controls.append(label);
       return number;
     });
     const inputs = numeric.map(number => number.input);
@@ -644,6 +650,7 @@
         if (drag || event.button !== 0) return;
         const [px, py] = position(event);
         for (let index = 0; index < plotted.length; index += 2) {
+          if (!movableProfilePoint(field, index)) continue;
           if (Math.hypot(px - scale.x(plotted[index]), py - scale.y(plotted[index + 1])) > 18) continue;
           drag = {id: event.pointerId, index};
           canvas.setPointerCapture(event.pointerId);

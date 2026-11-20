@@ -1,14 +1,21 @@
 // HC-06 is Bluetooth Classic SPP (serial), not a BLE GATT device.
-const telemetryFields = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped'.split(' ');
+const telemetryFields = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped leftActualRPM rightActualRPM leftBoostCurrent rightBoostCurrent'.split(' ');
 
 function parseBluetoothLine(line) {
   const parts = line.trim().split(',').map(value => value.trim());
-  if (![12, 14, 15].includes(parts.length)) return null;
-  const numeric = parts.length === 15 ? parts.slice(0, -1) : parts;
-  if (numeric.some(value => value === '' || !Number.isFinite(Number(value)))) return null;
-  const fields = numeric.length === 14 ? telemetryFields : [...telemetryFields.slice(0, 11), 'stopped'];
-  const row = Object.fromEntries(fields.map((field, i) => [field, Number(numeric[i])]));
-  row.mode = parts.length === 15 && ['LEAN', 'REMOTE', 'DISARM', 'ASSIST'].includes(parts[14]) ? parts[14] : 'UNKNOWN';
+  if (![12, 14, 15, 19].includes(parts.length)) return null;
+  const hasMode = parts.length === 15 || parts.length === 19;
+  const numeric = hasMode ? parts.slice(0, -1) : parts;
+  const fields = numeric.length === 12 ? [...telemetryFields.slice(0, 11), 'stopped'] : telemetryFields;
+  const row = {};
+  for (const [index, value] of numeric.entries()) {
+    const optional = parts.length === 19 && index >= 9 && index <= 15 && index !== 13;
+    if (optional && value.toLowerCase() === 'nan') continue;
+    if (!value || !Number.isFinite(Number(value))) return null;
+    row[fields[index]] = Number(value);
+  }
+  const mode = hasMode ? parts.at(-1) : null;
+  row.mode = ['LEAN', 'REMOTE', 'DISARM', 'ASSIST'].includes(mode) ? mode : 'UNKNOWN';
   return row;
 }
 

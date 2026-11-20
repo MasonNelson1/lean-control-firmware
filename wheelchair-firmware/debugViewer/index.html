@@ -140,6 +140,20 @@
       padding: 14px 12px 8px
     }
 
+    .plot-series {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 15px;
+      padding: 10px 4px 4px;
+    }
+
+    .plot-series label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+
     .plot {
       height: 280px;
       width: 100%;
@@ -795,20 +809,28 @@
           <section class="panel">
             <div class="panelhead">
               <div>
-                <h2>RPM tracking</h2>
-                <div class="sub">Target and PID-smoothed wheel commands</div>
+                <h2>Wheel RPM and assist boost</h2>
               </div>
               <div class="controls"><button id="pause" title="Pause or resume the line graphs.">Pause
-                  graphs</button><select id="window" aria-label="Graph time window">
+                  graphs</button>
+                <label title="Fit the vertical axes to the enabled lines.">
+                  <input type="checkbox" id="variable-scaling" checked> Variable scaling
+                </label>
+                <select id="window" aria-label="Graph time window">
                   <option value="60">60 seconds</option>
                   <option value="30">30 seconds</option>
                   <option value="10">10 seconds</option>
                 </select></div>
             </div>
-            <div class="plots"><canvas id="left" class="plot"
-                aria-label="Left target and smoothed RPM graph"></canvas><canvas id="right" class="plot"
-                aria-label="Right target and smoothed RPM graph"></canvas></div>
-            <div class="legend-note">Commanded RPM · positive = forward · time from device boot</div>
+            <div class="plots">
+              <div id="left-series" class="plot-series" role="group" aria-label="Left wheel RPM lines"></div>
+              <canvas id="left" class="plot" aria-label="Left wheel RPM graph"></canvas>
+              <div id="right-series" class="plot-series" role="group" aria-label="Right wheel RPM lines"></div>
+              <canvas id="right" class="plot" aria-label="Right wheel RPM graph"></canvas>
+              <div id="boost-series" class="plot-series" role="group" aria-label="Assist boost current lines"></div>
+              <canvas id="boost" class="plot" aria-label="Assist boost current graph"></canvas>
+            </div>
+            <div class="legend-note">RPM error is smoothed command minus measured RPM. Boost current shows the amps requested in Assist.</div>
           </section>
           <section class="panel">
             <div class="panelhead">
@@ -923,18 +945,106 @@
 
     function surface(id) { const c = $('#' + id), b = c.getBoundingClientRect(), d = devicePixelRatio || 1; c.width = Math.round(b.width * d); c.height = Math.round(b.height * d); const g = c.getContext('2d'); g.scale(d, d); return [g, b.width, b.height] }
     function ticks(lo, hi, count) { const raw = (hi - lo) / count, p = 10 ** Math.floor(Math.log10(raw)), n = raw / p, step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; let a = []; for (let x = Math.ceil(lo / step) * step; x <= hi + step * .001; x += step)a.push(Math.abs(x) < step * .001 ? 0 : x); return a }
-    function plot(side, rows, color) {
-      const [g, w, h] = surface(side), m = { l: 66, r: 20, t: 26, b: 48 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
-      const end = rows.length ? rows.at(-1).time_ms / 1000 : 60, start = Math.max(0, end - Number($('#window').value)), finish = Math.max(start + 1, end); const ymin = -170, ymax = 170, yt = [-170, -150, -100, -50, 0, 50, 100, 150, 170]; const Y = v => m.t + ph - (v - ymin) / (ymax - ymin) * ph, X = v => m.l + (v - start) / (finish - start) * pw;
-      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.font = '12px Arial, sans-serif'; g.lineWidth = .7;
-      for (const y of yt) { g.strokeStyle = '#e1e1e1'; g.beginPath(); g.moveTo(m.l, Y(y)); g.lineTo(w - m.r, Y(y)); g.stroke(); g.fillStyle = '#262626'; g.textAlign = 'right'; g.fillText(String(Math.round(y * 100) / 100), m.l - 9, Y(y) + 4) }
-      for (const x of ticks(start, finish, 8)) { g.strokeStyle = '#e6e6e6'; g.beginPath(); g.moveTo(X(x), m.t); g.lineTo(X(x), h - m.b); g.stroke(); g.fillStyle = '#262626'; g.textAlign = 'center'; g.fillText(String(Math.round(x * 10) / 10), X(x), h - m.b + 19) }
-      g.strokeStyle = '#333'; g.strokeRect(m.l, m.t, pw, ph); if (ymin < 0 && ymax > 0) { g.lineWidth = .7; g.beginPath(); g.moveTo(m.l, Y(0)); g.lineTo(w - m.r, Y(0)); g.stroke() }
-      g.save(); g.beginPath(); g.rect(m.l, m.t, pw, ph); g.clip(); for (const [key, col, width] of [[side + 'TargetRPM', '#a8a8a8', 1.25], [side + 'SmoothedRPM', color, 1.8]]) { g.strokeStyle = col; g.lineWidth = width; g.beginPath(); let pen = false, prev = null; for (const r of rows) { if (r.time_ms / 1000 < start) continue; const v = r[key]; if (!Number.isFinite(v)) { pen = false; continue } const x = X(r.time_ms / 1000), y = Y(v); if (!pen || prev !== null && r.time_ms - prev > 500) g.moveTo(x, y); else g.lineTo(x, y); pen = true; prev = r.time_ms } g.stroke() } g.restore();
-      g.fillStyle = '#252525'; g.textAlign = 'center'; g.font = '13px Arial, sans-serif'; g.fillText('Time (s)', m.l + pw / 2, h - 8); g.save(); g.translate(17, m.t + ph / 2); g.rotate(-Math.PI / 2); g.fillText((side === 'left' ? 'Left' : 'Right') + ' target RPM', 0, 0); g.restore();
-      const lw = Math.min(220, pw - 16), lx = m.l + 9, ly = m.t + 9; g.fillStyle = '#ffffffed'; g.fillRect(lx, ly, lw, 42); g.strokeStyle = '#d3d3d3'; g.strokeRect(lx, ly, lw, 42); g.font = '11px Arial, sans-serif'; g.textAlign = 'left';[['#a8a8a8', 'Original target'], [color, rows.length && rows.at(-1)[side + 'SmoothedRPM'] === undefined ? 'Smoothed unavailable' : 'PID-smoothed target']].forEach(([c, label], i) => { g.strokeStyle = c; g.lineWidth = 1.8; g.beginPath(); g.moveTo(lx + 8, ly + 13 + i * 17); g.lineTo(lx + 31, ly + 13 + i * 17); g.stroke(); g.fillStyle = '#333'; g.fillText(label, lx + 38, ly + 17 + i * 17) })
+    function rpmSeries(side, color) {
+      return [
+        ['Target', '#626c77', row => row[side + 'TargetRPM']],
+        ['Smoothed', color, row => row[side + 'SmoothedRPM']],
+        ['Actual', '#217a55', row => row[side + 'ActualRPM']],
+        ['Error', '#8b4291', row => row[side + 'SmoothedRPM'] - row[side + 'ActualRPM']]
+      ];
     }
-    function graphs() { plot('left', displayed, '#146db0'); plot('right', displayed, '#c46013') }
+    const wheelPlots = [
+      ['left', 'Left wheel (RPM)', rpmSeries('left', '#146db0'), 170, 5],
+      ['right', 'Right wheel (RPM)', rpmSeries('right', '#c46013'), 170, 5],
+      ['boost', 'Assist boost (A)', [
+        ['Left boost', '#146db0', row => row.leftBoostCurrent],
+        ['Right boost', '#c46013', row => row.rightBoostCurrent]
+      ], 30, 1]
+    ];
+    for (const [id, , series] of wheelPlots) {
+      for (const line of series) {
+        const [name, color] = line;
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.style.accentColor = color;
+        checkbox.onchange = graphs;
+        label.append(checkbox, name);
+        $('#' + id + '-series').append(label);
+        line.push(checkbox);
+      }
+    }
+
+    function plot(id, axisLabel, series, fixedLimit, scaleStep, rows) {
+      const [g, w, h] = surface(id), m = { l: 66, r: 20, t: 16, b: 48 };
+      const pw = w - m.l - m.r, ph = h - m.t - m.b;
+      if (pw <= 0 || ph <= 0) return;
+      const end = rows.length ? rows.at(-1).time_ms / 1000 : 60;
+      const start = Math.max(0, end - Number($('#window').value));
+      const finish = Math.max(start + 1, end);
+      const visible = rows.filter(row => row.time_ms / 1000 >= start);
+      const enabled = series.filter(([, , , checkbox]) => checkbox.checked);
+      let limit = fixedLimit;
+      if ($('#variable-scaling').checked) {
+        let peak = 0;
+        for (const [, , value] of enabled) {
+          for (const row of visible) {
+            const sample = value(row);
+            if (Number.isFinite(sample)) peak = Math.max(peak, Math.abs(sample));
+          }
+        }
+        limit = Math.max(scaleStep, Math.ceil(peak / scaleStep) * scaleStep);
+      }
+      const Y = v => m.t + ph - (v + limit) / (2 * limit) * ph;
+      const X = v => m.l + (v - start) / (finish - start) * pw;
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, w, h);
+      g.font = '12px Arial, sans-serif';
+      g.lineWidth = .7;
+      for (const y of ticks(-limit, limit, 8)) {
+        g.strokeStyle = y === 0 ? '#999' : '#e1e1e1';
+        g.beginPath(); g.moveTo(m.l, Y(y)); g.lineTo(w - m.r, Y(y)); g.stroke();
+        g.fillStyle = '#262626'; g.textAlign = 'right';
+        g.fillText(String(Math.round(y * 100) / 100), m.l - 9, Y(y) + 4);
+      }
+      for (const x of ticks(start, finish, 8)) {
+        g.strokeStyle = '#e6e6e6';
+        g.beginPath(); g.moveTo(X(x), m.t); g.lineTo(X(x), h - m.b); g.stroke();
+        g.fillStyle = '#262626'; g.textAlign = 'center';
+        g.fillText(String(Math.round(x * 10) / 10), X(x), h - m.b + 19);
+      }
+      g.strokeStyle = '#333'; g.strokeRect(m.l, m.t, pw, ph);
+      g.save(); g.beginPath(); g.rect(m.l, m.t, pw, ph); g.clip();
+      for (const [, color, value] of enabled) {
+        g.strokeStyle = color;
+        g.lineWidth = 1.8;
+        g.beginPath();
+        let previous = null;
+        for (const row of visible) {
+          const sample = value(row);
+          if (!Number.isFinite(sample)) { previous = null; continue; }
+          const x = X(row.time_ms / 1000), y = Y(sample);
+          if (previous === null || row.time_ms - previous > 500) {
+            g.moveTo(x, y);
+            g.lineTo(x + .5, y);
+          } else {
+            g.lineTo(x, y);
+          }
+          previous = row.time_ms;
+        }
+        g.stroke();
+      }
+      g.restore();
+      g.fillStyle = '#252525'; g.textAlign = 'center'; g.font = '13px Arial, sans-serif';
+      g.fillText('Time (s)', m.l + pw / 2, h - 8);
+      g.save(); g.translate(17, m.t + ph / 2); g.rotate(-Math.PI / 2);
+      g.fillText(axisLabel, 0, 0);
+      g.restore();
+    }
+    function graphs() {
+      for (const settings of wheelPlots) plot(...settings, displayed);
+    }
     // Match speedToRPM(MAX_SPEED) using the values in src/drive_constants.h.
     const maxWheelRPM = (4.91744 * 0.45) * 60 / (74.75 * 0.0254);
 
@@ -1029,6 +1139,7 @@
       drawDirection('smoothed-vector', smoothed);
     }
     function connect() { ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`); ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() }; ws.onclose = () => { if (connectionMode === 'usb') { showMode(lastRow, true); $('#status').textContent = 'Server disconnected'; $('#status').classList.add('off') } setTimeout(connect, 1000) }; ws.onmessage = e => { const d = JSON.parse(e.data); if (connectionMode !== 'usb' || !usbConnected) return; if (d.console) appendConsole(d.console); if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay') } }
+    $('#variable-scaling').onchange = graphs;
     $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); graphs(); sensors(null); if (dashboardBackend) connect();
   </script>
   <script src="./vendor/fflate-0.8.3.js"></script>

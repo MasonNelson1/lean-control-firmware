@@ -94,7 +94,14 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     turn = copysignf(powf(fabsf(turn), turnResponseExponent), turn);
 
     telemetry = {f, b, l, r, speed, turn, false};
-    return {constrain(speed + (pow(abs(speed + 0.1f), 0.47f) * turn), -1.0f, 1.0f), constrain(speed - (pow(abs(speed + 0.1f), 0.47f) * turn), -1.0f, 1.0f)};
+    const auto &mix = settings::leanTurnMix.get();
+    const float speedMagnitude = fabsf(speed);
+    const int segment = speedMagnitude < mix[2] ? 0 : 2;
+    const float ratio = (speedMagnitude - mix[segment]) / (mix[segment + 2] - mix[segment]);
+    const float turnGain = mix[segment + 1] + ratio * (mix[segment + 3] - mix[segment + 1]);
+    const float mixedTurn = turnGain * turn;
+    return {constrain(speed + mixedTurn, -1.0f, 1.0f),
+            constrain(speed - mixedTurn, -1.0f, 1.0f)};
 }
 
 void LeanDriveMode::calibrate()

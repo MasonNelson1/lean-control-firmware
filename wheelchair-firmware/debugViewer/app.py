@@ -10,21 +10,26 @@ except ImportError:
     pty = None
 
 ROOT = Path(__file__).parent
-FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped'.split()
+FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped leftActualRPM rightActualRPM leftBoostCurrent rightBoostCurrent'.split()
 def parse(line):
     parts = [p.strip() for p in next(csv.reader([line]))]
     if not parts: return 'text', line
     if parts[0] == 'time_ms': return 'header', None
-    if len(parts) in (12, 14, 15):
+    if len(parts) in (12, 14, 15, 19):
         try:
-            mode = parts[-1].upper() if len(parts) == 15 else 'UNKNOWN'
-            numeric = parts[:-1] if len(parts) == 15 else parts
-            values = [float(p) for p in numeric]
+            has_mode = len(parts) in (15, 19)
+            mode = parts[-1].upper() if has_mode else 'UNKNOWN'
+            numeric = parts[:-1] if has_mode else parts
+            names = FIELDS if len(numeric) != 12 else FIELDS[:11] + ['stopped']
+            row = {}
             import math
-            if not all(math.isfinite(v) for v in values): raise ValueError()
-            names = FIELDS if len(values) == 14 else FIELDS[:11]+['stopped']
-            row = dict(zip(names, values))
-            row['mode'] = mode if mode in ('LEAN', 'REMOTE', 'DISARM') else 'UNKNOWN'
+            for index, (name, text) in enumerate(zip(names, numeric)):
+                if len(parts) == 19 and index in (9, 10, 11, 12, 14, 15) and text.lower() == 'nan':
+                    continue
+                value = float(text)
+                if not math.isfinite(value): raise ValueError()
+                row[name] = value
+            row['mode'] = mode if mode in ('LEAN', 'REMOTE', 'DISARM', 'ASSIST') else 'UNKNOWN'
             return 'data', row
         except ValueError: pass
     return 'text', line

@@ -25,6 +25,7 @@ private:
     int floorL = 0;
     int floorR = 0;
 
+    int seatLoad = 0;
     int userWeightEstimate = 370; // Unloaded sensor estimate until calibration.
 
     // Cached from the weight estimate and configured factors during calibration.
@@ -39,8 +40,10 @@ private:
 public:
     void reset() { initiallyCalibrated = false; }
     MotorTargets getTargets() override;
-    // Refresh sensor telemetry without generating motor commands or changing LEDs.
-    void sampleSensors();
+    MotorTargets getTargetsFromSample();
+    bool isSeated() const { return 2 * seatLoad > userWeightEstimate; }
+    // Refresh the seat reading and optionally refresh lean telemetry.
+    void sampleSensors(bool seatOnly = false);
     void calibrate();
     void updateResponseCurve();
     const LeanTelemetry &getTelemetry() const { return telemetry; }

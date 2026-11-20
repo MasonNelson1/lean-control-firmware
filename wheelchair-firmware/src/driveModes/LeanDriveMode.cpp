@@ -31,14 +31,22 @@ void LeanDriveMode::updateResponseCurve()
     turnResponseExponent = logf(turnKnee[1]) / logf(turnKnee[0]);
 }
 
-void LeanDriveMode::sampleSensors()
+void LeanDriveMode::sampleSensors(bool seatOnly)
 {
-    // --- read, minus each sensor's floor ---
+    const int rawF = analogRead(common::PIN_F);
+    const int rawB = analogRead(common::PIN_B);
+    const int rawL = analogRead(common::PIN_L);
+    const int rawR = analogRead(common::PIN_R);
     const int defaultFloor = settings::defaultFloor.get();
-    int f = aboveFloor(analogRead(common::PIN_F), initiallyCalibrated ? floorF : defaultFloor);
-    int b = aboveFloor(analogRead(common::PIN_B), initiallyCalibrated ? floorB : defaultFloor);
-    int l = aboveFloor(analogRead(common::PIN_L), initiallyCalibrated ? floorL : defaultFloor);
-    int r = aboveFloor(analogRead(common::PIN_R), initiallyCalibrated ? floorR : defaultFloor);
+    seatLoad = (rawF - defaultFloor) + (rawB - defaultFloor) +
+               (rawL - defaultFloor) + (rawR - defaultFloor);
+    if (seatOnly)
+        return;
+
+    int f = aboveFloor(rawF, initiallyCalibrated ? floorF : defaultFloor);
+    int b = aboveFloor(rawB, initiallyCalibrated ? floorB : defaultFloor);
+    int l = aboveFloor(rawL, initiallyCalibrated ? floorL : defaultFloor);
+    int r = aboveFloor(rawR, initiallyCalibrated ? floorR : defaultFloor);
 
     // apply sensor specific gains
     b = (int)(b * settings::rearGain.get());
@@ -59,14 +67,17 @@ void LeanDriveMode::sampleSensors()
 MotorTargets LeanDriveMode::getTargets()
 {
     sampleSensors();
+    return getTargetsFromSample();
+}
+
+MotorTargets LeanDriveMode::getTargetsFromSample()
+{
     digitalWrite(common::PIN_CAL_LED, initiallyCalibrated ? LOW : HIGH);
     if (!initiallyCalibrated)
         return {0, 0};
 
     const int f = telemetry.front, b = telemetry.back;
     const int l = telemetry.left, r = telemetry.right;
-
-    // Seat detection is currently disabled in the stop condition.
 
     // calculate speed and turn components from -1 to 1
     float speed = normalizeSensorPair(f - b, backSaturation, frontSaturation);

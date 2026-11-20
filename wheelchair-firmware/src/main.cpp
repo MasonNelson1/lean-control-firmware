@@ -74,6 +74,10 @@ void setMotorPower(double left, double right, float dt)
 }
 
 mode MODE = REMOTE;
+// Keep the selected mode while the seat latch temporarily disarms the drive.
+static mode selectedMode = REMOTE;
+static uint32_t assistEnteredAt = 0;
+static bool calibrationPending = false;
 LeanDriveMode leanMode;
 AssistDriveMode assistMode;
 
@@ -203,8 +207,9 @@ void setup()
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
 
     settings::persistence.load();
-    MODE = settings::defaultMode.get();
-    if (MODE == LEAN)
+    selectedMode = settings::defaultMode.get();
+    MODE = selectedMode;
+    if (selectedMode == LEAN)
         leanMode.reset();
     applyRuntimeSettings();
 
@@ -232,13 +237,11 @@ void setup()
 void setMode()
 {
     constexpr uint32_t assistHoldMs = 500;
-    constexpr uint32_t assistBlinkMs = 500;
     static bool leanPressPending = false;
     static bool remotePressPending = false;
     static bool disarmPressPending = false;
     static bool assistHoldPending = false;
     static uint32_t disarmPressedAt = 0;
-    static uint32_t assistEnteredAt = 0;
 
     noInterrupts();
     const bool leanEdge = leanEdgePending;
@@ -257,7 +260,21 @@ void setMode()
     leanModeButton.loop();
     remoteModeButton.loop();
     calibrateButton.loop();
+    calibrationPending |= calibrateButton.isPressed() && selectedMode == LEAN;
     disarmModeButton.loop();
+
+    if (leanPressPending || remotePressPending || disarmPressPending || assistHoldPending)
+    {
+        leanMode.sampleSensors(/*seatOnly=*/true);
+        if (!leanMode.isSeated())
+        {
+            leanPressPending = false;
+            remotePressPending = false;
+            disarmPressPending = false;
+            assistHoldPending = false;
+            return;
+        }
+    }
 
     const bool leanPressed = leanModeButton.isPressed() && leanPressPending;
     const bool remotePressed = remoteModeButton.isPressed() && remotePressPending;
@@ -286,38 +303,32 @@ void setMode()
     if (disarmPressed)
     {
         // A press that exits Assist cannot reenter it until the next press.
-        assistHoldPending = MODE != ASSIST;
-        if (MODE != DISARM)
-        {
-            MODE = DISARM;
-            printMode();
-        }
+        assistHoldPending = selectedMode != ASSIST;
+        selectedMode = DISARM;
     }
-    else if (leanPressed && (MODE != LEAN))
+    else if (leanPressed && selectedMode != LEAN)
     {
         assistHoldPending = false;
-        MODE = LEAN;
-        leanMode.reset();
-        printMode();
+        selectedMode = LEAN;
     }
-    else if (remotePressed && (MODE != REMOTE))
+    else if (remotePressed && selectedMode != REMOTE)
     {
         assistHoldPending = false;
-        MODE = REMOTE;
+        selectedMode = REMOTE;
         remoteMode.reset();
-        printMode();
     }
     else if (assistHoldPending &&
              now - disarmPressedAt >= assistHoldMs)
     {
         assistHoldPending = false;
-        assistEnteredAt = now;
         assistMode.reset();
-        MODE = ASSIST;
-        printMode();
+        selectedMode = ASSIST;
     }
+}
 
-    // set mode LED's
+static void updateModeLEDs()
+{
+    constexpr uint32_t assistBlinkMs = 500;
     switch (MODE)
     {
     case LEAN:
@@ -342,13 +353,40 @@ void setMode()
     case ASSIST:
         digitalWrite(common::PIN_LEAN_LED, LOW);
         digitalWrite(common::PIN_DISARM_LED,
-                     ((now - assistEnteredAt) / assistBlinkMs) % 2 == 0 ? HIGH : LOW);
+                     ((millis() - assistEnteredAt) / assistBlinkMs) % 2 == 0 ? HIGH : LOW);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
         digitalWrite(common::PIN_CAL_LED, LOW);
         break;
     default:
         break;
     }
+}
+
+static bool selectedModeRequiresSeat()
+{
+    return selectedMode == LEAN || selectedMode == ASSIST;
+}
+
+static void applySeatedLatch()
+{
+    const bool seatDisarm = selectedModeRequiresSeat() && !leanMode.isSeated();
+    const mode nextMode = seatDisarm ? DISARM : selectedMode;
+    if (nextMode == MODE)
+        return;
+
+    if (seatDisarm)
+    {
+        leftRPMSetpointPID.reset();
+        rightRPMSetpointPID.reset();
+        assistMode.reset();
+    }
+    if (nextMode == LEAN)
+        leanMode.reset();
+    else if (nextMode == ASSIST)
+        assistEnteredAt = millis();
+
+    MODE = nextMode;
+    printMode();
 }
 
 static void updateDrive()
@@ -364,12 +402,24 @@ static void updateDrive()
     }
     tSend = now;
 
+    if (selectedModeRequiresSeat())
+    {
+        leanMode.sampleSensors();
+        if (selectedMode == LEAN && leanMode.isSeated() && calibrationPending)
+        {
+            leanMode.calibrate();
+            leanMode.sampleSensors();
+        }
+    }
+    calibrationPending = false;
+    applySeatedLatch();
+
     const float dt = period / 1000.0f;
     MotorTargets targets;
     switch (MODE)
     {
     case LEAN:
-        targets = leanMode.getTargets();
+        targets = leanMode.getTargetsFromSample();
         break;
 
     case REMOTE:
@@ -434,10 +484,8 @@ void loop()
         vescHandleFrame(feedback, motors.leftId, measuredMotors[0]);
         vescHandleFrame(feedback, motors.rightId, measuredMotors[1]);
     }
-    if (calibrateButton.isPressed() && MODE == LEAN)
-        leanMode.calibrate();
-
     updateDrive();
+    updateModeLEDs();
     replyToConfiguration();
 
     // Keep sensor telemetry at 20 Hz in every mode.

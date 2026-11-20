@@ -53,6 +53,8 @@ public:
 
     return true;
   }
+
+
   /**
    * Advance the smoother by one VESC motor-setpoint update.
    *

@@ -83,7 +83,7 @@ MotorTargets LeanDriveMode::getTargets()
     turn = copysignf(powf(fabsf(turn), turnResponseExponent), turn);
 
     telemetry = {f, b, l, r, speed, turn, false};
-    return {speed + turn, speed - turn};
+    return {constrain(speed + (pow(abs(speed + 0.1f), 0.47f) * turn), -1.0f, 1.0f), constrain(speed - (pow(abs(speed + 0.1f), 0.47f) * turn), -1.0f, 1.0f)};
 }
 
 void LeanDriveMode::calibrate()

@@ -13,6 +13,7 @@ module.exports = async function mockSerial(page) {
     let upload;
     window.serialTestMode = mode => controller.enqueue(new TextEncoder().encode(
       '1000,100,200,300,400,1000,370,0,0,0,0,0,0,1,' + mode + '\n'));
+    window.serialTestLine = line => controller.enqueue(new TextEncoder().encode(line + '\n'));
 
     const text = value => { const bytes = new TextEncoder().encode(value); return [bytes.length, ...bytes]; };
     const u16 = value => [value & 255, value >> 8];

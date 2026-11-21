@@ -18,6 +18,14 @@ bool ModeStateMachine::needsSeatSample(const Inputs &in) const
 ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t now)
 {
     Actions actions;
+    if (in.calibrationActive)
+    {
+        // Poll buttons normally, but discard presses instead of queuing a mode change.
+        leanPending_ = remotePending_ = disarmPending_ = assistHoldPending_ = false;
+        calibrationPending_ = false;
+        confirmingProfile_ = NoProfile;
+        return actions;
+    }
     leanPending_ |= in.lean.edge;
     remotePending_ |= in.remote.edge;
     disarmPending_ |= in.disarm.edge;

@@ -22,7 +22,7 @@ function harness({secure = true, openError = null, backend = true, configWire = 
     TextDecoder, performance: {now: () => now},
     window: {isSecureContext: secure},
     navigator: {serial: {async requestPort(options) { requestOptions = options; return port; }}},
-    bluetoothActive: false, displayed: [], latest: [], lastRow: null,
+    bluetoothActive: false, displayed: [], latest: [], lastRow: null, dynamicGains: null,
     dashboardBackend: backend, connectionMode: 'bluetooth', usbConnected: false,
     ws: {readyState: 1, send: command => commands.push(command)},
     $: selector => {
@@ -81,6 +81,77 @@ test('parses measured wheel RPM and requested assist current', () => {
   assert.equal(missing.leftActualRPM, undefined);
   assert.equal(missing.rightActualRPM, 0);
   assert.equal(missing.leftSmoothedRPM, undefined);
+});
+
+test('parses gain status without accepting incomplete, nonfinite, or nonpositive gains', () => {
+  const parse = harness().context.parseDynamicGains;
+  assert.equal(JSON.stringify(parse('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800')),
+    JSON.stringify({F: 1.23, B: 2.34, L: 1, R: 0.98}));
+  for (const line of [
+    'DYNAMIC_GAINS F=1 B=2 L=3',
+    'DYNAMIC_GAINS F=nan B=2 L=3 R=4',
+    'DYNAMIC_GAINS F=-1 B=2 L=3 R=4',
+    'DYNAMIC_GAINS F=0 B=2 L=3 R=4',
+    'DYNAMIC_GAINS F=1 B=2 L=3 R=4 garbage',
+  ]) assert.equal(parse(line), null);
+});
+
+test('fragmented gain status updates separately from telemetry and clears on disconnect', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  h.send('DYNAMIC_GAINS F=1.2300 B=');
+  await settle();
+  assert.equal(h.context.dynamicGains, null);
+  h.send('2.3400 L=1.0000 R=0.9800\n' + row() + '\n');
+  await settle();
+  assert.equal(h.context.dynamicGains.F, 1.23);
+  assert.equal(h.context.dynamicGains.B, 2.34);
+  h.context.renderBluetooth();
+  assert.equal(h.frames.at(-1).rows.length, 1);
+  assert.ok(!h.messages.some(message => message.startsWith('DYNAMIC_GAINS')));
+  await h.context.disconnectBluetooth();
+  assert.equal(h.context.dynamicGains, null);
+});
+
+test('source changes discard gains and inactive Bluetooth cannot overwrite the USB cache', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  h.send('DYNAMIC_GAINS F=1 B=2 L=3 R=4\n');
+  await settle();
+  assert.equal(h.context.dynamicGains.R, 4);
+  h.elements.get('#connection-mode').value = 'usb';
+  await h.context.changeConnectionMode();
+  assert.equal(h.context.dynamicGains, null);
+  h.send('DYNAMIC_GAINS F=9 B=9 L=9 R=9\n');
+  await settle();
+  assert.equal(h.context.dynamicGains, null);
+  await h.context.disconnectBluetooth();
+});
+
+test('sensor panel displays active gains beside the sensor counts', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const code = html.slice(html.indexOf('    function sensors(r)'), html.indexOf('    function connect()'));
+  const panels = ['F', 'B', 'L', 'R'].map(key => {
+    const children = new Map();
+    return {dataset: {key}, querySelector(selector) {
+      if (!children.has(selector)) children.set(selector, {style: {}});
+      return children.get(selector);
+    }};
+  });
+  const context = vm.createContext({
+    dynamicGains: {F: 1.23, B: 2.34, L: 1, R: 0.98},
+    document: {querySelectorAll: () => panels},
+    $: () => ({classList: {toggle() {}}}),
+    smoothedDirection: () => null, drawDirection() {},
+  });
+  vm.runInContext(code, context);
+  context.sensors({F: 100, B: 200, L: 300, R: 400, total: 1000});
+  assert.equal(panels[0].querySelector('strong').textContent, 100);
+  assert.equal(panels[0].querySelector('.gain').textContent, '×1.23');
+  assert.equal(panels[3].querySelector('.gain').textContent, '×0.98');
+  context.dynamicGains = null;
+  context.sensors(null);
+  assert.equal(panels[0].querySelector('.gain').textContent, '—');
 });
 
 test('reads fragmented lines, marks stale data, clears history after device reboot, and disconnects cleanly', async () => {

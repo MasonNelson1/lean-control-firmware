@@ -183,5 +183,28 @@ int main()
         assert(sm.selected() == REMOTE);
         assert(!sm.needsSeatSample(seated()));
     }
+    { // Calibration discards even partly debounced mode presses and profile holds.
+        SM sm;
+        sm.begin(LEAN);
+        auto in = seated();
+        in.remote.edge = true;
+        sm.update(in, 10);
+        in = press(REMOTE);
+        in.calibrationActive = true;
+        assert(!sm.update(in, 50).resetRemote);
+        in = seated();
+        in.remote.pressed = true;
+        sm.update(in, 60);
+        assert(sm.selected() == LEAN);
+        in = press(DISARM);
+        in.calibrationActive = true;
+        sm.update(in, 70);
+        sm.update(seated(), 1000);
+        assert(sm.selected() == LEAN);
+        const auto seatLoss = sm.applySeat(false, 1001);
+        assert(seatLoss.changed && seatLoss.seatDisarm);
+        sm.update(press(REMOTE), 1100);
+        assert(sm.selected() == REMOTE);
+    }
     puts("Mode state machine regression tests passed");
 }

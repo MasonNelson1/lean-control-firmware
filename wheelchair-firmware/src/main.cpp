@@ -31,6 +31,7 @@ ezButton calibrateButton(PIN_CAL_BUTTON);
 ezButton leanModeButton(PIN_LEAN_BUTTON);
 ezButton remoteModeButton(PIN_REMOTE_BUTTON);
 ezButton disarmModeButton(PIN_DISARM_BUTTON);
+static uint32_t calibrationPressedAt = 0;
 
 RPMSetpointPID leftRPMSetpointPID(RPMSetpointPID::defaultTuning());
 RPMSetpointPID rightRPMSetpointPID(RPMSetpointPID::defaultTuning());
@@ -151,6 +152,7 @@ static bool activateProfile(int slot)
     activeProfile = slot;
     applyRuntimeSettings();
     leanMode.reset();
+    leanMode.resetDynamicGains();
     assistMode.reset();
     leftRPMSetpointPID.reset();
     rightRPMSetpointPID.reset();
@@ -229,6 +231,8 @@ void setup()
         leanMode.reset();
     applyRuntimeSettings();
 
+    leanMode.resetDynamicGains();
+
     // user input
     analogReadResolution(12);
     analogReadAveraging(4);
@@ -276,10 +280,13 @@ static void updateModeInputs()
     input.disarm.pressed = disarmModeButton.isPressed();
     input.disarm.released = disarmModeButton.isReleased();
     input.calibrate.pressed = calibrateButton.isPressed();
+    if (input.calibrate.pressed)
+        calibrationPressedAt = millis();
     input.calibrate.released = calibrateButton.isReleased();
     input.leanHeld = leanModeButton.getStateRaw() == LOW;
     input.profileSettled = profileKnob.settled();
     input.pendingProfile = pendingProfile;
+    input.calibrationActive = leanMode.calibrationActive();
     // Refresh only the seat reading, leaving the control/telemetry sample intact.
     if (modeState.needsSeatSample(input))
         leanMode.sampleSensors(/*seatOnly=*/true);
@@ -305,7 +312,7 @@ static void updateModeLEDs()
         digitalWrite(common::PIN_LEAN_LED, HIGH);
         digitalWrite(common::PIN_DISARM_LED, LOW);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
-        // calibration button status is handled in the getTargets() for this mode.
+        digitalWrite(common::PIN_CAL_LED, leanMode.calibrationLEDOn(millis()) ? HIGH : LOW);
         break;
 
     case REMOTE:
@@ -340,6 +347,7 @@ static void applySeatedLatch()
     // Clear old motion on every entry to Disarm, including the mode button.
     if (modeState.current() == DISARM)
     {
+        leanMode.cancelCalibration();
         leftRPMSetpointPID.reset();
         rightRPMSetpointPID.reset();
         assistMode.reset();
@@ -364,15 +372,29 @@ static void updateDrive()
 
     const bool calibrationRequested = modeState.takeCalibrationRequest();
     if (modeState.requiresSeat())
-    {
         leanMode.sampleSensors();
-        if (modeState.selected() == LEAN && leanMode.isSeated() && calibrationRequested)
-        {
-            leanMode.calibrate();
-            leanMode.sampleSensors();
-        }
-    }
     applySeatedLatch();
+    if (modeState.current() == LEAN && leanMode.isSeated() && calibrationRequested)
+    {
+        vescSetCurrent(can1, motors.leftId, 0.0f);
+        vescSetCurrent(can1, motors.rightId, 0.0f);
+        leftRPMSetpointPID.reset();
+        rightRPMSetpointPID.reset();
+        motorTelemetry = {};
+        leanMode.beginCalibration(calibrationPressedAt);
+        leanMode.sampleSensors();
+        // Calibration updates the seat threshold as well as the neutral floors.
+        applySeatedLatch();
+    }
+    if (leanMode.calibrationActive())
+    {
+        leanMode.updateCalibration(millis(), calibrateButton.getState() == LOW);
+        leanMode.sampleSensors();
+        vescSetCurrent(can1, motors.leftId, 0.0f);
+        vescSetCurrent(can1, motors.rightId, 0.0f);
+        assistBoostCurrent = {};
+        return;
+    }
 
     const float dt = period / 1000.0f;
     MotorTargets targets;
@@ -438,6 +460,12 @@ static void replyToConfiguration()
 static void publishTelemetry()
 {
     const uint32_t now = millis();
+    static uint32_t lastGainStatusMs = 0;
+    if (now - lastGainStatusMs >= 1000)
+    {
+        lastGainStatusMs = now;
+        leanMode.publishDynamicGains();
+    }
     if (!telemetryOutput.due(now))
         return;
     // Lean samples on each control tick; other modes sample for display only.

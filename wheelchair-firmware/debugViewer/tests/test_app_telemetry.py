@@ -15,7 +15,20 @@ def row(time=1000, mode="LEAN"):
 
 
 class ParseTests(unittest.TestCase):
-    pass
+    def test_gain_status(self):
+        kind, gains = viewer.parse('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800')
+        self.assertEqual(kind, 'gains')
+        self.assertEqual(gains, {'F': 1.23, 'B': 2.34, 'L': 1, 'R': .98})
+
+    def test_invalid_gain_status(self):
+        for message in (
+            'DYNAMIC_GAINS F=1 B=2 L=3',
+            'DYNAMIC_GAINS F=nan B=2 L=3 R=4',
+            'DYNAMIC_GAINS F=-1 B=2 L=3 R=4',
+            'DYNAMIC_GAINS F=0 B=2 L=3 R=4',
+            'DYNAMIC_GAINS F=1 B=2 L=3 R=4 garbage',
+        ):
+            self.assertEqual(viewer.parse(message)[0], 'text')
 
 
 def install_parse_case(name, line, kind, mode=None):
@@ -59,6 +72,31 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
         viewer.clients.clear()
         viewer.telemetry_warning_at = float("-inf")
         viewer.telemetry_warning_rows = 0
+        viewer.dynamic_gains = None
+
+    async def test_gain_status_is_cached_and_emitted_without_console_or_csv_changes(self):
+        events = []
+        async def emit(event):
+            events.append(event)
+        with patch.object(viewer, 'emit', emit):
+            await viewer.line_received('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800')
+        gains = {'F': 1.23, 'B': 2.34, 'L': 1, 'R': .98}
+        self.assertEqual(viewer.dynamic_gains, gains)
+        self.assertEqual(events, [{'dynamicGains': gains}])
+        self.assertFalse(viewer.history)
+        self.assertFalse(viewer.console)
+
+    async def test_new_client_broadcast_includes_cached_gains(self):
+        await viewer.line_received('DYNAMIC_GAINS F=1 B=2 L=3 R=4')
+        events = []
+        async def emit(event):
+            events.append(event)
+        with patch.object(viewer, 'emit', emit):
+            task = asyncio.create_task(viewer.broadcast())
+            await asyncio.sleep(0)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self.assertEqual(events[0]['dynamicGains'], {'F': 1, 'B': 2, 'L': 3, 'R': 4})
 
     async def test_reboot_clears_previous_history(self):
         await viewer.line_received(row(1000))

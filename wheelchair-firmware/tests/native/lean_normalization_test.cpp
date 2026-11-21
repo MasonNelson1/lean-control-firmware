@@ -27,6 +27,7 @@ int main() {
     setGain(settings::rightGain, 1);
     LeanDriveMode mode;
     mode.updateResponseCurve();
+    mode.resetDynamicGains();
     sensors(1000, 1000, 1000, 1000);
     auto targets = mode.getTargets();
     assert(targets.left == 0 && targets.right == 0); // calibration gate

@@ -38,13 +38,13 @@ void LeanDriveMode::sampleSensors(bool seatOnly)
     int l = aboveFloor(rawL, initiallyCalibrated ? floorL : defaultFloor);
     int r = aboveFloor(rawR, initiallyCalibrated ? floorR : defaultFloor);
 
-    // apply sensor specific gains
-    b = (int)(b * settings::rearGain.get());
-    f = (int)(f * settings::frontGain.get());
-    l = (int)(l * settings::leftGain.get());
-    r = (int)(r * settings::rightGain.get());
+    flooredReadings = {{f, b, l, r}};
+    f = static_cast<int>(f * dynamicGains[0]);
+    b = static_cast<int>(b * dynamicGains[1]);
+    l = static_cast<int>(l * dynamicGains[2]);
+    r = static_cast<int>(r * dynamicGains[3]);
 
-    telemetry = {f, b, l, r, 0.0f, 0.0f, !initiallyCalibrated};
+    telemetry = {f, b, l, r, 0.0f, 0.0f, !initiallyCalibrated || calibrationActive()};
 }
 
 MotorTargets LeanDriveMode::getTargets()
@@ -55,8 +55,7 @@ MotorTargets LeanDriveMode::getTargets()
 
 MotorTargets LeanDriveMode::getTargetsFromSample()
 {
-    digitalWrite(common::PIN_CAL_LED, initiallyCalibrated ? LOW : HIGH);
-    if (!initiallyCalibrated)
+    if (!initiallyCalibrated || calibrationActive())
         return {0, 0};
 
     const int f = telemetry.front, b = telemetry.back;
@@ -117,4 +116,87 @@ void LeanDriveMode::calibrate()
 
     telemetry::Telemetry::logf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
                                samples, floorF, floorB, floorL, floorR);
+}
+
+void LeanDriveMode::beginCalibration(uint32_t pressedAt)
+{
+    calibrate();
+    calibrationPressedAt = pressedAt;
+    calibrationPeaks.fill(0);
+    calibrationState = CalibrationState::Waiting;
+}
+
+void LeanDriveMode::updateCalibration(uint32_t now, bool buttonHeld)
+{
+    if (!calibrationActive())
+        return;
+    if (!buttonHeld)
+    {
+        if (calibrationState == CalibrationState::Collecting)
+            finishDynamicCalibration();
+        calibrationState = CalibrationState::Idle;
+        return;
+    }
+    if (calibrationState == CalibrationState::Waiting && now - calibrationPressedAt >= 300)
+    {
+        calibrationState = CalibrationState::Collecting;
+        collectionStartedAt = now;
+        telemetry::Telemetry::logf("Dynamic calibration started; lean in all four directions, then release.\n");
+    }
+    if (calibrationState == CalibrationState::Collecting)
+        for (size_t i = 0; i < calibrationPeaks.size(); ++i)
+            if (flooredReadings[i] > calibrationPeaks[i])
+                calibrationPeaks[i] = flooredReadings[i];
+}
+
+void LeanDriveMode::finishDynamicCalibration()
+{
+    const float threshold = 0.1f * userWeightEstimate;
+    const char *names[] = {"front", "back", "left", "right"};
+    bool valid = userWeightEstimate > 0;
+    if (!valid)
+        telemetry::Telemetry::logf("Dynamic calibration rejected: weight estimate must be positive.\n");
+    for (size_t i = 0; i < calibrationPeaks.size(); ++i)
+    {
+        if (calibrationPeaks[i] < threshold || calibrationPeaks[i] == 0)
+        {
+            valid = false;
+            telemetry::Telemetry::logf("Dynamic calibration rejected: %s maximum %d, required %.1f.\n",
+                                       names[i], calibrationPeaks[i], threshold);
+        }
+    }
+    if (!valid)
+        return;
+    for (size_t i = 0; i < dynamicGains.size(); ++i)
+        dynamicGains[i] = static_cast<float>(userWeightEstimate) / calibrationPeaks[i];
+    telemetry::Telemetry::logf("Dynamic calibration complete: maxima F=%d B=%d L=%d R=%d.\n",
+                               calibrationPeaks[0], calibrationPeaks[1], calibrationPeaks[2], calibrationPeaks[3]);
+    publishDynamicGains();
+}
+
+void LeanDriveMode::cancelCalibration()
+{
+    if (calibrationActive())
+        telemetry::Telemetry::logf("Dynamic calibration cancelled; keeping active gains.\n");
+    calibrationState = CalibrationState::Idle;
+}
+
+bool LeanDriveMode::calibrationLEDOn(uint32_t now) const
+{
+    if (calibrationState == CalibrationState::Collecting)
+        return ((now - collectionStartedAt) / 100) % 2 == 0;
+    return !initiallyCalibrated;
+}
+
+void LeanDriveMode::resetDynamicGains()
+{
+    dynamicGains = {{settings::frontGain.get(), settings::rearGain.get(),
+                     settings::leftGain.get(), settings::rightGain.get()}};
+    publishDynamicGains();
+}
+
+void LeanDriveMode::publishDynamicGains() const
+{
+    telemetry::Telemetry::logf("DYNAMIC_GAINS F=%.4f B=%.4f L=%.4f R=%.4f\n",
+                               dynamicGains[0], dynamicGains[1], dynamicGains[2], dynamicGains[3]);
 }

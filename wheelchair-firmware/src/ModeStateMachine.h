@@ -20,6 +20,7 @@ public:
         bool leanHeld = false; // raw level, so a release cancels confirmation immediately
         bool seated = false;
         bool profileSettled = false;
+        bool calibrationActive = false;
         int pendingProfile = NoProfile;
     };
     struct Actions

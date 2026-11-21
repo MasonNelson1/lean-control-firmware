@@ -193,8 +193,15 @@
       font-size: 24px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
-      display: block;
+      display: inline-block;
       margin: 3px 0 7px
+    }
+
+    .sensor .gain {
+      margin-left: 6px;
+      font-size: 12px;
+      color: #718095;
+      font-variant-numeric: tabular-nums;
     }
 
     .track {
@@ -865,22 +872,22 @@
                     <rect x="9" y="5" width="22" height="30" rx="8" />
                     <path d="M10 15h20M10 27h20" />
                   </svg>SEAT</div>
-                <div class="sensor front" data-key="F"><label>Front</label><strong>—</strong>
+                <div class="sensor front" data-key="F"><label>Front</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
                 </div>
-                <div class="sensor back" data-key="B"><label>Back</label><strong>—</strong>
+                <div class="sensor back" data-key="B"><label>Back</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
                 </div>
-                <div class="sensor left" data-key="L"><label>Left</label><strong>—</strong>
+                <div class="sensor left" data-key="L"><label>Left</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
                 </div>
-                <div class="sensor right" data-key="R"><label>Right</label><strong>—</strong>
+                <div class="sensor right" data-key="R"><label>Right</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
@@ -937,7 +944,7 @@
     </div>
   </div>
   <script>
-    let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'bluetooth', usbConnected = false;
+    let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'bluetooth', usbConnected = false, dynamicGains = null;
     const $ = s => document.querySelector(s);
     function appendConsole(line) { const p = $('pre'); p.textContent = (p.textContent + line + '\n').split('\n').slice(-400).join('\n'); if ($('#scroll').checked) p.scrollTop = p.scrollHeight }
     function applyTelemetry(rows, stale, source) { latest = rows; lastRow = latest.at(-1) || null; showMode(lastRow, stale); $('#status').textContent = `${source} · ${stale ? 'Waiting for telemetry' : 'Receiving telemetry'}`; $('#status').classList.toggle('off', stale); if (!paused) { displayed = latest; graphs() } sensors(lastRow) }
@@ -1123,6 +1130,8 @@
       for (const el of document.querySelectorAll('.sensor')) {
         const value = r?.[el.dataset.key];
         el.querySelector('strong').textContent = value === undefined ? '—' : Math.round(value);
+        const gain = dynamicGains?.[el.dataset.key];
+        el.querySelector('.gain').textContent = Number.isFinite(gain) ? `×${gain.toFixed(2)}` : '—';
         el.querySelector('.fill').style.width = (r ? Math.min(100, Math.max(0, value) / Math.max(1, r.F + r.B + r.L + r.R) * 100) : 0) + '%';
       }
       $('#total').textContent = r ? Math.round(r.total) : '—';
@@ -1138,7 +1147,26 @@
       drawDirection('vector', Number.isFinite(r?.speed) && Number.isFinite(r?.turn) ? r : null);
       drawDirection('smoothed-vector', smoothed);
     }
-    function connect() { ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`); ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() }; ws.onclose = () => { if (connectionMode === 'usb') { showMode(lastRow, true); $('#status').textContent = 'Server disconnected'; $('#status').classList.add('off') } setTimeout(connect, 1000) }; ws.onmessage = e => { const d = JSON.parse(e.data); if (connectionMode !== 'usb' || !usbConnected) return; if (d.console) appendConsole(d.console); if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay') } }
+    function connect() {
+      ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+      ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() };
+      ws.onclose = () => {
+        if (connectionMode === 'usb') {
+          setDynamicGains(null);
+          showMode(lastRow, true);
+          $('#status').textContent = 'Server disconnected';
+          $('#status').classList.add('off');
+        }
+        setTimeout(connect, 1000);
+      };
+      ws.onmessage = e => {
+        const d = JSON.parse(e.data);
+        if (connectionMode !== 'usb' || !usbConnected) return;
+        if ('dynamicGains' in d) setDynamicGains(d.dynamicGains);
+        if (d.console) appendConsole(d.console);
+        if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay');
+      };
+    }
     $('#variable-scaling').onchange = graphs;
     $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); graphs(); sensors(null); if (dashboardBackend) connect();
   </script>

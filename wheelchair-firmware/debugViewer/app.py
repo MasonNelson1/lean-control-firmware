@@ -1,4 +1,4 @@
-import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib, re
+import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib, re, math
 from collections import deque
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
@@ -12,6 +12,11 @@ except ImportError:
 ROOT = Path(__file__).parent
 FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped leftActualRPM rightActualRPM leftBoostCurrent rightBoostCurrent'.split()
 def parse(line):
+    gains = re.fullmatch(r'DYNAMIC_GAINS F=(\d+(?:\.\d+)?) B=(\d+(?:\.\d+)?) L=(\d+(?:\.\d+)?) R=(\d+(?:\.\d+)?)', line.strip())
+    if gains:
+        values = [float(value) for value in gains.groups()]
+        if all(math.isfinite(value) and value > 0 for value in values):
+            return 'gains', dict(zip(('F', 'B', 'L', 'R'), values))
     parts = [p.strip() for p in next(csv.reader([line]))]
     if not parts: return 'text', line
     if parts[0] == 'time_ms': return 'header', None
@@ -22,7 +27,6 @@ def parse(line):
             numeric = parts[:-1] if has_mode else parts
             names = FIELDS if len(numeric) != 12 else FIELDS[:11] + ['stopped']
             row = {}
-            import math
             for index, (name, text) in enumerate(zip(names, numeric)):
                 if len(parts) == 19 and 7 <= index <= 17 and index != 13 and re.fullmatch(r'[+-]?(?:nan|inf(?:inity)?)', text, re.I):
                     continue
@@ -48,6 +52,7 @@ def recover_telemetry_rows(line):
 app=FastAPI()
 history=deque(maxlen=13000); console=deque(maxlen=400); clients=set()
 connected=True; proc=None; args=None
+dynamic_gains = None
 telemetry_warning_at = float("-inf")
 telemetry_warning_rows = 0
 async def emit(event):
@@ -55,8 +60,12 @@ async def emit(event):
         try: await asyncio.wait_for(ws.send_json(event), .3)
         except Exception: clients.discard(ws)
 async def line_received(line):
-    global telemetry_warning_at, telemetry_warning_rows
+    global telemetry_warning_at, telemetry_warning_rows, dynamic_gains
     kind,value=parse(line)
+    if kind == 'gains':
+        dynamic_gains = value
+        await emit({'dynamicGains': value})
+        return
     issue = None
     recovered = []
     if kind == 'data':
@@ -90,9 +99,10 @@ async def line_received(line):
 async def note(s):
     await line_received(s)
 async def acquire():
-    global proc
+    global proc, dynamic_gains
     if args.replay:
         while True:
+            dynamic_gains = None
             previous=None
             for line in Path(args.replay).read_text().splitlines():
                 while not connected: await asyncio.sleep(.1)
@@ -109,6 +119,7 @@ async def acquire():
         if not connected: await asyncio.sleep(.3); continue
         master,slave=pty.openpty()
         try:
+            dynamic_gains = None
             cmd=['pio','device','monitor','-d',str(ROOT.parent),'-e','teensy41','-b',str(args.baud)]
             if args.port: cmd+=['-p',args.port]
             proc=await asyncio.create_subprocess_exec(*cmd,stdin=slave,stdout=slave,stderr=slave,cwd=ROOT,start_new_session=True)
@@ -133,7 +144,8 @@ async def acquire():
             await note('Lost connection — reconnecting'); await asyncio.sleep(2)
 async def broadcast():
     while True:
-        await emit({'history':list(history),'stale':not history or time.monotonic()-last_change[0]>2})
+        await emit({'history':list(history),'stale':not history or time.monotonic()-last_change[0]>2,
+                    'dynamicGains': dynamic_gains})
         await asyncio.sleep(.05)
 last_change=[0]
 @app.on_event('startup')
@@ -254,7 +266,7 @@ async def release_bluetooth(request: Request):
 
 @app.websocket('/ws')
 async def socket(ws:WebSocket):
-    global connected
+    global connected, dynamic_gains
     await ws.accept(); clients.add(ws)
     await ws.send_json({'console':'\n'.join(console)})
     try:
@@ -262,6 +274,7 @@ async def socket(ws:WebSocket):
             command=await ws.receive_text()
             if command=='disconnect':
                 connected=False
+                dynamic_gains = None
                 if proc and proc.returncode is None:
                     try: proc.terminate()
                     except ProcessLookupError: pass

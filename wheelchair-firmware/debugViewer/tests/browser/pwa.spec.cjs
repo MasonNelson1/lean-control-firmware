@@ -131,3 +131,28 @@ test('local Python mode preserves USB/replay and does not register a service wor
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
   expect(await page.locator('.brand-logo').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
 });
+
+test('live gain status appears beside sensor ADC counts and clears on reconnect', async ({page}) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await mockSerial(page);
+  await page.goto('./');
+  await expect(page.locator('.sensor.front .gain')).toHaveText('—');
+  await page.locator('#connection-connect').click();
+  await page.evaluate(() => serialTestLine('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800'));
+  await expect(page.locator('.sensor.front strong')).toHaveText('100');
+  await expect(page.locator('.sensor.front .gain')).toHaveText('×1.23');
+  await expect(page.locator('.sensor.back .gain')).toHaveText('×2.34');
+  await expect(page.locator('.sensor.left .gain')).toHaveText('×1.00');
+  await expect(page.locator('.sensor.right .gain')).toHaveText('×0.98');
+  await expect(page.locator('pre')).not.toContainText('DYNAMIC_GAINS');
+  await page.screenshot({path: test.info().outputPath('dynamic-gains.png')});
+  await page.locator('#connection-disconnect').click();
+  await expect(page.locator('.sensor.front .gain')).toHaveText('—');
+  await page.locator('#connection-connect').click();
+  await expect(page.locator('.sensor.front .gain')).toHaveText('—');
+  await page.evaluate(() => serialTestLine('DYNAMIC_GAINS F=5.0000 B=4.0000 L=3.0000 R=2.0000'));
+  await expect(page.locator('.sensor.front .gain')).toHaveText('×5.00');
+  expect(errors).toEqual([]);
+  await page.locator('#connection-disconnect').click();
+});

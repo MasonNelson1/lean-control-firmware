@@ -263,22 +263,40 @@ const ConfigWire = (() => {
     async request(command, body = new Uint8Array()) {
       if (!this.port?.writable) throw new Error('Connect the wheelchair over Bluetooth first.');
       if (this.pending) throw new Error('Another configuration request is in progress.');
-      const seq = this.sequence++ & 0xff;
-      const frame = requestFrame(seq, command, body);
-      const port = this.port;
+      // Reads are safe to repeat. Never retry mutations: a missing ACK does
+      // not establish whether the wheelchair already applied a write/save.
+      const readOnly = [commands.hello, commands.group, commands.describe,
+        commands.read, commands.preview, commands.profileList, commands.profileRead].includes(command);
+      const maxAttempts = readOnly ? 3 : 1;
+      const timeoutMs = [commands.save, commands.profileCommit, commands.profileMove].includes(command) ? 8000 : 2500;
+      const requestBody = body.slice();
+      // Validate before acquiring the request slot.
+      requestFrame(0, command, requestBody);
+      const port = this.port, generation = this.generation;
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          this.finish(new Error('No configuration reply. Check the connection and wheelchair firmware.'));
-        }, (command === commands.save || command === commands.profileCommit || command === commands.profileMove) ? 8000 : 2500);
-        const pending = {seq, command, resolve, reject, timer};
+        const pending = {command, resolve, reject, timer: null, seq: null, attempts: 0};
         this.pending = pending;
-        // Serialize writer ownership even if a reply arrives before the previous
-        // stream write promise has released its Web Serial writer lock.
-        this.writeTask = this.writeTask.then(() => {
-          if (this.pending === pending && this.port === port) return this.write(port, frame);
-        }).catch(error => {
-          if (this.pending === pending) this.finish(error);
-        });
+        const sendAttempt = () => {
+          if (this.pending !== pending) return;
+          const seq = this.sequence++ & 0xff;
+          const frame = requestFrame(seq, command, requestBody);
+          pending.seq = seq;
+          pending.attempts++;
+          pending.timer = setTimeout(() => {
+            if (this.pending !== pending || pending.seq !== seq) return;
+            if (pending.attempts < maxAttempts) sendAttempt();
+            else this.finish(new Error(`No configuration reply${readOnly ? ' after 3 attempts' : ''}. Check the connection and wheelchair firmware.`));
+          }, timeoutMs);
+          // Retain the same request slot across retries. Each attempt uses a
+          // fresh sequence so a late reply cannot complete the wrong attempt.
+          this.writeTask = this.writeTask.then(() => {
+            if (this.pending === pending && pending.seq === seq &&
+                this.port === port && this.generation === generation) return this.write(port, frame);
+          }).catch(error => {
+            if (this.pending === pending && pending.seq === seq) this.finish(error);
+          });
+        };
+        sendAttempt();
       });
     }
 

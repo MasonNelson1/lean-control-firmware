@@ -38,10 +38,12 @@
   }
 
   function updateToolbar() {
+    // Reading depends on the serial connection, never on telemetry freshness.
+    const readable = Boolean(link.port) && !busy;
     const editable = loaded && !busy;
     const writable = editable && canWrite;
     const hasDrafts = drafts.size > 0;
-    byId('config-reload').disabled = !link.port || busy;
+    byId('config-reload').disabled = !readable;
     byId('config-apply').disabled = !writable || !hasDrafts;
     byId('config-save').disabled = !writable || !(link.dirty || hasDrafts);
     byId('config-revert').disabled = busy || !(hasDrafts || (writable && link.dirty));
@@ -49,7 +51,7 @@
     const slot = byId('config-profiles').value;
     byId('config-profiles').disabled = !editable || !profiles.length;
     byId('config-profile-save').disabled = !writable || slot === '';
-    byId('config-profile-load').disabled = !editable || !profiles[slot];
+    byId('config-profile-load').disabled = !readable || !loaded || !profiles[slot];
     byId('config-profile-up').disabled = !writable || !profiles[slot] || Number(slot) === 0;
     byId('config-profile-down').disabled = !writable || !profiles[slot] || Number(slot) === profiles.length - 1;
     byId('config-summary').textContent = loaded
@@ -829,7 +831,9 @@
   };
 
   window.configurationModeChanged = mode => {
-    canWrite = mode === 'DISARM';
+    const nextCanWrite = mode === 'DISARM';
+    if (canWrite === nextCanWrite) return;
+    canWrite = nextCanWrite;
     updateToolbar();
   };
   for (const item of document.querySelectorAll('[data-page]')) item.onclick = () => selectPage(item.dataset.page);

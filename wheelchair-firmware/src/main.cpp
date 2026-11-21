@@ -337,7 +337,8 @@ static void applySeatedLatch()
     const auto transition = modeState.applySeat(leanMode.isSeated(), millis());
     if (!transition.changed)
         return;
-    if (transition.seatDisarm)
+    // Clear old motion on every entry to Disarm, including the mode button.
+    if (modeState.current() == DISARM)
     {
         leftRPMSetpointPID.reset();
         rightRPMSetpointPID.reset();

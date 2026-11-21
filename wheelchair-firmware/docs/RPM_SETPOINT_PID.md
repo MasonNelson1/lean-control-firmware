@@ -286,8 +286,8 @@ When a lower speed selection is below the existing output speed, this final clip
 The controller receives a wheel target after the following processing:
 
 1. Read F/B/L/R sensors, subtract calibrated floors and clamp negatives to zero.
-2. Apply sensor gains, then sensor saturation. Current rear gain is 4; the other gains are 1. Current code caps all four using `frontSaturation`.
-3. Normalize `F − B` to speed and `R − L` to turn, each in `[-1, 1]`, using the corresponding directional saturation limits.
+2. Apply the configured sensor gains without per-sensor saturation caps.
+3. Normalize `F ? B` to speed and `R ? L` to turn by dividing both differences by `userWeightEstimate`, then clamp each to `[-1, 1]`. A nonpositive weight estimate produces zero normalized input.
 4. Set a component to zero when its magnitude is strictly less than `DEADBAND = 0.05`.
 5. On the scheduled update, apply the power response separately to speed and turn.
 6. Mix shaped components into left/right normalized demands, clip each demand and convert to wheel RPM.

@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'bluetooth.js'), 'utf8
 const row = (time = 1000, mode = 'LEAN') => `${time},100,200,300,400,1000,370,0.25,-0.1,10,20,9,19,1,${mode}`;
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-function harness({secure = true, openError = null, backend = true} = {}) {
+function harness({secure = true, openError = null, backend = true, configWire = false} = {}) {
   const elements = new Map();
   const messages = [], frames = [], commands = [];
   let controller, now = 0, closed = false, requestOptions;
@@ -33,8 +33,9 @@ function harness({secure = true, openError = null, backend = true} = {}) {
     graphs() {}, showMode() {}, sensors() {},
     appendConsole: line => messages.push(line),
     applyTelemetry: (rows, stale, source) => frames.push({rows: rows.slice(), stale, source}),
-    setInterval() { return 1; }, clearInterval() {}, setTimeout,
+    setInterval() { return 1; }, clearInterval() {}, setTimeout, clearTimeout,
   });
+  if (configWire) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'config-protocol.js'), 'utf8'), context);
   vm.runInContext(source, context);
   return {
     context, elements, frames, messages, commands,
@@ -330,4 +331,70 @@ test('recovery does not invent fields or accept partial rows', () => {
   assert.equal(recover(currentRow('garbage')).length, 0);
   assert.equal(recover(currentRow().replace('1000,100', '999999999999,100')).length, 0);
   assert.equal(recover('1787682,0,0,49,0,49,757,0.0000,-0.0414,-2.1795,2.1795').length, 0);
+});
+
+
+function configResponse(wire, seq) {
+  const data = Uint8Array.of(0xc2, 1, seq, wire.commands.hello, 0, 0, 1, 0, 2, 0, 0, 0);
+  new DataView(data.buffer).setUint16(data.length - 2, wire.crc16(data.subarray(0, -2)), true);
+  return wire.encodeFrame(data); // includes trailing zero
+}
+
+for (const damage of ['missing opening zero', 'missing closing zero', 'corrupt payload', 'oversized payload']) {
+  test(`binary receiver resynchronizes after ${damage} without reconnecting`, async () => {
+    const h = harness({configWire: true}), wire = h.run('ConfigWire');
+    const received = [];
+    h.context.window.configLink = {receive: frame => received.push(wire.responseFrame(frame))};
+    await h.context.connectBluetooth();
+    const first = configResponse(wire, 0), next = configResponse(wire, 1);
+    if (damage === 'missing opening zero') h.send(first);
+    if (damage === 'missing closing zero') h.send(Uint8Array.of(0, ...first.subarray(0, -1)));
+    if (damage === 'corrupt payload') {
+      first[first.length - 2] ^= 1;
+      h.send(Uint8Array.of(0, ...first));
+    }
+    if (damage === 'oversized payload') h.send(Uint8Array.of(0, ...new Uint8Array(500).fill(65), 0));
+    h.send(currentRow() + '\n'); // may be discarded until binary alignment is recovered
+    h.send(Uint8Array.of(0, ...next));
+    h.send(currentRow().replace(/^1000,/, '1050,') + '\n');
+    await settle();
+    h.context.renderBluetooth();
+    assert.equal(received.length, 1);
+    assert.equal(received[0].seq, 1);
+    assert.equal(h.frames.at(-1).rows.at(-1).time_ms, 1050);
+    assert.equal(h.closed, false);
+    await h.context.disconnectBluetooth();
+  });
+}
+
+test('stale telemetry does not close the serial connection or cancel an active configuration read', async () => {
+  const h = harness({configWire: true}), wire = h.run('ConfigWire');
+  const link = new wire.Link();
+  link.attach({writable: new WritableStream({write() {}})});
+  h.context.window.configLink = link;
+  const modes = [];
+  h.context.window.configurationModeChanged = mode => modes.push(mode);
+  await h.context.connectBluetooth();
+  h.send(currentRow() + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  const pending = link.request(wire.commands.hello);
+  await settle();
+  h.setNow(2100);
+  h.context.renderBluetooth();
+  assert.equal(h.frames.at(-1).stale, true);
+  assert.equal(modes.at(-1), null);
+  assert.ok(link.pending);
+  assert.equal(h.closed, false);
+  h.send(Uint8Array.of(0, ...configResponse(wire, 0)));
+  await settle();
+  const reply = await pending;
+  assert.equal(reply.u16(), 1);
+  assert.equal(reply.u16(), 2);
+  h.send(currentRow().replace(/^1000,/, '2200,') + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  assert.equal(h.frames.at(-1).stale, false);
+  assert.equal(modes.at(-1), 'LEAN');
+  await h.context.disconnectBluetooth();
 });

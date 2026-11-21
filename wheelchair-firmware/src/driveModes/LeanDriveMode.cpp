@@ -4,22 +4,11 @@
 #include "../config/DriveSettings.h"
 #include "../telemetry/Telemetry.h"
 
-static float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit)
+static float normalizeSensorPair(int difference, int userWeightEstimate)
 {
-    if (difference >= 0)
-    {
-        return constrain(
-            (float)difference / positiveLimit,
-            0.0f,
-            1.0f);
-    }
-    else
-    {
-        return constrain(
-            (float)difference / negativeLimit,
-            -1.0f,
-            0.0f);
-    }
+    if (userWeightEstimate <= 0)
+        return 0.0f;
+    return constrain(static_cast<float>(difference) / userWeightEstimate, -1.0f, 1.0f);
 }
 
 static int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
@@ -55,13 +44,6 @@ void LeanDriveMode::sampleSensors(bool seatOnly)
     l = (int)(l * settings::leftGain.get());
     r = (int)(r * settings::rightGain.get());
 
-    if (initiallyCalibrated)
-    {
-        f = min(frontSaturation, f);
-        b = min(backSaturation, b);
-        l = min(leftSaturation, l);
-        r = min(rightSaturation, r);
-    }
     telemetry = {f, b, l, r, 0.0f, 0.0f, !initiallyCalibrated};
 }
 
@@ -81,8 +63,8 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     const int l = telemetry.left, r = telemetry.right;
 
     // calculate speed and turn components from -1 to 1
-    float speed = normalizeSensorPair(f - b, backSaturation, frontSaturation);
-    float turn = normalizeSensorPair(r - l, leftSaturation, rightSaturation);
+    float speed = normalizeSensorPair(f - b, userWeightEstimate);
+    float turn = normalizeSensorPair(r - l, userWeightEstimate);
 
     // apply deadband.
     if (fabs(speed) < settings::deadband.get())
@@ -130,11 +112,6 @@ void LeanDriveMode::calibrate()
     floorL = (sumL + samples / 2) / samples;
     floorR = (sumR + samples / 2) / samples;
     userWeightEstimate = (floorF + floorB + floorL + floorR) / 4; // integer division ok here.
-
-    frontSaturation = settings::frontWeight.get() * userWeightEstimate;
-    backSaturation = settings::rearWeight.get() * userWeightEstimate;
-    leftSaturation = settings::leftWeight.get() * userWeightEstimate;
-    rightSaturation = settings::rightWeight.get() * userWeightEstimate;
 
     initiallyCalibrated = true;
 

@@ -20,7 +20,7 @@ namespace settings
         Group drive(registry(), 1, "Drive behavior");
         Group lean(registry(), 2, "Lean control");
         Group gains(registry(), 3, "Sensor gains", false, &lean);
-        Group sensitivity(registry(), 4, "Sensor sensitivity", false, &lean);
+        // Group ID 4 is retired with the directional saturation factors.
         Group response(registry(), 5, "Response curves", false, &lean);
         Group timing(registry(), 6, "Communication and timing", true);
         Group calibration(registry(), 7, "Calibration", true);
@@ -74,14 +74,8 @@ namespace settings
     ConfigField<float> rightGain(registry(), 13,
                                  {gains, "Right gain", "Multiplier applied to the right sensor after subtracting its calibrated floor.", "×"}, 1, 0.01f, 100);
 
-    ConfigField<float> frontWeight(registry(), 20,
-                                   {sensitivity, "Front saturation factor", "Multiple of the calibrated weight reference for full forward input. Higher values require more force. Recalibrate to apply.", "×"}, 1, .2, 3);
-    ConfigField<float> rearWeight(registry(), 21,
-                                  {sensitivity, "Rear saturation factor", "Multiple of the calibrated weight reference for full reverse input. Higher values require more force. Recalibrate to apply.", "×"}, 1, .2, 3);
-    ConfigField<float> leftWeight(registry(), 22,
-                                  {sensitivity, "Left saturation factor", "Multiple of the calibrated weight reference for full left turn. Higher values require more force. Recalibrate to apply.", "×"}, 1, .2, 3);
-    ConfigField<float> rightWeight(registry(), 23,
-                                   {sensitivity, "Right saturation factor", "Multiple of the calibrated weight reference for full right turn. Higher values require more force. Recalibrate to apply.", "×"}, 1, .2, 3);
+    // Field IDs 20-23 are retired; normalize lean differences by rider weight.
+
 
     // The knee is one atomic value, so input/output constraints can be checked
     // together. LeanDriveMode derives its exponent from the accepted coordinates.

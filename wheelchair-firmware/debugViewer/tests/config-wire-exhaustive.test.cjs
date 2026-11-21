@@ -92,7 +92,9 @@ test('serial link times out without acknowledgment', async () => {
   link.attach({writable: new WritableStream({write() {}})});
   const request = link.request(commands.hello);
   timers[0]();
-  await assert.rejects(request, /No configuration reply/);
+  timers[1]();
+  timers[2]();
+  await assert.rejects(request, /No configuration reply after 3 attempts/);
   assert.equal(link.pending, null);
 });
 test('serial link releases writer after failed write', async () => {

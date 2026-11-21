@@ -30,6 +30,27 @@ CSV/configuration stream. It delivers configuration frames to `configLink`.
 Keep a single serial reader: adding another reader breaks configuration/CSV
 demultiplexing. Disconnecting discards the connection-specific schema and drafts.
 
+Stale telemetry does not close the serial port, cancel configuration reads, or
+disable reload/profile-read controls. It removes confirmation of Disarm, so
+mutation controls remain disabled until fresh Disarm telemetry arrives. The
+mixed-stream receiver validates candidate configuration replies at each zero
+boundary and uses an invalid boundary as a possible start of the next packet.
+This restores alignment after a missing delimiter, corrupt payload, or oversized
+frame when a subsequent intact reply arrives; it does not reopen a closed port.
+Actual Bluetooth disconnection still requires the user to choose Connect.
+
+
+Read-only configuration commands (hello, groups, field descriptions/values,
+preview metadata, profile catalogs and profile chunks) retry a timed-out request
+at most twice, for three attempts total at 2.5 seconds each. Successful earlier
+requests are retained as discovery continues. Each attempt uses a fresh sequence
+number; late replies from previous attempts are ignored. Explicit device errors,
+serial write failures and disconnects are not retried. Mutation commands,
+including settings writes, save/revert/defaults and profile uploads/moves, are
+never automatically retried because a missing acknowledgement does not prove
+that the operation failed to execute.
+
+
 The firmware requires Disarm for active configuration writes and profile uploads.
 The browser can edit drafts, stage defaults, and load onboard profiles in every
 mode. On connection the browser queries only the profile catalog. An explicit

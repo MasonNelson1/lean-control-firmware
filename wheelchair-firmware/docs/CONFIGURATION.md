@@ -106,10 +106,12 @@ tuning declaration.
 
 The default startup selection is REMOTE. A valid controller packet is required
 for remote propulsion. LEAN remains calibration-gated. The default sensor
-floor is the pre-calibration telemetry baseline. Saturation factors scale the
-calibrated weight reference independently for the four sensors. Calibration
-calculates and caches all four saturation values. Recalibrate after editing a
-saturation factor to use it in the drive calculations.
+floor is the pre-calibration telemetry baseline. After subtracting floors and
+applying sensor gains, forward/back and right/left differences are each divided
+by the calibrated user weight estimate and clamped to [-1, 1]. Individual sensor
+values are not saturation-capped. The former directional saturation fields
+(IDs 20-23) and their group (ID 4) are retired; those IDs must not be reused.
+Older saved records for these fields are ignored when loading configuration.
 
 The watchdog can only be shortened from its 100 ms default, the control
 period stays within 4–10 ms, and configurable jerk cannot exceed the original

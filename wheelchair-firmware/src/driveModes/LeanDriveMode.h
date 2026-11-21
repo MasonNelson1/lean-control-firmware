@@ -18,12 +18,6 @@ private:
     int seatLoad = 0;
     int userWeightEstimate = 370; // Unloaded sensor estimate until calibration.
 
-    // Cached from the weight estimate and configured factors during calibration.
-    int frontSaturation = 0;
-    int backSaturation = 0;
-    int leftSaturation = 0;
-    int rightSaturation = 0;
-
     float speedResponseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
     float turnResponseExponent = 2.0f;
 

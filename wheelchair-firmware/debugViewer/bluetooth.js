@@ -35,9 +35,10 @@ function recoverTelemetryRows(line) {
 // Legacy telemetry is newline-delimited. Configuration replies are framed
 // with a zero on each side of their COBS payload.
 class BluetoothReceiver {
-  constructor(onLine, onFrame) {
+  constructor(onLine, onFrame, validFrame = () => true) {
     this.onLine = onLine;
     this.onFrame = onFrame;
+    this.validFrame = validFrame;
     this.decoder = new TextDecoder();
     this.line = [];
     this.frame = null;
@@ -50,8 +51,16 @@ class BluetoothReceiver {
           this.line = [];
           this.frame = [];
         } else {
-          if (this.frame.length && this.frame.length <= 402) this.onFrame(Uint8Array.from(this.frame));
-          this.frame = null;
+          const candidate = Uint8Array.from(this.frame);
+          if (candidate.length && candidate.length <= 402 && this.validFrame(candidate)) {
+            this.onFrame(candidate);
+            this.frame = null;
+          } else {
+            // A delimiter may be the opening boundary of the next packet if
+            // the previous boundary was lost. Keep searching at every zero
+            // until a complete checksum-validated response restores alignment.
+            this.frame = [];
+          }
         }
       } else if (this.frame !== null) {
         if (this.frame.length <= 402) this.frame.push(byte);
@@ -122,7 +131,8 @@ async function readBluetooth(port) {
       }
       else appendConsole(line);
     }
-  }, frame => window.configLink?.receive(frame));
+  }, frame => window.configLink?.receive(frame),
+    frame => typeof ConfigWire === 'undefined' || ConfigWire.responseFrame(frame) !== null);
   try {
     while (bluetoothActive && port.readable) {
       const stream = port.readable;

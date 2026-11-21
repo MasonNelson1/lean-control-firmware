@@ -53,12 +53,13 @@ function harness() {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
   }
   const source = fs.readFileSync(path.join(__dirname, '..', 'configuration.js'), 'utf8');
-  const hook = '  globalThis.controlsUnderTest = {numberInput, parseDraft, inputValue, renderField, restoreDefaults, listProfiles, loadProfile, Reader: ConfigWire.Reader,' +
+  const hook = '  globalThis.controlsUnderTest = {numberInput, parseDraft, inputValue, renderField, restoreDefaults, listProfiles, loadProfile, updateToolbar, seedProfiles(items) { profiles = items; }, Reader: ConfigWire.Reader,' +
     ' draft(id) { return drafts.get(id); }, seed(items, entries) { groups = new Map(items); fields = new Map(entries); drafts.clear(); loaded = true; }};\n';
   assert.ok(source.includes('  window.configurationConnectionChanged(null);'));
   vm.runInContext(source.replace('  window.configurationConnectionChanged(null);', hook + '  window.configurationConnectionChanged(null);'), context);
   return {
     api: context.controlsUnderTest,
+    window: context.window,
     link: context.window.configLink,
     node: id => document.getElementById(id),
     types: vm.runInContext('ConfigWire.types', context),
@@ -257,4 +258,26 @@ test('catalog reads only names and explicit load stages settings', async () => {
   assert.deepEqual(commands, [10, 11]);
   assert.equal(h.api.draft(10), '4');
   assert.equal(c.field.value, 1);
+});
+
+
+test('stale telemetry disables writes while configuration read controls stay enabled', () => {
+  const h = harness();
+  scalar(h);
+  h.link.port = {writable: {}};
+  h.api.seedProfiles(['Test profile']);
+  h.node('config-profiles').value = '0';
+  h.link.dirty = true;
+  h.window.configurationModeChanged('DISARM');
+  h.api.updateToolbar();
+  assert.equal(h.node('config-save').disabled, false);
+  assert.equal(h.node('config-reload').disabled, false);
+  assert.equal(h.node('config-profile-load').disabled, false);
+  h.window.configurationModeChanged(null);
+  assert.equal(h.node('config-save').disabled, true);
+  assert.equal(h.node('config-reload').disabled, false);
+  assert.equal(h.node('config-profile-load').disabled, false);
+  h.window.configurationModeChanged('LEAN');
+  assert.equal(h.node('config-reload').disabled, false);
+  assert.equal(h.node('config-profile-load').disabled, false);
 });

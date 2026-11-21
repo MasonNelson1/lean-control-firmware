@@ -206,5 +206,28 @@ int main()
         sm.update(press(REMOTE), 1100);
         assert(sm.selected() == REMOTE);
     }
+    { // A completed dynamic calibration disarms until a fresh mode selection.
+        SM sm;
+        sm.begin(LEAN);
+        sm.requestDisarm();
+        assert(sm.selected() == DISARM);
+        const auto transition = sm.applySeat(true, 100);
+        assert(transition.changed && !transition.seatDisarm && !transition.resetLean);
+        assert(sm.current() == DISARM);
+        sm.update(seated(), 1000);
+        assert(!sm.applySeat(true, 1000).changed);
+        assert(sm.current() == DISARM);
+        sm.update(press(LEAN), 1100);
+        assert(sm.applySeat(true, 1100).resetLean);
+        assert(sm.current() == LEAN);
+    }
+    { // A programmatic disarm clears an earlier Assist hold.
+        SM sm;
+        sm.update(press(DISARM), 10);
+        sm.requestDisarm();
+        assert(!sm.update(seated(), 1000).resetAssist);
+        sm.applySeat(true, 1000);
+        assert(sm.current() == DISARM);
+    }
     puts("Mode state machine regression tests passed");
 }

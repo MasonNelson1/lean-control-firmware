@@ -37,6 +37,7 @@ public:
     };
 
     void begin(common::mode initial);
+    void requestDisarm();
     Actions update(const Inputs &input, uint32_t now);
     bool needsSeatSample(const Inputs &input) const;
     // Called at the control tick after refreshing the seat sensors.

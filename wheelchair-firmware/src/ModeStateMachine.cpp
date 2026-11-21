@@ -8,6 +8,14 @@ void ModeStateMachine::begin(mode initial)
     selectedMode_ = currentMode_ = initial;
 }
 
+void ModeStateMachine::requestDisarm()
+{
+    selectedMode_ = DISARM;
+    leanPending_ = remotePending_ = disarmPending_ = assistHoldPending_ = false;
+    calibrationPending_ = false;
+    confirmingProfile_ = NoProfile;
+}
+
 bool ModeStateMachine::needsSeatSample(const Inputs &in) const
 {
     return in.lean.edge || in.remote.edge || in.disarm.edge ||

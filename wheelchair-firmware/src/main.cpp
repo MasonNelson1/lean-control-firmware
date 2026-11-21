@@ -388,7 +388,11 @@ static void updateDrive()
     }
     if (leanMode.calibrationActive())
     {
-        leanMode.updateCalibration(millis(), calibrateButton.getState() == LOW);
+        if (leanMode.updateCalibration(millis(), calibrateButton.getState() == LOW))
+        {
+            modeState.requestDisarm();
+            applySeatedLatch();
+        }
         leanMode.sampleSensors();
         vescSetCurrent(can1, motors.leftId, 0.0f);
         vescSetCurrent(can1, motors.rightId, 0.0f);

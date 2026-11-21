@@ -28,10 +28,10 @@ static void sensors(int f, int b, int l, int r)
     sensorInputs[common::PIN_R] = r;
 }
 
-static void sample(LeanDriveMode &mode, uint32_t now, bool held = true)
+static bool sample(LeanDriveMode &mode, uint32_t now, bool held = true)
 {
     mode.sampleSensors();
-    mode.updateCalibration(now, held);
+    return mode.updateCalibration(now, held);
 }
 
 static void checkGains(const LeanDriveMode &mode, float f, float b, float l, float r)
@@ -52,7 +52,7 @@ int main()
     // A short press calibrates neutral and keeps the configured gains.
     sensors(1000, 1000, 1000, 1000);
     mode.beginCalibration(100);
-    sample(mode, 399, false);
+    assert(!sample(mode, 399, false));
     assert(!mode.calibrationActive());
     assert(!mode.calibrationLEDOn(399));
     assert(mode.getUserWeightEstimate() == 1000);
@@ -79,7 +79,8 @@ int main()
     assert(stopped.left == 0 && stopped.right == 0);
     // A sample taken after release must not contribute to the peaks.
     sensors(4095, 4095, 4095, 4095);
-    sample(mode, 1700, false);
+    assert(sample(mode, 1700, false));
+    assert(!sample(mode, 1705, false)); // completion is reported once
     checkGains(mode, 10, 5, 2.5f, 1.25f);
     assert(!mode.calibrationActive());
     assert(!mode.calibrationLEDOn(1700));
@@ -102,7 +103,7 @@ int main()
     mode.beginCalibration(2000);
     sensors(1320, 1500, 1600, 1319);
     sample(mode, 2300);
-    sample(mode, 2400, false);
+    assert(sample(mode, 2400, false)); // rejected attempts also require Disarm
     checkGains(mode, 10, 5, 2.5f, 1.25f);
     assert(messages.find("right maximum 119, required 120.0") != std::string::npos);
 
@@ -113,14 +114,21 @@ int main()
     sample(mode, 3300);
     mode.cancelCalibration();
     assert(!mode.calibrationActive());
+    assert(!sample(mode, 3400, false));
     assert(!mode.calibrationLEDOn(3400));
     checkGains(mode, 10, 5, 2.5f, 1.25f);
 
     // A delayed first update (e.g. long neutral averaging) enters collection.
     sensors(1200, 1200, 1200, 1200);
     mode.beginCalibration(4000);
-    sensors(1320, 1320, 1320, 1320);
+    sensors(1320, 1200, 1200, 1200);
     sample(mode, 5000);
+    sensors(1200, 1320, 1200, 1200);
+    sample(mode, 5005);
+    sensors(1200, 1200, 1320, 1200);
+    sample(mode, 5010);
+    sensors(1200, 1200, 1200, 1320);
+    sample(mode, 5015);
     sample(mode, 5100, false);
     checkGains(mode, 10, 10, 10, 10); // exact threshold is accepted
 
@@ -130,19 +138,67 @@ int main()
     mode.beginCalibration(start);
     sample(mode, start + 299);
     assert(!mode.calibrationLEDOn(start + 299));
-    sensors(1500, 1500, 1500, 1500);
+    sensors(1500, 1000, 1000, 1000);
     sample(mode, start + 300);
+    sensors(1000, 1500, 1000, 1000);
+    sample(mode, start + 305);
+    sensors(1000, 1000, 1500, 1000);
+    sample(mode, start + 310);
+    sensors(1000, 1000, 1000, 1500);
+    sample(mode, start + 315);
     assert(mode.calibrationLEDOn(start + 300));
     assert(!mode.calibrationLEDOn(start + 400));
     sample(mode, start + 500, false);
     checkGains(mode, 2, 2, 2, 2);
 
+    // Pair each raw peak with its simultaneous opposite reading, before gains.
+    sensors(1000, 1000, 1000, 1000);
+    mode.beginCalibration(7000);
+    sensors(1400, 900, 1000, 1000); // larger difference, but not the front maximum
+    sample(mode, 7300);
+    sensors(1500, 1200, 1000, 1000); // front peak 500, opposite 200
+    sample(mode, 7305);
+    sensors(1100, 1600, 1000, 1000); // back peak 600, opposite 100
+    sample(mode, 7310);
+    sensors(1000, 1000, 1400, 1100); // left peak 400, opposite 100
+    sample(mode, 7315);
+    sensors(1000, 1000, 1150, 1800); // right peak 800, opposite 150
+    sample(mode, 7320);
+    sensors(1500, 900, 1000, 1000); // tied front maximum retains the first peak sample
+    sample(mode, 7325);
+    sample(mode, 7330, false);
+    checkGains(mode, 1000.0f / 300, 2, 1000.0f / 300, 1000.0f / 650);
+
+    // Signed opposite readings below neutral contribute to the difference.
+    sensors(1000, 1000, 1000, 1000);
+    mode.beginCalibration(8000);
+    sensors(1400, 900, 1000, 1000);
+    sample(mode, 8300);
+    sensors(900, 1400, 1000, 1000);
+    sample(mode, 8305);
+    sensors(1000, 1000, 1400, 900);
+    sample(mode, 8310);
+    sensors(1000, 1000, 900, 1400);
+    sample(mode, 8315);
+    sample(mode, 8320, false);
+    checkGains(mode, 2, 2, 2, 2);
+
+    // Peaks can meet the existing 10% threshold but have invalid pair differences.
+    sensors(1000, 1000, 1000, 1000);
+    mode.beginCalibration(9000);
+    sensors(1500, 1600, 1400, 1400);
+    sample(mode, 9300);
+    sample(mode, 9310, false);
+    checkGains(mode, 2, 2, 2, 2);
+    assert(messages.find("front difference at peak -100 must be positive") != std::string::npos);
+    assert(messages.find("left difference at peak 0 must be positive") != std::string::npos);
+
     // Zero weight never produces infinite or zero gains.
     sensors(0, 0, 0, 0);
-    mode.beginCalibration(6000);
+    mode.beginCalibration(10000);
     sensors(100, 100, 100, 100);
-    sample(mode, 6300);
-    sample(mode, 6400, false);
+    sample(mode, 10300);
+    sample(mode, 10400, false);
     checkGains(mode, 2, 2, 2, 2);
 
     // The startup/profile hook restores the configured defaults explicitly.

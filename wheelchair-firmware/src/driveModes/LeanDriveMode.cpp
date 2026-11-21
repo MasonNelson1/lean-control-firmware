@@ -11,7 +11,7 @@ static float normalizeSensorPair(int difference, int userWeightEstimate)
     return constrain(static_cast<float>(difference) / userWeightEstimate, -1.0f, 1.0f);
 }
 
-static int aboveFloor(int raw, int floor) { return raw > floor ? raw - floor : 0; }
+static int aboveFloor(int raw, int floor) { return raw - floor; }
 
 void LeanDriveMode::updateResponseCurve()
 {
@@ -74,13 +74,14 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     // Shape speed and turn separately before wheel mixing and PID smoothing.
     speed = copysignf(powf(fabsf(speed), speedResponseExponent), speed);
     turn = copysignf(powf(fabsf(turn), turnResponseExponent), turn);
-    if (speed < -0.3f) {
+    if (speed < -0.3f)
+    {
         turn *= -1;
     }
-    if (speed < -0.9f) {
+    if (speed < -0.9f)
+    {
         turn = 0;
     }
-
 
     telemetry = {f, b, l, r, speed, turn, false};
     const auto &mix = settings::leanTurnMix.get();
@@ -123,19 +124,21 @@ void LeanDriveMode::beginCalibration(uint32_t pressedAt)
     calibrate();
     calibrationPressedAt = pressedAt;
     calibrationPeaks.fill(0);
+    oppositeAtPeak.fill(0);
     calibrationState = CalibrationState::Waiting;
 }
 
-void LeanDriveMode::updateCalibration(uint32_t now, bool buttonHeld)
+bool LeanDriveMode::updateCalibration(uint32_t now, bool buttonHeld)
 {
     if (!calibrationActive())
-        return;
+        return false;
     if (!buttonHeld)
     {
-        if (calibrationState == CalibrationState::Collecting)
+        const bool dynamicFinished = calibrationState == CalibrationState::Collecting;
+        if (dynamicFinished)
             finishDynamicCalibration();
         calibrationState = CalibrationState::Idle;
-        return;
+        return dynamicFinished;
     }
     if (calibrationState == CalibrationState::Waiting && now - calibrationPressedAt >= 300)
     {
@@ -144,33 +147,48 @@ void LeanDriveMode::updateCalibration(uint32_t now, bool buttonHeld)
         telemetry::Telemetry::logf("Dynamic calibration started; lean in all four directions, then release.\n");
     }
     if (calibrationState == CalibrationState::Collecting)
+    {
+        const size_t opposite[] = {1, 0, 3, 2};
         for (size_t i = 0; i < calibrationPeaks.size(); ++i)
             if (flooredReadings[i] > calibrationPeaks[i])
+            {
                 calibrationPeaks[i] = flooredReadings[i];
+                oppositeAtPeak[i] = flooredReadings[opposite[i]];
+            }
+    }
+    return false;
 }
 
 void LeanDriveMode::finishDynamicCalibration()
 {
     const float threshold = 0.1f * userWeightEstimate;
     const char *names[] = {"front", "back", "left", "right"};
+    std::array<int, 4> differences{};
     bool valid = userWeightEstimate > 0;
     if (!valid)
         telemetry::Telemetry::logf("Dynamic calibration rejected: weight estimate must be positive.\n");
     for (size_t i = 0; i < calibrationPeaks.size(); ++i)
     {
+        differences[i] = calibrationPeaks[i] - oppositeAtPeak[i];
         if (calibrationPeaks[i] < threshold || calibrationPeaks[i] == 0)
         {
             valid = false;
             telemetry::Telemetry::logf("Dynamic calibration rejected: %s maximum %d, required %.1f.\n",
                                        names[i], calibrationPeaks[i], threshold);
         }
+        if (differences[i] <= 0)
+        {
+            valid = false;
+            telemetry::Telemetry::logf("Dynamic calibration rejected: %s difference at peak %d must be positive.\n",
+                                       names[i], differences[i]);
+        }
     }
     if (!valid)
         return;
     for (size_t i = 0; i < dynamicGains.size(); ++i)
-        dynamicGains[i] = static_cast<float>(userWeightEstimate) / calibrationPeaks[i];
-    telemetry::Telemetry::logf("Dynamic calibration complete: maxima F=%d B=%d L=%d R=%d.\n",
-                               calibrationPeaks[0], calibrationPeaks[1], calibrationPeaks[2], calibrationPeaks[3]);
+        dynamicGains[i] = static_cast<float>(userWeightEstimate) / differences[i];
+    telemetry::Telemetry::logf("Dynamic calibration complete: differences at peaks F=%d B=%d L=%d R=%d.\n",
+                               differences[0], differences[1], differences[2], differences[3]);
     publishDynamicGains();
 }
 

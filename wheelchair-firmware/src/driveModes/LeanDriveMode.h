@@ -30,6 +30,7 @@ private:
     std::array<float, 4> dynamicGains{{1, 1, 1, 1}};
     std::array<int, 4> flooredReadings{};
     std::array<int, 4> calibrationPeaks{};
+    std::array<int, 4> oppositeAtPeak{};
     void finishDynamicCalibration();
 
 public:
@@ -41,7 +42,8 @@ public:
     void sampleSensors(bool seatOnly = false);
     void calibrate();
     void beginCalibration(uint32_t pressedAt);
-    void updateCalibration(uint32_t now, bool buttonHeld);
+    // Returns true when releasing the button finishes a dynamic calibration attempt.
+    bool updateCalibration(uint32_t now, bool buttonHeld);
     void cancelCalibration();
     bool calibrationActive() const { return calibrationState != CalibrationState::Idle; }
     bool calibrationLEDOn(uint32_t now) const;

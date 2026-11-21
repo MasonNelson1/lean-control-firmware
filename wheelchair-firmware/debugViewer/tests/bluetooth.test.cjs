@@ -211,3 +211,123 @@ test('hosted Bluetooth connects without any Python cleanup or USB monitoring req
   await h.context.disconnectSelected();
   assert.equal(h.closed, true);
 });
+
+
+const currentRow = (speed = '0.25', turn = '-0.1') =>
+  `1000,100,200,300,400,1000,370,${speed},${turn},10,20,9,19,0,nan,-nan,0,0,LEAN`;
+
+test('current CSV keeps valid fields when a Lean float is nonfinite', () => {
+  const parse = harness().context.parseBluetoothLine;
+  for (const token of ['nan', '-nan', '+NaN', 'inf', '-Infinity']) {
+    const sample = parse(currentRow(token));
+    assert.equal(sample.mode, 'LEAN');
+    assert.equal(sample.F, 100);
+    assert.equal(sample.speed, undefined);
+    assert.equal(sample.turn, -0.1);
+    assert.equal(sample.leftActualRPM, undefined);
+    assert.equal(sample.rightActualRPM, undefined);
+  }
+  assert.equal(parse(currentRow('garbage')), null);
+  assert.equal(parse(currentRow().replace('1000,100', 'nan,100')), null);
+});
+
+test('Lean rows with unavailable direction update telemetry without flooding the console', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  h.send(Array.from({length: 40}, () => currentRow('-nan', 'nan') + '\n').join(''));
+  await settle();
+  h.context.renderBluetooth();
+  assert.equal(h.frames.at(-1).rows.length, 40);
+  assert.equal(h.frames.at(-1).rows[0].F, 100);
+  assert.equal(h.messages.filter(m => m.startsWith('Telemetry warning')).length, 1);
+  assert.ok(h.messages.some(m => m.includes('unavailable speed, turn')));
+  assert.ok(!h.messages.some(m => m.startsWith('1000,')));
+  await h.context.disconnectBluetooth();
+});
+
+test('rejected CSV is reported at most once per five seconds while status messages remain visible', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  const damaged = currentRow('garbage');
+  h.send((damaged + '\n').repeat(100) + 'Mode: LEAN\n');
+  await settle();
+  assert.equal(h.messages.filter(m => m.startsWith('Telemetry warning')).length, 1);
+  assert.ok(h.messages.includes('Mode: LEAN'));
+  assert.ok(!h.messages.includes(damaged));
+  h.setNow(4999);
+  h.send(damaged + '\n');
+  await settle();
+  assert.equal(h.messages.filter(m => m.startsWith('Telemetry warning')).length, 1);
+  h.setNow(5000);
+  h.send(damaged + '\n' + currentRow() + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  assert.equal(h.messages.filter(m => m.startsWith('Telemetry warning')).length, 2);
+  assert.equal(h.frames.at(-1).rows.length, 1);
+  await h.context.disconnectBluetooth();
+});
+
+test('sensor panel handles missing direction fields without throwing or drawing invalid vectors', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const code = html.slice(html.indexOf('    function sensors(r)'), html.indexOf('    function connect()'));
+  const elements = new Map(), vectors = [];
+  const context = vm.createContext({
+    document: {querySelectorAll: () => []},
+    $: id => {
+      if (!elements.has(id)) elements.set(id, {classList: {toggle() {}}});
+      return elements.get(id);
+    },
+    smoothedDirection: () => null,
+    drawDirection: (id, value) => vectors.push([id, value]),
+  });
+  vm.runInContext(code, context);
+  context.sensors({F: 100, B: 200, L: 300, R: 400, total: 1000, userWeight: 370, stopped: 0});
+  assert.equal(elements.get('#speed').textContent, '\u2014');
+  assert.equal(elements.get('#turn').textContent, '\u2014');
+  assert.equal(vectors.find(([id]) => id === 'vector')[1], null);
+});
+
+
+const joinedLeanSample = '1782632,0,0,43,0,43,757,0.0000,-0.0356,-1.8723,1.8723,-1.9189,1.9189,0,0.0000,0.0000,0.0000,0.0000,LE1782682,0,0,46,0,46,757,0.0000,-0.0385,-2.0251,2.0251,-1.8511,1.8511,0,0.0000,0.0000,0.0000,0.0000,LEAN';
+
+test('recovers the complete Lean row from the reported 37-column damaged stream', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  for (let index = 0; index < joinedLeanSample.length; index += 23) {
+    h.send(joinedLeanSample.slice(index, index + 23));
+  }
+  h.send('\nMode: LEAN\n');
+  await settle();
+  h.context.renderBluetooth();
+  const samples = h.frames.at(-1).rows;
+  assert.equal(samples.length, 1);
+  assert.equal(samples[0].time_ms, 1782682);
+  assert.equal(samples[0].L, 46);
+  assert.equal(samples[0].turn, -0.0385);
+  assert.equal(samples[0].mode, 'LEAN');
+  assert.ok(h.messages.some(m => m.includes('recovered 1 complete rows')));
+  assert.ok(h.messages.includes('Mode: LEAN'));
+  await h.context.disconnectBluetooth();
+});
+
+test('recovers multiple complete rows when newline bytes are missing', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  const a = currentRow().replace(/^1000,/, '2000,');
+  const b = currentRow().replace(/^1000,/, '2050,');
+  const c = currentRow().replace(/^1000,/, '2100,');
+  h.send(a + b + c + '\n');
+  await settle();
+  h.context.renderBluetooth();
+  assert.deepEqual(Array.from(h.frames.at(-1).rows, r => r.time_ms), [2000, 2050, 2100]);
+  assert.ok(h.messages.some(m => m.includes('recovered 3 complete rows')));
+  await h.context.disconnectBluetooth();
+});
+
+test('recovery does not invent fields or accept partial rows', () => {
+  const recover = harness().context.recoverTelemetryRows;
+  assert.equal(recover(currentRow().slice(0, -2)).length, 0);
+  assert.equal(recover(currentRow('garbage')).length, 0);
+  assert.equal(recover(currentRow().replace('1000,100', '999999999999,100')).length, 0);
+  assert.equal(recover('1787682,0,0,49,0,49,757,0.0000,-0.0414,-2.1795,2.1795').length, 0);
+});

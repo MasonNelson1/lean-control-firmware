@@ -2,6 +2,7 @@
 #include "Arduino.h"
 #include "common.h"
 #include "../config/DriveSettings.h"
+#include "../telemetry/Telemetry.h"
 
 static float normalizeSensorPair(int difference, int negativeLimit, int positiveLimit)
 {
@@ -137,9 +138,6 @@ void LeanDriveMode::calibrate()
 
     initiallyCalibrated = true;
 
-    // todo make telemetry handling more formal.
-    Serial.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
-                  samples, floorF, floorB, floorL, floorR);
-    Serial1.printf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
-                   samples, floorF, floorB, floorL, floorR);
+    telemetry::Telemetry::logf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
+                               samples, floorF, floorB, floorL, floorR);
 }

@@ -1,6 +1,7 @@
 #include "RemoteDriveMode.h"
 #include "Arduino.h"
 #include "../config/DriveSettings.h"
+#include "../telemetry/Telemetry.h"
 
 void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
 {
@@ -32,7 +33,7 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
     case PACKET_SOFT_STOP:
         if (size != 1)
             return;
-        Serial.println("Soft stopping because of soft stop packet");
+        telemetry::Telemetry::logf("Soft stopping because of soft stop packet\n");
         softStopLatched = true;
         requestedLeftPower = 0.0f;
         requestedRightPower = 0.0f;
@@ -42,7 +43,7 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
     case PACKET_SOFT_STOP_CLEAR:
         if (size != 1)
             return;
-        Serial.println("Clearing soft stop");
+        telemetry::Telemetry::logf("Clearing soft stop\n");
         softStopLatched = false;
         lastPacketMillis = millis(); // needed so it doesn't think it disconnected
         break;

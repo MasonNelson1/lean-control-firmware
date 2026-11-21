@@ -9,14 +9,27 @@ function parseBluetoothLine(line) {
   const fields = numeric.length === 12 ? [...telemetryFields.slice(0, 11), 'stopped'] : telemetryFields;
   const row = {};
   for (const [index, value] of numeric.entries()) {
-    const optional = parts.length === 19 && index >= 9 && index <= 15 && index !== 13;
-    if (optional && value.toLowerCase() === 'nan') continue;
+    // Nonfinite float samples are unavailable, never zero. Keep the other
+    // fields (especially seat sensors and mode) usable when one calculation fails.
+    const optional = parts.length === 19 && index >= 7 && index <= 17 && index !== 13;
+    if (optional && /^[+-]?(?:nan|inf(?:inity)?)$/i.test(value)) continue;
     if (!value || !Number.isFinite(Number(value))) return null;
     row[fields[index]] = Number(value);
   }
   const mode = hasMode ? parts.at(-1) : null;
   row.mode = ['LEAN', 'REMOTE', 'DISARM', 'ASSIST'].includes(mode) ? mode : 'UNKNOWN';
   return row;
+}
+
+// Recover only fully validated current rows with a recognizable timestamp
+// boundary. Never guess missing bytes or splice numeric fields across samples.
+function recoverTelemetryRows(line) {
+  const number = '[+-]?(?:\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|nan|inf(?:inity)?)';
+  const pattern = new RegExp(`(?:^|(?<=[A-Za-z]))\\d+,(?:${number},){17}(?:LEAN|REMOTE|DISARM|ASSIST)(?=$|\\d)`, 'gi');
+  return [...line.matchAll(pattern)].map(match => match[0]).filter(candidate => {
+    const row = parseBluetoothLine(candidate);
+    return row && row.time_ms <= 0xffffffff;
+  });
 }
 
 // Legacy telemetry is newline-delimited. Configuration replies are framed
@@ -81,14 +94,34 @@ function renderBluetooth() {
 }
 
 async function readBluetooth(port) {
+  let lastTelemetryWarning = -Infinity, suppressedTelemetryRows = 0;
+  const warnTelemetry = detail => {
+    suppressedTelemetryRows++;
+    const now = performance.now();
+    if (now - lastTelemetryWarning < 5000) return;
+    appendConsole(`Telemetry warning (${suppressedTelemetryRows} affected rows since last warning): ${detail}`);
+    lastTelemetryWarning = now;
+    suppressedTelemetryRows = 0;
+  };
   const receiver = new BluetoothReceiver(line => {
     const row = parseBluetoothLine(line);
     if (row) {
+      const missing = ['speed', 'turn'].filter(field => !Number.isFinite(row[field]));
+      if (missing.length) warnTelemetry(`unavailable ${missing.join(', ')}; showing remaining fields`);
       if (bluetoothRows.length && row.time_ms < bluetoothRows.at(-1).time_ms) bluetoothRows = [];
       bluetoothRows.push(row);
       bluetoothLastRowAt = performance.now();
       while (bluetoothRows.length > 13000 || row.time_ms - bluetoothRows[0].time_ms > 60000) bluetoothRows.shift();
-    } else if (line.trim() && !line.startsWith('time_ms')) appendConsole(line);
+    } else if (line.trim() && !line.trimStart().startsWith('time_ms')) {
+      // CSV rejected by the parser is telemetry, not a human status message.
+      // Retain one example for diagnosis without printing 20 rows per second.
+      if (/^\s*\d+\s*,/.test(line)) {
+        const recovered = recoverTelemetryRows(line);
+        warnTelemetry(`${recovered.length ? `recovered ${recovered.length} complete rows from damaged CSV` : 'rejected CSV'} (${line.split(',').length} columns): ${line.slice(0, 256)}`);
+        for (const candidate of recovered) receiver.onLine(candidate);
+      }
+      else appendConsole(line);
+    }
   }, frame => window.configLink?.receive(frame));
   try {
     while (bluetoothActive && port.readable) {
@@ -134,7 +167,8 @@ async function connectBluetooth() {
   try {
     // Standard Serial Port Profile services are allowed by default.
     port = await navigator.serial.requestPort({filters: [{bluetoothServiceClassId: 0x1101}]});
-    await port.open({baudRate: 115200, bufferSize: 4096});
+    // Leave room for short rendering pauses on phones without overrunning reads.
+    await port.open({baudRate: 115200, bufferSize: 65536});
     bluetoothPort = port;
     bluetoothActive = true;
     bluetoothRows = [];

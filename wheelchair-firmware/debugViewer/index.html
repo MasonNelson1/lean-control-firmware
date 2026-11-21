@@ -1131,11 +1131,11 @@
       $('#drive').classList.toggle('off', !r || !!r.stopped);
 
       const smoothed = smoothedDirection(r);
-      $('#speed').textContent = r?.speed.toFixed(3) ?? '—';
-      $('#turn').textContent = r?.turn.toFixed(3) ?? '—';
+      $('#speed').textContent = r?.speed?.toFixed(3) ?? '—';
+      $('#turn').textContent = r?.turn?.toFixed(3) ?? '—';
       $('#smoothed-speed').textContent = smoothed?.speed.toFixed(3) ?? '—';
       $('#smoothed-turn').textContent = smoothed?.turn.toFixed(3) ?? '—';
-      drawDirection('vector', r);
+      drawDirection('vector', Number.isFinite(r?.speed) && Number.isFinite(r?.turn) ? r : null);
       drawDirection('smoothed-vector', smoothed);
     }
     function connect() { ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`); ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() }; ws.onclose = () => { if (connectionMode === 'usb') { showMode(lastRow, true); $('#status').textContent = 'Server disconnected'; $('#status').classList.add('off') } setTimeout(connect, 1000) }; ws.onmessage = e => { const d = JSON.parse(e.data); if (connectionMode !== 'usb' || !usbConnected) return; if (d.console) appendConsole(d.console); if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay') } }

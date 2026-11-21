@@ -2,19 +2,12 @@
 
 #include <Arduino.h>
 
+#include "Mode.h"
 #include "drive_constants.h"
 #include "rpm_setpoint_pid.h"
 
 namespace common
 {
-
-    enum mode
-    {
-        LEAN,
-        REMOTE,
-        DISARM,
-        ASSIST
-    };
 
     constexpr uint8_t PIN_F = A15; // pin 39
     constexpr uint8_t PIN_B = A17; // pin 41

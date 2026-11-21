@@ -2,23 +2,13 @@
 #pragma once
 
 #include "DriveMode.h"
-
-struct LeanTelemetry
-{
-    int front;
-    int back;
-    int left;
-    int right;
-    float speed;
-    float turn;
-    bool stopped = true;
-};
+#include "../telemetry/TelemetryTypes.h"
 
 class LeanDriveMode : public DriveMode
 {
 private:
     bool initiallyCalibrated = false;
-    LeanTelemetry telemetry{};
+    telemetry::SensorTelemetry telemetry{};
 
     int floorF = 0;
     int floorB = 0;
@@ -46,6 +36,6 @@ public:
     void sampleSensors(bool seatOnly = false);
     void calibrate();
     void updateResponseCurve();
-    const LeanTelemetry &getTelemetry() const { return telemetry; }
+    const telemetry::SensorTelemetry &getTelemetry() const { return telemetry; }
     int getUserWeightEstimate() const { return userWeightEstimate; }
 };

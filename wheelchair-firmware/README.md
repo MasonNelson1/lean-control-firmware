@@ -2,6 +2,42 @@
 
 See [RPM setpoint PID documentation](docs/RPM_SETPOINT_PID.md) for the controller API, equations, tuning, limits and current firmware integration.
 
+## Mode and telemetry components
+
+`src/ModeStateMachine` owns selected/current modes, pending button presses,
+Assist hold timing, profile confirmation, calibration requests, and the seat
+latch. `main.cpp` samples hardware and applies returned reset/profile actions.
+Selected mode survives seat loss; effective mode updates at the control tick
+before motor commands. The state machine has no Arduino dependency.
+
+`src/telemetry/TelemetryTypes.h` defines all shared telemetry structs, including
+Lean and Remote samples. Drive modes produce these samples. `TelemetryFrame`
+formats the existing 19-column CSV and expires motor RPM feedback after 500 ms.
+`Telemetry` owns the 20 Hz cadence, serial output, and `logf()` status messages.
+USB receives a header and CSV rows, replacing the temporary voltage-only debug
+output. Bluetooth retains headerless CSV and drops whole lines if its transmit
+buffer is full. Binary configuration responses keep their PacketSerial framing
+and run before periodic telemetry.
+
+Run the native regression tests in PowerShell after creating `.pio` (requires
+`g++`):
+
+```powershell
+g++ -std=c++17 -Wall -Wextra -Werror -I src tests/native/mode_state_machine_test.cpp src/ModeStateMachine.cpp -o .pio/mode_state_machine_test.exe
+if ($LASTEXITCODE -ne 0) { throw 'State machine test compilation failed' }
+& ./.pio/mode_state_machine_test.exe
+
+g++ -std=c++17 -Wall -Wextra -Werror -I tests/native/telemetry_stubs -I src tests/native/telemetry_test.cpp src/telemetry/TelemetryFrame.cpp src/telemetry/Telemetry.cpp -o .pio/telemetry_test.exe
+if ($LASTEXITCODE -ne 0) { throw 'Telemetry test compilation failed' }
+& ./.pio/telemetry_test.exe
+```
+
+Coverage includes button priorities, debounce latches, seat recovery, hold and
+release boundaries, interrupted profile confirmations, clock rollover, CSV
+columns, feedback expiry, and serial backpressure. Hardware behavior still
+requires verification on the chair.
+
+
 
 
 TODO:

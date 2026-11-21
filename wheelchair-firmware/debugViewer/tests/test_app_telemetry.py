@@ -57,6 +57,8 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
         viewer.history.clear()
         viewer.console.clear()
         viewer.clients.clear()
+        viewer.telemetry_warning_at = float("-inf")
+        viewer.telemetry_warning_rows = 0
 
     async def test_reboot_clears_previous_history(self):
         await viewer.line_received(row(1000))
@@ -143,3 +145,77 @@ class ExtendedTelemetryTest(unittest.TestCase):
         self.assertEqual(sample['rightActualRPM'], -12)
         self.assertEqual(sample['leftBoostCurrent'], 3.25)
         self.assertEqual(sample['rightBoostCurrent'], 4.5)
+
+
+class CurrentTelemetryTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        viewer.history.clear()
+        viewer.console.clear()
+        viewer.clients.clear()
+        viewer.telemetry_warning_at = float('-inf')
+        viewer.telemetry_warning_rows = 0
+
+    def sample(self, speed='0.25', turn='-0.1'):
+        return f'1000,100,200,300,400,1000,370,{speed},{turn},10,20,9,19,0,nan,-nan,0,0,LEAN'
+
+    def test_nonfinite_direction_preserves_valid_fields(self):
+        for token in ['nan', '-nan', '+NaN', 'inf', '-Infinity']:
+            with self.subTest(token=token):
+                kind, sample = viewer.parse(self.sample(token))
+                self.assertEqual(kind, 'data')
+                self.assertEqual(sample['mode'], 'LEAN')
+                self.assertEqual(sample['F'], 100)
+                self.assertNotIn('speed', sample)
+                self.assertNotIn('rightActualRPM', sample)
+                json = viewer.json.dumps(sample, allow_nan=False)
+                self.assertNotIn('NaN', json)
+        self.assertEqual(viewer.parse(self.sample('garbage'))[0], 'text')
+
+    async def test_unavailable_direction_updates_history_and_warns_once(self):
+        with patch.object(viewer.time, 'monotonic', return_value=10):
+            for _ in range(40):
+                await viewer.line_received(self.sample('-nan', 'nan'))
+        self.assertEqual(len(viewer.history), 40)
+        self.assertEqual(len(viewer.console), 1)
+        self.assertIn('unavailable speed, turn', viewer.console[0])
+
+    async def test_rejected_csv_is_rate_limited_and_recovers(self):
+        damaged = self.sample('garbage')
+        with patch.object(viewer.time, 'monotonic', return_value=10):
+            for _ in range(100):
+                await viewer.line_received(damaged)
+            await viewer.line_received('Mode: LEAN')
+        self.assertEqual(len(viewer.console), 2)
+        self.assertIn('rejected CSV (19 columns)', viewer.console[0])
+        self.assertEqual(viewer.console[1], 'Mode: LEAN')
+        with patch.object(viewer.time, 'monotonic', return_value=15):
+            await viewer.line_received(damaged)
+            await viewer.line_received(self.sample())
+        self.assertEqual(len(viewer.console), 3)
+        self.assertEqual(len(viewer.history), 1)
+
+
+class DamagedTelemetryTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        viewer.history.clear()
+        viewer.console.clear()
+        viewer.clients.clear()
+        viewer.telemetry_warning_at = float('-inf')
+        viewer.telemetry_warning_rows = 0
+
+    async def test_reported_concatenated_lean_row(self):
+        sample = '1782632,0,0,43,0,43,757,0.0000,-0.0356,-1.8723,1.8723,-1.9189,1.9189,0,0.0000,0.0000,0.0000,0.0000,LE1782682,0,0,46,0,46,757,0.0000,-0.0385,-2.0251,2.0251,-1.8511,1.8511,0,0.0000,0.0000,0.0000,0.0000,LEAN'
+        await viewer.line_received(sample)
+        self.assertEqual(len(viewer.history), 1)
+        self.assertEqual(viewer.history[0]['time_ms'], 1782682)
+        self.assertEqual(viewer.history[0]['L'], 46)
+        self.assertEqual(viewer.history[0]['turn'], -0.0385)
+        self.assertIn('recovered 1 complete rows', viewer.console[0])
+
+    async def test_missing_newlines(self):
+        make_row = lambda t: f'{t},0,0,46,0,46,757,0,-0.0385,-2,2,-1,1,0,0,0,0,0,LEAN'
+        await viewer.line_received(''.join(make_row(t) for t in (1000, 1050, 1100)))
+        self.assertEqual([r['time_ms'] for r in viewer.history], [1000, 1050, 1100])
+
+    def test_truncated_rows_stay_rejected(self):
+        self.assertEqual(viewer.recover_telemetry_rows('1787682,0,0,49,0,49,757,0.0000,-0.0414,-2.1795,2.1795'), [])

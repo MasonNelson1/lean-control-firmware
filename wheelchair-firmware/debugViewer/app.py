@@ -1,4 +1,4 @@
-import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib
+import asyncio, csv, json, os, time, argparse, sys, io, zipfile, zlib, re
 from collections import deque
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
@@ -24,7 +24,7 @@ def parse(line):
             row = {}
             import math
             for index, (name, text) in enumerate(zip(names, numeric)):
-                if len(parts) == 19 and index in (9, 10, 11, 12, 14, 15) and text.lower() == 'nan':
+                if len(parts) == 19 and 7 <= index <= 17 and index != 13 and re.fullmatch(r'[+-]?(?:nan|inf(?:inity)?)', text, re.I):
                     continue
                 value = float(text)
                 if not math.isfinite(value): raise ValueError()
@@ -34,15 +34,52 @@ def parse(line):
         except ValueError: pass
     return 'text', line
 
+def recover_telemetry_rows(line):
+    number = r'[+-]?(?:\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|nan|inf(?:inity)?)'
+    pattern = rf'(?:^|(?<=[A-Za-z]))\d+,(?:{number},){{17}}(?:LEAN|REMOTE|DISARM|ASSIST)(?=$|\d)'
+    result = []
+    for match in re.finditer(pattern, line, re.I):
+        candidate = match.group()
+        kind, row = parse(candidate)
+        if kind == 'data' and row['time_ms'] <= 0xffffffff:
+            result.append(candidate)
+    return result
+
 app=FastAPI()
 history=deque(maxlen=13000); console=deque(maxlen=400); clients=set()
 connected=True; proc=None; args=None
+telemetry_warning_at = float("-inf")
+telemetry_warning_rows = 0
 async def emit(event):
     for ws in list(clients):
         try: await asyncio.wait_for(ws.send_json(event), .3)
         except Exception: clients.discard(ws)
 async def line_received(line):
+    global telemetry_warning_at, telemetry_warning_rows
     kind,value=parse(line)
+    issue = None
+    recovered = []
+    if kind == 'data':
+        missing = [name for name in ('speed', 'turn') if name not in value]
+        if missing:
+            issue = 'unavailable ' + ', '.join(missing) + '; showing remaining fields'
+    elif kind == 'text' and re.match(r'^\s*\d+\s*,', line):
+        recovered = recover_telemetry_rows(line)
+        detail = f'recovered {len(recovered)} complete rows from damaged CSV' if recovered else 'rejected CSV'
+        issue = f"{detail} ({len(line.split(','))} columns): {line[:256]}"
+    if issue:
+        telemetry_warning_rows += 1
+        now = time.monotonic()
+        if now - telemetry_warning_at >= 5:
+            warning = f'Telemetry warning ({telemetry_warning_rows} affected rows since last warning): {issue}'
+            console.append(warning)
+            await emit({'console': warning})
+            telemetry_warning_at = now
+            telemetry_warning_rows = 0
+        if kind != 'data':
+            for candidate in recovered:
+                await line_received(candidate)
+            return
     if kind=='data':
         if history and value['time_ms'] < history[-1]['time_ms']: history.clear()
         history.append(value)

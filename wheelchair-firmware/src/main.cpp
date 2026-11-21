@@ -11,6 +11,8 @@
 #include "PacketSerial.h"
 #include "config/DriveSettings.h"
 #include "drive_knobs.h"
+#include "ModeStateMachine.h"
+#include "telemetry/Telemetry.h"
 
 using namespace common;
 
@@ -45,15 +47,8 @@ struct MotorSetup
 static MotorSetup motors;
 static VescStatus measuredMotors[2]{};
 
-struct MotorCommandTelemetry
-{
-    float leftTargetRPM;
-    float rightTargetRPM;
-    float leftSmoothedRPM;
-    float rightSmoothedRPM;
-};
-
-static MotorCommandTelemetry motorTelemetry{};
+static telemetry::MotorCommands motorTelemetry{};
+static telemetry::Telemetry telemetryOutput;
 static MotorTargets assistBoostCurrent{};
 
 // This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
@@ -82,11 +77,7 @@ void setMotorPower(double left, double right, float dt)
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};
 }
 
-mode MODE = REMOTE;
-// Keep the selected mode while the seat latch temporarily disarms the drive.
-static mode selectedMode = REMOTE;
-static uint32_t assistEnteredAt = 0;
-static bool calibrationPending = false;
+ModeStateMachine modeState;
 LeanDriveMode leanMode;
 AssistDriveMode assistMode;
 
@@ -138,28 +129,6 @@ void onDisarmButtonPress()
 {
     disarmEdgePending = true;
 }
-const char *modeName(mode currentMode)
-{
-    switch (currentMode)
-    {
-    case LEAN:
-        return "LEAN";
-    case REMOTE:
-        return "REMOTE";
-    case DISARM:
-        return "DISARM";
-    case ASSIST:
-        return "ASSIST";
-    default:
-        return "UNKNOWN";
-    }
-}
-
-void printMode()
-{
-    Serial.printf("Mode: %s\n", modeName(MODE));
-}
-
 // Apply the knobs' current positions and report them as one text line.
 // Non-CSV lines show up as console text in the debug viewer.
 static void applyKnobs()
@@ -167,18 +136,12 @@ static void applyKnobs()
     userMaxSpeedMS = knobs::speedLimitMS(speedKnob.position());
 
     // this only prints when the knobs are moved, not all the time.
-    char line[160];
-    const int length = snprintf(line, sizeof(line),
-                                "Knobs: speed %d/%d (%.2f m/s, raw %u)%s, profile %d/%d (raw %u)%s\n",
-                                speedKnob.position() + 1, knobs::Positions, userMaxSpeedMS,
-                                static_cast<unsigned>(speedKnob.lastRaw()), speedKnob.faulted() ? " FAULT->slowest" : "",
-                                profileKnob.position() + 1, knobs::Positions,
-                                static_cast<unsigned>(profileKnob.lastRaw()), profileKnob.faulted() ? " FAULT" : "");
-    if (length <= 0 || length >= static_cast<int>(sizeof(line)))
-        return;
-    Serial.write(reinterpret_cast<const uint8_t *>(line), length);
-    if (Serial1.availableForWrite() >= length)
-        Serial1.write(reinterpret_cast<const uint8_t *>(line), length);
+    telemetry::Telemetry::logf(
+        "Knobs: speed %d/%d (%.2f m/s, raw %u)%s, profile %d/%d (raw %u)%s\n",
+        speedKnob.position() + 1, knobs::Positions, userMaxSpeedMS,
+        static_cast<unsigned>(speedKnob.lastRaw()), speedKnob.faulted() ? " FAULT->slowest" : "",
+        profileKnob.position() + 1, knobs::Positions,
+        static_cast<unsigned>(profileKnob.lastRaw()), profileKnob.faulted() ? " FAULT" : "");
 }
 
 static bool activateProfile(int slot)
@@ -261,9 +224,8 @@ void setup()
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
 
     settings::persistence.load();
-    selectedMode = settings::defaultMode.get();
-    MODE = selectedMode;
-    if (selectedMode == LEAN)
+    modeState.begin(settings::defaultMode.get());
+    if (modeState.selected() == LEAN)
         leanMode.reset();
     applyRuntimeSettings();
 
@@ -288,131 +250,56 @@ void setup()
     // motors
     vescBegin(can1);
     delay(200);
-    printMode();
-    Serial.println("Setup successful, ready to drive.");
+    telemetry::Telemetry::logf("Mode: %s\n", modeName(modeState.current()));
+    telemetry::Telemetry::logf("Setup successful, ready to drive.\n");
 }
 
-void setMode()
+// Hardware adapter: the state machine owns all pending presses and timers.
+static void updateModeInputs()
 {
-    constexpr uint32_t assistHoldMs = 500;
-    static bool leanPressPending = false;
-    static bool remotePressPending = false;
-    static bool disarmPressPending = false;
-    static bool assistHoldPending = false;
-    static uint32_t disarmPressedAt = 0;
-    static uint32_t profilePressedAt = 0;
-    static int confirmingProfile = knobs::Invalid;
-
+    ModeStateMachine::Inputs input;
     noInterrupts();
-    const bool leanEdge = leanEdgePending;
-    const bool remoteEdge = remoteEdgePending;
-    const bool disarmEdge = disarmEdgePending;
-    leanEdgePending = false;
-    remoteEdgePending = false;
-    disarmEdgePending = false;
+    input.lean.edge = leanEdgePending;
+    input.remote.edge = remoteEdgePending;
+    input.disarm.edge = disarmEdgePending;
+    leanEdgePending = remoteEdgePending = disarmEdgePending = false;
     interrupts();
 
-    leanPressPending |= leanEdge;
-    remotePressPending |= remoteEdge;
-    disarmPressPending |= disarmEdge;
-
-    // loop the buttons right away
     leanModeButton.loop();
     remoteModeButton.loop();
     calibrateButton.loop();
-    calibrationPending |= calibrateButton.isPressed() && selectedMode == LEAN;
     disarmModeButton.loop();
-
-    // A confirmation belongs to one stable detent and one continuous press.
-    if (confirmingProfile != pendingProfile || !profileKnob.settled() ||
-        leanModeButton.getStateRaw() != LOW || MODE != DISARM || selectedMode != DISARM)
-        confirmingProfile = knobs::Invalid;
-
-    if (leanPressPending || remotePressPending || disarmPressPending || assistHoldPending ||
-        confirmingProfile != knobs::Invalid)
-    {
+    input.lean.pressed = leanModeButton.isPressed();
+    input.lean.released = leanModeButton.isReleased();
+    input.remote.pressed = remoteModeButton.isPressed();
+    input.remote.released = remoteModeButton.isReleased();
+    input.disarm.pressed = disarmModeButton.isPressed();
+    input.disarm.released = disarmModeButton.isReleased();
+    input.calibrate.pressed = calibrateButton.isPressed();
+    input.calibrate.released = calibrateButton.isReleased();
+    input.leanHeld = leanModeButton.getStateRaw() == LOW;
+    input.profileSettled = profileKnob.settled();
+    input.pendingProfile = pendingProfile;
+    // Refresh only the seat reading, leaving the control/telemetry sample intact.
+    if (modeState.needsSeatSample(input))
         leanMode.sampleSensors(/*seatOnly=*/true);
-        if (!leanMode.isSeated())
-        {
-            leanPressPending = false;
-            remotePressPending = false;
-            disarmPressPending = false;
-            assistHoldPending = false;
-            confirmingProfile = knobs::Invalid;
-            return;
-        }
-    }
-
-    const bool leanPressed = leanModeButton.isPressed() && leanPressPending;
-    const bool remotePressed = remoteModeButton.isPressed() && remotePressPending;
-    const bool disarmPressed = disarmModeButton.isPressed() && disarmPressPending;
-     
-    const uint32_t now = millis();
-    if (leanPressed)
-        leanPressPending = false;
-    if (remotePressed)
-        remotePressPending = false;
-    if (disarmPressed) {
-        disarmPressPending = false;
-        disarmPressedAt = now;
-    }
-       
-    if (leanModeButton.isReleased())
-        leanPressPending = false;
-    if (remoteModeButton.isReleased())
-        remotePressPending = false;
-    if (disarmModeButton.isReleased())
-    {
-        disarmPressPending = false;
-        assistHoldPending = false;
-    }
-
-    const bool profilePress = leanPressed && pendingProfile != knobs::Invalid;
-    if (profilePress && profileKnob.settled() && MODE == DISARM && selectedMode == DISARM)
-    {
-        confirmingProfile = pendingProfile;
-        profilePressedAt = now;
-    }
-    if (disarmPressed || remotePressed || assistHoldPending)
-        confirmingProfile = knobs::Invalid;
-    if (confirmingProfile != knobs::Invalid && now - profilePressedAt >= 2000)
-    {
-        if (!activateProfile(confirmingProfile))
-            Serial.printf("Profile %d unavailable; keeping current settings.\n", confirmingProfile + 1);
-        pendingProfile = knobs::Invalid;
-        confirmingProfile = knobs::Invalid;
-    }
-
-    if (disarmPressed)
-    {
-        // A press that exits Assist cannot reenter it until the next press.
-        assistHoldPending = selectedMode != ASSIST;
-        selectedMode = DISARM;
-    }
-    else if (leanPressed && !profilePress && selectedMode != LEAN)
-    {
-        assistHoldPending = false;
-        selectedMode = LEAN;
-    }
-    else if (remotePressed && selectedMode != REMOTE)
-    {
-        assistHoldPending = false;
-        selectedMode = REMOTE;
+    input.seated = leanMode.isSeated();
+    const auto actions = modeState.update(input, millis());
+    if (actions.resetRemote)
         remoteMode.reset();
-    }
-    else if (assistHoldPending &&
-             now - disarmPressedAt >= assistHoldMs)
-    {
-        assistHoldPending = false;
+    if (actions.resetAssist)
         assistMode.reset();
-        selectedMode = ASSIST;
+    if (actions.activateProfile != ModeStateMachine::NoProfile)
+    {
+        if (!activateProfile(actions.activateProfile))
+            telemetry::Telemetry::logf("Profile %d unavailable; keeping current settings.\n", actions.activateProfile + 1);
+        pendingProfile = knobs::Invalid;
     }
 }
 
 static void updateModeLEDs()
 {
-    constexpr uint32_t assistBlinkMs = 500;
-    switch (MODE)
+    switch (modeState.current())
     {
     case LEAN:
         digitalWrite(common::PIN_LEAN_LED, HIGH);
@@ -436,7 +323,7 @@ static void updateModeLEDs()
     case ASSIST:
         digitalWrite(common::PIN_LEAN_LED, LOW);
         digitalWrite(common::PIN_DISARM_LED,
-                     ((millis() - assistEnteredAt) / assistBlinkMs) % 2 == 0 ? HIGH : LOW);
+                     modeState.assistLEDOn(millis()) ? HIGH : LOW);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
         digitalWrite(common::PIN_CAL_LED, LOW);
         break;
@@ -445,31 +332,20 @@ static void updateModeLEDs()
     }
 }
 
-static bool selectedModeRequiresSeat()
-{
-    return selectedMode == LEAN || selectedMode == ASSIST;
-}
-
 static void applySeatedLatch()
 {
-    const bool seatDisarm = selectedModeRequiresSeat() && !leanMode.isSeated();
-    const mode nextMode = seatDisarm ? DISARM : selectedMode;
-    if (nextMode == MODE)
+    const auto transition = modeState.applySeat(leanMode.isSeated(), millis());
+    if (!transition.changed)
         return;
-
-    if (seatDisarm)
+    if (transition.seatDisarm)
     {
         leftRPMSetpointPID.reset();
         rightRPMSetpointPID.reset();
         assistMode.reset();
     }
-    if (nextMode == LEAN)
+    if (transition.resetLean)
         leanMode.reset();
-    else if (nextMode == ASSIST)
-        assistEnteredAt = millis();
-
-    MODE = nextMode;
-    printMode();
+    telemetry::Telemetry::logf("Mode: %s\n", modeName(modeState.current()));
 }
 
 static void updateDrive()
@@ -485,21 +361,21 @@ static void updateDrive()
     }
     tSend = now;
 
-    if (selectedModeRequiresSeat())
+    const bool calibrationRequested = modeState.takeCalibrationRequest();
+    if (modeState.requiresSeat())
     {
         leanMode.sampleSensors();
-        if (selectedMode == LEAN && leanMode.isSeated() && calibrationPending)
+        if (modeState.selected() == LEAN && leanMode.isSeated() && calibrationRequested)
         {
             leanMode.calibrate();
             leanMode.sampleSensors();
         }
     }
-    calibrationPending = false;
     applySeatedLatch();
 
     const float dt = period / 1000.0f;
     MotorTargets targets;
-    switch (MODE)
+    switch (modeState.current())
     {
     case LEAN:
         targets = leanMode.getTargetsFromSample();
@@ -519,15 +395,15 @@ static void updateDrive()
         break;
     default:
         targets = {0.0f, 0.0f};
-        Serial.println("Unknown mode detected, setting motor power to 0, this should never happen");
+        telemetry::Telemetry::logf("Unknown mode detected, setting motor power to 0, this should never happen\n");
         break;
     }
-    assistBoostCurrent = MODE == ASSIST ? targets : MotorTargets{};
-    if (MODE == LEAN || MODE == REMOTE)
+    assistBoostCurrent = modeState.current() == ASSIST ? targets : MotorTargets{};
+    if (modeState.current() == LEAN || modeState.current() == REMOTE)
     {
         setMotorPower(targets.left, targets.right, dt);
     }
-    else if (MODE == DISARM)
+    else if (modeState.current() == DISARM)
     {
         vescSetCurrent(can1, motors.leftId, 0.0f);
         vescSetCurrent(can1, motors.rightId, 0.0f);
@@ -542,7 +418,7 @@ static void updateDrive()
 static void replyToConfiguration()
 {
     constexpr size_t MaxPacketBytes = config::MaxResponseSize + config::MaxResponseSize / 254 + 3;
-    settings::protocol.tick(millis(), MODE == DISARM);
+    settings::protocol.tick(millis(), modeState.current() == DISARM);
     if (!settings::protocol.pending() || Serial1.availableForWrite() < static_cast<int>(MaxPacketBytes))
         return;
 
@@ -550,7 +426,7 @@ static void replyToConfiguration()
     // Configuration writes are permitted only while the current mode is DISARM.
     // Only successful runtime mutations require refreshing derived settings.
     const uint32_t revision = settings::protocol.revision();
-    const size_t length = settings::protocol.reply(response, MODE == DISARM);
+    const size_t length = settings::protocol.reply(response, modeState.current() == DISARM);
     if (settings::protocol.revision() != revision)
         applyRuntimeSettings();
     // The leading zero distinguishes PacketSerial responses from legacy CSV.
@@ -558,10 +434,36 @@ static void replyToConfiguration()
     packetSerial.send(response, length);
 }
 
+static void publishTelemetry()
+{
+    const uint32_t now = millis();
+    if (!telemetryOutput.due(now))
+        return;
+    // Lean samples on each control tick; other modes sample for display only.
+    if (modeState.current() != LEAN)
+        leanMode.sampleSensors();
+    telemetry::TelemetryFrame frame;
+    frame.timeMs = now;
+    frame.mode = modeState.current();
+    frame.lean = leanMode.getTelemetry();
+    frame.userWeight = leanMode.getUserWeightEstimate();
+    frame.remoteStopped = remoteMode.getTelemetry().stopped;
+    frame.commands = motorTelemetry;
+    const auto feedback = [](const VescStatus &motor)
+    {
+        return telemetry::MotorFeedback{motor.erpm / VESC_ERPM_PER_WHEEL_RPM,
+                                        motor.lastRpmMs, motor.rpmFrames != 0};
+    };
+    frame.left = feedback(measuredMotors[0]);
+    frame.right = feedback(measuredMotors[1]);
+    frame.boostCurrent = assistBoostCurrent;
+    telemetryOutput.publish(frame);
+}
+
 void loop()
 {
     updateKnobs();
-    setMode();
+    updateModeInputs();
     packetSerial.update();
     CAN_message_t feedback;
     for (int i = 0; i < 32 && can1.read(feedback); ++i)
@@ -574,56 +476,5 @@ void loop()
     updateProfileLED();
     replyToConfiguration();
 
-    // Keep sensor telemetry at 20 Hz in every mode.
-    static uint32_t lastTelemetryMs = 0;
-    const uint32_t now = millis();
-    if (now - lastTelemetryMs < 50)
-        return;
-    lastTelemetryMs = now;
-
-    static bool headerPrinted = false;
-    if (!headerPrinted)
-    {
-        Serial.println("time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,rightTargetRPM,"
-                       "leftSmoothedRPM,rightSmoothedRPM,stopped,leftActualRPM,rightActualRPM,"
-                       "leftBoostCurrent,rightBoostCurrent,mode");
-        headerPrinted = true;
-    }
-
-    const bool leanActive = MODE == LEAN;
-    // LEAN samples on each control tick; other modes sample for display only.
-    if (!leanActive)
-        leanMode.sampleSensors();
-    const LeanTelemetry lean = leanMode.getTelemetry();
-    const bool stopped = MODE == DISARM || (leanActive ? lean.stopped : remoteMode.getTelemetry().stopped);
-    const bool rpmControl = MODE == LEAN || MODE == REMOTE;
-    const MotorCommandTelemetry commands = rpmControl
-        ? motorTelemetry : MotorCommandTelemetry{NAN, NAN, NAN, NAN};
-    const auto actualRPM = [now](const VescStatus &motor) {
-        constexpr uint32_t feedbackTimeoutMs = 500;
-        return motor.rpmFrames && now - motor.lastRpmMs <= feedbackTimeoutMs
-            ? motor.erpm / VESC_ERPM_PER_WHEEL_RPM : NAN;
-    };
-    const int total = lean.front + lean.back + lean.left + lean.right;
-
-    char row[256];
-    const int rowLength = snprintf(row, sizeof(row),
-                                   "%lu,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.4f,%.4f,%.4f,%.4f,%s\n",
-                                   static_cast<unsigned long>(now),
-                                   lean.front, lean.back, lean.left, lean.right, total,
-                                   leanMode.getUserWeightEstimate(), lean.speed, lean.turn,
-                                   commands.leftTargetRPM, commands.rightTargetRPM,
-                                   commands.leftSmoothedRPM, commands.rightSmoothedRPM,
-                                   stopped ? 1 : 0, actualRPM(measuredMotors[0]), actualRPM(measuredMotors[1]),
-                                   assistBoostCurrent.left, assistBoostCurrent.right, modeName(MODE));
-    if (rowLength <= 0 || rowLength >= static_cast<int>(sizeof(row)))
-        return;
-
-    // Serial.write(reinterpret_cast<const uint8_t *>(row), rowLength);
-    Serial.println(measuredMotors[1].inputVoltage);
-    // Serial.println(digitalRead(common::PIN_CAL_BUTTON));
-
-    // The HC-06 shares Serial1 with the remote controller.
-    if (Serial1.availableForWrite() >= rowLength)
-        Serial1.write(reinterpret_cast<const uint8_t *>(row), rowLength);
+    publishTelemetry();
 }

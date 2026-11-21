@@ -92,6 +92,13 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     // Shape speed and turn separately before wheel mixing and PID smoothing.
     speed = copysignf(powf(fabsf(speed), speedResponseExponent), speed);
     turn = copysignf(powf(fabsf(turn), turnResponseExponent), turn);
+    if (speed < -0.3f) {
+        turn *= -1;
+    }
+    if (speed < -0.9f) {
+        turn = 0;
+    }
+
 
     telemetry = {f, b, l, r, speed, turn, false};
     const auto &mix = settings::leanTurnMix.get();

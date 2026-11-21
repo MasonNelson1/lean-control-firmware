@@ -22,7 +22,6 @@ static int lastProfilePosition = knobs::Invalid;
 static int pendingProfile = knobs::Invalid;
 static int activeProfile = knobs::Invalid;
 float userMaxSpeedMS = knobs::speedLimitMS(0);
-const float userMaxAccelMS2 = knobs::accelLimitMS2(0);
 // TODO: a stop/fault should bypass smoothing and reset BOTH PID instances.
 
 // MISC CONSTANTS and vars
@@ -70,8 +69,10 @@ void setMotorPower(double left, double right, float dt)
 
     const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
     const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-    const float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
-    const float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
+    const float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, MAX_ACCEL);
+    const float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, MAX_ACCEL);
+    const float leftError = leftRpms - measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM;
+    const float rightError = rightRpms - measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM;
     vescSetWheelRPM(can1, motors.leftId, leftRpms);
     vescSetWheelRPM(can1, motors.rightId, rightRpms);
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};

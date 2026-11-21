@@ -69,10 +69,14 @@ void setMotorPower(double left, double right, float dt)
 
     const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
     const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-    const float leftRpms = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, MAX_ACCEL);
-    const float rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, MAX_ACCEL);
-    const float leftError = leftRpms - measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM;
-    const float rightError = rightRpms - measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM;
+    const float leftMeasuredRPM = measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM;
+    const float rightMeasuredRPM = measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM;
+    const float leftRpms = constrain(
+        leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, MAX_ACCEL),
+        leftMeasuredRPM - common::MAX_RPM_COMMAND_DIFF, leftMeasuredRPM + common::MAX_RPM_COMMAND_DIFF);
+    const float rightRpms = constrain(
+        rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, MAX_ACCEL),
+        rightMeasuredRPM - common::MAX_RPM_COMMAND_DIFF, rightMeasuredRPM + common::MAX_RPM_COMMAND_DIFF);
     vescSetWheelRPM(can1, motors.leftId, leftRpms);
     vescSetWheelRPM(can1, motors.rightId, rightRpms);
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};

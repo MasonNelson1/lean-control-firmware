@@ -31,6 +31,9 @@ public:
     static constexpr uint32_t PushWindowMs = 100;
     static constexpr uint32_t SampleMs = 20; // VESC speed frames arrive at 50 Hz
     static constexpr uint32_t BoostMs = 700; // one boost, fading out
+    // After a boost, wait this long before watching for the next push, so the
+    // speed the VESC reports has caught up with what the boost did.
+    static constexpr uint32_t RearmMs = 100;
     // Boost is full up to 85% of the speed-knob limit and zero from 100%.
     static constexpr float speedCapFadeFraction = 0.15f;
     // The team's pulse pattern within a boost: 5 ms on, 5 ms off.
@@ -57,7 +60,8 @@ public:
             {
                 boosting = false;
                 samples = 0; // what follows must be seen unboosted from the start
-                lastSampleMs = now;
+                rearmAt = now + RearmMs;
+                waitingToRearm = true;
                 return 0.0f;
             }
             if (elapsed % PulseMs >= PulseOnMs)
@@ -68,6 +72,12 @@ public:
         }
 
         // No boost: watch for a push.
+        if (waitingToRearm)
+        {
+            if (static_cast<int32_t>(now - rearmAt) < 0)
+                return 0.0f;
+            waitingToRearm = false;
+        }
         if (samples != 0 && now - lastSampleMs < SampleMs)
             return 0.0f;
         lastSampleMs = now;
@@ -96,6 +106,7 @@ public:
     {
         initialized = false;
         boosting = false;
+        waitingToRearm = false;
         samples = 0;
         direction = 0.0f;
         baselineRPM = 0.0f;
@@ -114,7 +125,8 @@ private:
     bool boosting = false;
     float direction = 0.0f;
     float baselineRPM = 0.0f;
-    uint32_t lastMS = 0, lastSampleMs = 0, boostStartedAt = 0;
+    uint32_t lastMS = 0, lastSampleMs = 0, boostStartedAt = 0, rearmAt = 0;
+    bool waitingToRearm = false;
     float history[History]{};
     uint8_t samples = 0;
     float minRpm = 1.0f;

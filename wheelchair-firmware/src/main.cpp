@@ -2,6 +2,7 @@
 #include <ezButton.h>
 #include "vesc_can.h"
 #include "vesc_probe.h"
+#include "vesc_apply.h"
 #include "rpm_setpoint_pid.h"
 #include "common.h"
 #include "driveModes/DriveMode.h"
@@ -486,6 +487,7 @@ static void replyToConfiguration()
 
 // Read-only VESC firmware-version probe (see vesc_probe.h).
 static vescprobe::Reply probeReply;
+static vescapply::Applier vescApplier; // one-shot approved VESC settings write (vesc_apply.h)
 static uint32_t probeAsked = 0, probeFrames = 0, probeReplies = 0;
 // A config reply being streamed out as hex, a chunk per telemetry tick.
 static uint8_t confDump[1024];
@@ -541,7 +543,7 @@ static void publishTelemetry()
         // Every 5 s one read-only GET to one VESC, cycling: firmware version,
         // motor config, app config; left then right. A full cycle takes 30 s.
         static uint8_t probeTick = 0;
-        if (++probeTick % 5 == 0)
+        if (++probeTick % 5 == 0 && !vescApplier.active())
         {
             static const uint8_t comms[3] = {vescprobe::COMM_FW_VERSION, vescprobe::COMM_GET_MCCONF, vescprobe::COMM_GET_APPCONF};
             const uint8_t slot = (probeTick / 5) % 6;
@@ -609,9 +611,18 @@ void loop()
         if (vescprobe::handleFrame(feedback, probeReply))
         {
             ++probeReplies;
-            logProbeReply();
+            if (vescApplier.active())
+                vescApplier.onReply(probeReply);
+            else
+                logProbeReply();
             probeReply.done = false;
         }
+    }
+    {
+        const bool disarmed = modeState.current() == DISARM;
+        vescApplier.maybeStart(vescFresh(measuredMotors[0], 500) && vescFresh(measuredMotors[1], 500), disarmed,
+                               motors.leftId, motors.rightId);
+        vescApplier.update(can1, disarmed);
     }
     updateDrive();
     updateModeLEDs();

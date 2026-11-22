@@ -8,3 +8,4 @@ the code; the docs can be stale.
 - Weird sensor data: investigate the hardware first (plate, bolts, preload, wiring). Prefer an easy hardware fix over a software workaround.
 - Chair experiments are catalogued in `../experiments/README.md` (setup, protocol, data, results).
 - PCB (KiCad, plain text): `../../pcb/`, see its README.
+- Live chair setup (Bluetooth telemetry, tools, upload rules, experiments): `building-with-charles.md`.

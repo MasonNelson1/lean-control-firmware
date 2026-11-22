@@ -495,6 +495,8 @@ static void publishTelemetry()
         // 20 Hz raw ADC counts (front/back/left/right) for lean-transition analysis.
         const auto &raw = leanMode.getRawReadings();
         telemetry::Telemetry::logf("DBG R %lu %d %d %d %d\n", static_cast<unsigned long>(now), raw[0], raw[1], raw[2], raw[3]);
+        // 20 Hz centre of pressure in inches (corner layout only).
+        leanMode.publishCentreOfPressure(now);
     }
     telemetry::TelemetryFrame frame;
     frame.timeMs = now;

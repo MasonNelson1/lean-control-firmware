@@ -11,8 +11,12 @@ Tables (SQLite, in memory, rebuilt on every call):
          *SmoothedRPM, *ActualRPM, *BoostCurrent, stopped, mode
   msg    firmware text lines: s, host_time, kind (first word; CORRUPT = row damaged on the radio link), text
   sens   parsed 'DBG SENSORS' lines: s, rawF, rawB, rawL, rawR, floorF..floorR,
-         W, seatLoad, seated, calibrated, calActive
+         W, seatLoad, seated, calibrated, calActive, railed, layout (PLUS/CORNER), and on the
+         corner layout copX, copY, neutralX, neutralY, reachFwd, reachBack, reachLeft, reachRight
+         (inches; reachCal = 1 when a dynamic calibration set the reach)
   raw    20 Hz 'DBG R' lines: s, host_time, time_ms, F, B, L, R (raw ADC counts; zero force ≈ 372)
+  cop    20 Hz 'DBG COP' lines (corner layout): s, host_time, time_ms, x, y (centre of pressure,
+         inches, x right / y forward), dx, dy (from the calibrated neutral; NULL before), total
   vesc   parsed 'DBG VESC' lines: s, id, age, frames, erpm, current, duty, fetC, vin
 Output is capped at 80 rows; aggregate with GROUP BY CAST(s/N AS INT) for trends.
 """
@@ -26,8 +30,10 @@ import sqlite3
 
 LIVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "live", "current.csv")
 SENS = re.compile(r"DBG SENSORS raw=(-?\d+)/(-?\d+)/(-?\d+)/(-?\d+) floors=(-?\d+)/(-?\d+)/(-?\d+)/(-?\d+) "
-                  r"W=(-?\d+) seatLoad=(-?\d+) seated=(\d) calibrated=(\d) calActive=(\d)(?: railed=(\d))?")
+                  r"W=(-?\d+) seatLoad=(-?\d+) seated=(\d) calibrated=(\d) calActive=(\d)(?: railed=(\d))?"
+                  r"(?: layout=(\w+))?(?: cop=(\S+)/(\S+) neutral=(\S+)/(\S+) reach=(\S+)/(\S+)/(\S+)/([^*\s]+)(\*?))?")
 RAWR = re.compile(r"^DBG R (\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+)$")
+COP = re.compile(r"^DBG COP (\d+) (\S+) (\S+) (\S+) (\S+) (\S+)$")
 VESC = re.compile(r"DBG VESC id=(\d+) age=(\d+) frames=(\d+) erpm=(-?\d+) current=(\S+) duty=(\S+) fetC=(\S+) vin=(\S+)")
 TREND = """SELECT CAST(s/{n} AS INT)*{n} AS s0, MIN(host_time) AS at, mode,
   ROUND(AVG(F),1) F, ROUND(AVG(B),1) B, ROUND(AVG(L),1) L, ROUND(AVG(R),1) R,
@@ -58,8 +64,10 @@ def load(path):
         db.execute(f"CREATE TABLE t ({', '.join(cols)})")
         db.execute("CREATE TABLE msg (s, host_time, kind, text)")
         db.execute("CREATE TABLE sens (s, host_time, rawF, rawB, rawL, rawR, floorF, floorB, floorL, floorR, "
-                   "W, seatLoad, seated, calibrated, calActive, railed)")
+                   "W, seatLoad, seated, calibrated, calActive, railed, layout, copX, copY, neutralX, neutralY, "
+                   "reachFwd, reachBack, reachLeft, reachRight, reachCal)")
         db.execute("CREATE TABLE raw (s, host_time, time_ms, F, B, L, R)")
+        db.execute("CREATE TABLE cop (s, host_time, time_ms, x, y, dx, dy, total)")
         db.execute("CREATE TABLE vesc (s, host_time, id, age, frames, erpm, current, duty, fetC, vin)")
         t0 = None
         for r in reader:
@@ -77,10 +85,18 @@ def load(path):
             if m:
                 db.execute("INSERT INTO raw VALUES (?,?,?,?,?,?,?)", [s, r[0]] + [int(g) for g in m.groups()])
                 continue
+            m = COP.match(text)
+            if m:
+                db.execute("INSERT INTO cop VALUES (?,?,?,?,?,?,?,?)", [s, r[0]] + [num(g) for g in m.groups()])
+                continue
             db.execute("INSERT INTO msg VALUES (?,?,?,?)", (s, r[0], "CORRUPT" if text[:1].isdigit() else text.split(" ")[0], text))
             m = SENS.search(text)
             if m:
-                db.execute(f"INSERT INTO sens VALUES ({','.join('?' * 16)})", [s, r[0]] + [None if g is None else int(g) for g in m.groups()])
+                g = m.groups()
+                ints = [None if v is None else int(v) for v in g[:14]]
+                corner = [None if v is None else num(v) for v in g[15:23]]
+                cal = None if g[23] is None else int(g[23] == "*")
+                db.execute(f"INSERT INTO sens VALUES ({','.join('?' * 26)})", [s, r[0]] + ints + [g[14]] + corner + [cal])
             m = VESC.search(text)
             if m:
                 db.execute(f"INSERT INTO vesc VALUES ({','.join('?' * 10)})", [s, r[0]] + [num(g) for g in m.groups()])

@@ -29,8 +29,9 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - **What the firmware sends:**
   - The telemetry CSV row at 20 Hz (post-gain values; the dashboard parses it).
   - `DBG R <ms> F B L R`: raw ADC counts, 20 Hz.
+  - `DBG COP <ms> x y dx dy total`: centre of pressure in inches and its offset from the calibrated neutral, 20 Hz, corner layout only (`chair_sql.py` table `cop`).
   - Once a second:
-    - `DBG SENSORS`: raw, floors, W, seat load, seated/calibrated/railed flags.
+    - `DBG SENSORS`: raw, floors, W, seat load, seated/calibrated/railed flags, `layout=`; on the corner layout also the CoP, calibrated neutral and reach in use (inches; `*` = set by dynamic calibration).
     - `DBG VESC`: per controller id, status-frame age, frames, ERPM, current, duty, MOSFET temperature, voltage.
     - `DYNAMIC_GAINS`.
   - The dashboard hides `DBG` lines.
@@ -43,6 +44,7 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
   - `auto_sweeps.py`: finds lean sweeps automatically and gives range and curve.
   - `cop_inches.py`: centre of pressure in plate inches.
   - `compare_math.py`: compares lean-math versions on the same sweeps.
+  - `replay_cop.py`: runs a log through the firmware's corner-layout math (constants read from the firmware source) and prints speed/turn per hold; `--trace` for the whole sweep.
   - `sweep_analysis.py`
 - **Facts:**
   - Zero force ≈ **372** raw on every sensor (amplifier offset).
@@ -54,7 +56,12 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - `tools/upload_on_plug.sh` (run in background) waits for the Teensy on USB (VID 16C0) and uploads the current build once, if it differs from the last one uploaded.
 - Teensy USB shows as COM3.
 
-## Plate and sensors (as of 2026-11-21)
+## Plate and sensors (as of 2026-11-22: rectangle)
+- **Rectangle layout** since 2026-11-22, one sensor per corner. Channels keep their pin names: **R = front-right, L = front-left, F = back-left, B = back-right**. Positions (inches from the old plus centre) live in `src/driveModes/lean_layout.h`.
+- **Firmware setting `Sensor layout`** (dashboard, Lean control): `CORNER` (default) steers from the centre of pressure; `PLUS` is the old math, kept intact. Changing it needs a recalibration.
+- **Corner calibration:** short press in **active neutral** sets the neutral CoP. Hold the button and lean forward, back, left and right to set this rider's full-lean reach (otherwise the configured reach applies). Empty-plate baselines and per-channel gains are under "Corner layout sensors".
+
+## Plate and sensors (as of 2026-11-21, plus layout)
 - **Sensors:** FlexiForce A502 force sensors in a plus, each through an MCP6004 transimpedance amp. Readings depend strongly on contact area.
 - **Top plate:** sits on 1/4" hollow rubber stoppers. Tightening bolts are off; they made no difference.
 - **Coordinates:** (0,0) is the plus centre. First hole 2.5" out, then 1" apart. Front/back holes 1–6, left/right 1–5. Current config **F5 B6 L5 R5**; B5 is equivalent.

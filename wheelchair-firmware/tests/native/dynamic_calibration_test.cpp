@@ -43,6 +43,9 @@ static void checkGains(const LeanDriveMode &mode, float f, float b, float l, flo
 
 int main()
 {
+    // These tests cover the plus layout's dynamic gains (the corner layout is the default).
+    const auto plus = static_cast<uint8_t>(lean::SensorLayout::Plus);
+    assert(settings::sensorLayout.update(&plus, 1));
     LeanDriveMode mode;
     mode.updateResponseCurve();
     mode.resetDynamicGains();

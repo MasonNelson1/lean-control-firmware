@@ -63,7 +63,11 @@ int main() {
             &settings::normalPid.lowTau, &settings::normalPid.highTau, &settings::normalPid.ki,
             &settings::normalPid.kd, &settings::normalPid.filter, &settings::normalPid.maxJerk,
             &settings::transitionPid.lowTau, &settings::transitionPid.highTau, &settings::transitionPid.ki,
-            &settings::transitionPid.kd, &settings::transitionPid.filter, &settings::transitionPid.maxJerk
+            &settings::transitionPid.kd, &settings::transitionPid.filter, &settings::transitionPid.maxJerk,
+            &settings::sensorLayout, &settings::cornerDeadzone,
+            &settings::reachForward, &settings::reachBack, &settings::reachLeft, &settings::reachRight,
+            &settings::emptyPlateF, &settings::emptyPlateB, &settings::emptyPlateL, &settings::emptyPlateR,
+            &settings::cornerGainF, &settings::cornerGainB, &settings::cornerGainL, &settings::cornerGainR
         };
         CHECK(exported.size() == settings::registry().fieldCount());
         for (const auto *field : exported) CHECK(settings::registry().find(field->id) == field);
@@ -110,6 +114,32 @@ int main() {
         CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
         CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
         CHECK(!settings::persistence.dirty());
+    });
+    test("every setting fits one saved profile", [] {
+        // Saving a profile snapshots every field into ProfileCapacity bytes. The
+        // host's 8-byte unsigned long makes this a few bytes stricter than the Teensy.
+        uint8_t data[Persistence::PayloadCapacity];
+        const size_t used = snapshot(settings::registry(), data, sizeof(data));
+        CHECK(used != 0 && used <= Persistence::ProfileCapacity);
+    });
+    test("sensor layout accepts only PLUS and CORNER and defaults to CORNER", [] {
+        CHECK(settings::sensorLayout.get() == lean::SensorLayout::Corner);
+        for (uint8_t value : {uint8_t{0}, uint8_t{1}}) {
+            CHECK(request(Command::Set, settings::sensorLayout.id, &value, 1) == Status::Ok);
+            CHECK(static_cast<uint8_t>(settings::sensorLayout.get()) == value);
+        }
+        const uint8_t bad = 2;
+        CHECK(request(Command::Set, settings::sensorLayout.id, &bad, 1) != Status::Ok);
+        CHECK(settings::sensorLayout.get() == lean::SensorLayout::Corner);
+    });
+    test("corner reach can never sit inside the deadzone", [] {
+        // axisLean needs reach > deadzone in every direction; the bounds guarantee it.
+        const float tooShort = lean::MinReach - 0.01f, tooWide = lean::MaxDeadzone + 0.01f;
+        CHECK(lean::MinReach > lean::MaxDeadzone);
+        CHECK(request(Command::Set, settings::reachBack.id, reinterpret_cast<const uint8_t *>(&tooShort), 4) != Status::Ok);
+        CHECK(request(Command::Set, settings::cornerDeadzone.id, reinterpret_cast<const uint8_t *>(&tooWide), 4) != Status::Ok);
+        CHECK(settings::reachBack.get() == lean::DefaultReachBack);
+        CHECK(settings::cornerDeadzone.get() == lean::DefaultDeadzone);
     });
     test("actual settings fit EEPROM and survive reload", [] {
         CHECK(settings::persistence.save());

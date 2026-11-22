@@ -139,10 +139,24 @@ namespace
         }
     }
 
+    // The layout setting defaults to Corner; every scenario runs on Plus.
+    void usePlus()
+    {
+#ifdef HAS_SENSOR_LAYOUT
+        const auto plus = static_cast<uint8_t>(lean::SensorLayout::Plus);
+        if (!settings::sensorLayout.update(&plus, 1))
+        {
+            puts("layout update rejected");
+            std::exit(2);
+        }
+#endif
+    }
+
     // Scenario list. Each returns its own hash so a mismatch points at one area.
     Run uncalibrated()
     {
         Run run;
+        usePlus();
         LeanDriveMode mode;
         mode.updateResponseCurve();
         mode.resetDynamicGains();
@@ -153,6 +167,7 @@ namespace
     Run calibratedDefaults()
     {
         Run run;
+        usePlus();
         LeanDriveMode mode;
         mode.updateResponseCurve();
         mode.resetDynamicGains();
@@ -174,6 +189,7 @@ namespace
     Run dynamicGains()
     {
         Run run;
+        usePlus();
         LeanDriveMode mode;
         mode.updateResponseCurve();
         mode.resetDynamicGains();
@@ -197,6 +213,7 @@ namespace
     Run changedSettings()
     {
         Run run;
+        usePlus();
         setFloat(settings::deadband, 0.12f);
         setProfile(settings::leanForewardBackResponse, {{0.3f, 0.2f}});
         setProfile(settings::leanSideToSideResponse, {{0.5f, 0.25f}});
@@ -218,9 +235,6 @@ namespace
 
 int main(int argc, char **argv)
 {
-#ifdef HAS_SENSOR_LAYOUT
-    lean::selectLayoutForTest(lean::SensorLayout::Plus);
-#endif
     const Run runs[] = {uncalibrated(), calibratedDefaults(), dynamicGains(), changedSettings()};
     const char *names[] = {"uncalibrated", "calibratedDefaults", "dynamicGains", "changedSettings"};
     if (argc > 1 && std::strcmp(argv[1], "--generate") == 0)

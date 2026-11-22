@@ -14,17 +14,17 @@ and verification. User installation and development commands are in
 firmware files or wire identifiers unless the user explicitly requests that work.
 
 ## Build / upload / monitor (PlatformIO)
-`pio` is not on the shell PATH here; use `~/.platformio/penv/bin/pio`.
-
 | Env | Source | Purpose |
 |---|---|---|
-| `teensy41` (default) | `src/main.cpp` | lean control pipeline |
-| `can_test` | `src/can_motor_test.cpp` | two-sensor → one-VESC bench test |
-| `simple` | `src/simple_drive.cpp` | 4 raw sensors → two VESCs (duty, differential), no pipeline/calibration (debug) |
+| `teensy41` (default, only env) | `src/main.cpp` | lean control pipeline |
 
-- Build:   `pio run` (main) / `pio run -e can_test`
-- Upload:  `pio run -t upload` / `pio run -e can_test -t upload`
+The old `can_test` (`src/can_motor_test.cpp`) and `simple` (`src/simple_drive.cpp`)
+bench programs were deleted from `src/`; recover them from git history if needed.
+
+- Build:   `pio run`
+- Upload:  `pio run -t upload`
 - Monitor: `pio device monitor`  (115200 baud; close it before uploading)
+- Tests:   `./run-tests.sh` (native C++ + dashboard JS/Python; no hardware)
 - Always build before suggesting an upload. Report compile errors verbatim.
 - Revert any changes made to `Arduino.h` for testing before finishing your work,
   including changes to `tests/native/config_stubs/Arduino.h`.

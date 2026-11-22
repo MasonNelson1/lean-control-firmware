@@ -19,17 +19,12 @@ output. Bluetooth retains headerless CSV and drops whole lines if its transmit
 buffer is full. Binary configuration responses keep their PacketSerial framing
 and run before periodic telemetry.
 
-Run the native regression tests in PowerShell after creating `.pio` (requires
-`g++`):
+Run all host-side tests (native C++ with `g++`, plus the dashboard's JS and
+Python tests) from this folder:
 
-```powershell
-g++ -std=c++17 -Wall -Wextra -Werror -I src tests/native/mode_state_machine_test.cpp src/ModeStateMachine.cpp -o .pio/mode_state_machine_test.exe
-if ($LASTEXITCODE -ne 0) { throw 'State machine test compilation failed' }
-& ./.pio/mode_state_machine_test.exe
-
-g++ -std=c++17 -Wall -Wextra -Werror -I tests/native/telemetry_stubs -I src tests/native/telemetry_test.cpp src/telemetry/TelemetryFrame.cpp src/telemetry/Telemetry.cpp -o .pio/telemetry_test.exe
-if ($LASTEXITCODE -ne 0) { throw 'Telemetry test compilation failed' }
-& ./.pio/telemetry_test.exe
+```sh
+./run-tests.sh           # everything
+./run-tests.sh native    # firmware only
 ```
 
 Coverage includes button priorities, debounce latches, seat recovery, hold and

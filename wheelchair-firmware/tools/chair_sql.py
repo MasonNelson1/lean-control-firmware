@@ -55,9 +55,9 @@ def load(path):
         cols = ["s"] + header
         db.execute(f"CREATE TABLE t ({', '.join(cols)})")
         db.execute("CREATE TABLE msg (s, host_time, kind, text)")
-        db.execute("CREATE TABLE sens (s, rawF, rawB, rawL, rawR, floorF, floorB, floorL, floorR, "
+        db.execute("CREATE TABLE sens (s, host_time, rawF, rawB, rawL, rawR, floorF, floorB, floorL, floorR, "
                    "W, seatLoad, seated, calibrated, calActive, railed)")
-        db.execute("CREATE TABLE vesc (s, id, age, frames, erpm, current, duty, fetC, vin)")
+        db.execute("CREATE TABLE vesc (s, host_time, id, age, frames, erpm, current, duty, fetC, vin)")
         t0 = None
         for r in reader:
             if not r:
@@ -73,10 +73,10 @@ def load(path):
             db.execute("INSERT INTO msg VALUES (?,?,?,?)", (s, r[0], "CORRUPT" if text[:1].isdigit() else text.split(" ")[0], text))
             m = SENS.search(text)
             if m:
-                db.execute(f"INSERT INTO sens VALUES ({','.join('?' * 15)})", [s] + [None if g is None else int(g) for g in m.groups()])
+                db.execute(f"INSERT INTO sens VALUES ({','.join('?' * 16)})", [s, r[0]] + [None if g is None else int(g) for g in m.groups()])
             m = VESC.search(text)
             if m:
-                db.execute(f"INSERT INTO vesc VALUES ({','.join('?' * 9)})", [s] + [num(g) for g in m.groups()])
+                db.execute(f"INSERT INTO vesc VALUES ({','.join('?' * 10)})", [s, r[0]] + [num(g) for g in m.groups()])
     return db
 
 

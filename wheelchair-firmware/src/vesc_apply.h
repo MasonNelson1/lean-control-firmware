@@ -56,6 +56,8 @@ struct LongSender
   uint8_t target = 0;
   bool fillsDone = false, processSent = true;
   uint32_t fillsDoneMs = 0;
+  uint16_t framesSent = 0, writeFails = 0;
+  uint32_t lastFrameUs = 0;
 
   void start(uint8_t vescId, const uint8_t *payload, uint16_t n)
   {
@@ -65,6 +67,8 @@ struct LongSender
     target = vescId;
     fillsDone = false;
     processSent = false;
+    framesSent = 0;
+    writeFails = 0;
   }
   bool busy() const { return !processSent; }
 
@@ -72,8 +76,14 @@ struct LongSender
   {
     if (processSent)
       return;
-    for (int k = 0; k < 8 && !fillsDone; ++k)
+    // One frame at a time, 2 ms apart: VESC 6.06 drops the whole buffer if a fill
+    // frame arrives out of order (rx_buffer_offset must match), and several frames
+    // queued in different FlexCAN mailboxes can leave in mailbox order, not queue order.
+    if (!fillsDone && micros() - lastFrameUs < 2000)
+      return;
+    for (int k = 0; k < 1 && !fillsDone; ++k)
     {
+      lastFrameUs = micros();
       CAN_message_t m;
       m.flags.extended = 1;
       if (pos < 256 && pos <= 252)
@@ -84,7 +94,11 @@ struct LongSender
         memcpy(&m.buf[1], data + pos, n);
         m.len = n + 1;
         if (!bus.write(m))
+        {
+          ++writeFails;
           return; // TX full; try again next loop
+        }
+        ++framesSent;
         pos += n;
       }
       else
@@ -96,7 +110,11 @@ struct LongSender
         memcpy(&m.buf[2], data + pos, n);
         m.len = n + 2;
         if (!bus.write(m))
+        {
+          ++writeFails;
           return;
+        }
+        ++framesSent;
         pos += n;
       }
       if (pos >= len)
@@ -141,7 +159,7 @@ public:
       return;
     if (firstOkMs_ == 0)
       firstOkMs_ = millis();
-    if (millis() - firstOkMs_ < 3000) // let both VESCs finish booting
+    if (millis() - firstOkMs_ < 30000) // let both VESCs boot and the Bluetooth tap reconnect
       return;
     job_ = 0;
     step_ = Step::Get;
@@ -276,10 +294,43 @@ private:
     };
     return j;
   }
+  static const char *stepName(Step s)
+  {
+    switch (s)
+    {
+    case Step::Get: return "get";
+    case Step::WaitGet: return "wait-get";
+    case Step::Send: return "send";
+    case Step::WaitSet: return "wait-set";
+    case Step::Verify: return "verify";
+    case Step::WaitVerify: return "wait-verify";
+    default: return "-";
+    }
+  }
   void report(const char *result, const char *why)
   {
-    telemetry::Telemetry::logf("DBG VAPPLY job=%s result=%s why=%s\n", jobs()[job_].name, result, why);
+    char line[96];
+    snprintf(line, sizeof(line), "job=%s step=%s result=%s why=%s", jobs()[job_].name, stepName(step_), result, why);
+    telemetry::Telemetry::logf("DBG VAPPLY %s fills=%u wfail=%u proc=%d\n", line, sender_.framesSent, sender_.writeFails, sender_.processSent);
+    if (nlog_ < 12)
+      snprintf(log_[nlog_++], sizeof(log_[0]), "%s", line);
   }
+
+public:
+  // After the run, repeat every result every 10 s so a reconnecting tap still sees them.
+  void repeatSummary()
+  {
+    static uint32_t last = 0;
+    if (step_ != Step::Done || millis() - last < 10000)
+      return;
+    last = millis();
+    for (uint8_t i = 0; i < nlog_; ++i)
+      telemetry::Telemetry::logf("DBG VAPPLY summary %u/%u %s\n", i + 1, nlog_, log_[i]);
+  }
+
+private:
+  char log_[12][96] = {};
+  uint8_t nlog_ = 0;
 
   uint8_t leftId_ = 0, rightId_ = 0;
   Step step_ = Step::Idle;

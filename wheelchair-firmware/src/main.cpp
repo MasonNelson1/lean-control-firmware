@@ -623,6 +623,7 @@ void loop()
         vescApplier.maybeStart(vescFresh(measuredMotors[0], 500) && vescFresh(measuredMotors[1], 500), disarmed,
                                motors.leftId, motors.rightId);
         vescApplier.update(can1, disarmed);
+        vescApplier.repeatSummary();
     }
     updateDrive();
     updateModeLEDs();

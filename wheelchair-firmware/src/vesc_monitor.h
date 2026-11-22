@@ -150,7 +150,7 @@ public:
 
   const Side &side(int i) const { return sides_[i]; }
 
-  // DBG VVAL: the latest values reply. Averages (imot, iin, iD, iQ, vD, vQ) are
+  // DBG VVAL: the latest values reply (side = L or R). Averages (imot, iin, iD, iQ, vD, vQ) are
   // means since the previous poll of that VESC. n = asked/replies/lost.
   void logValues(int i, uint32_t now)
   {
@@ -158,19 +158,20 @@ public:
     const VescValues &v = s.values;
     if (!s.have)
     {
-      telemetry::Telemetry::logf("DBG VVAL id=%u age=-1 n=%lu/%lu/%lu\n", ids_[i], (unsigned long)s.asked,
-                                 (unsigned long)s.replies, (unsigned long)s.bad);
+      telemetry::Telemetry::logf("DBG VVAL id=%u age=-1 n=%lu/%lu/%lu side=%c\n", ids_[i], (unsigned long)s.asked,
+                                 (unsigned long)s.replies, (unsigned long)s.bad, i == 0 ? 'L' : 'R');
       return;
     }
     telemetry::Telemetry::logf(
         "DBG VVAL id=%u age=%lu fault=%u fetC=%.1f motC=%.1f imot=%.2f iin=%.2f iD=%.2f iQ=%.2f duty=%.3f "
         "erpm=%.0f vin=%.1f ah=%.4f/%.4f wh=%.3f/%.3f tach=%ld/%ld pid=%.2f mos=%.1f/%.1f/%.1f vD=%.2f vQ=%.2f "
-        "st=%u faults=%lu last=%u n=%lu/%lu/%lu lat=%lu\n",
+        "st=%u faults=%lu last=%u n=%lu/%lu/%lu lat=%lu side=%c\n",
         ids_[i], (unsigned long)(now - s.lastMs), v.fault, v.tempFet, v.tempMotor, v.currentMotor, v.currentIn,
         v.currentD, v.currentQ, v.duty, v.erpm, v.inputVoltage, v.ampHours, v.ampHoursCharged, v.wattHours,
         v.wattHoursCharged, (long)v.tachometer, (long)v.tachometerAbs, v.pidPos, v.tempMos[0], v.tempMos[1],
         v.tempMos[2], v.voltageD, v.voltageQ, v.status, (unsigned long)s.faults, s.lastFault,
-        (unsigned long)s.asked, (unsigned long)s.replies, (unsigned long)s.bad, (unsigned long)s.latencyMaxMs);
+        (unsigned long)s.asked, (unsigned long)s.replies, (unsigned long)s.bad, (unsigned long)s.latencyMaxMs,
+        i == 0 ? 'L' : 'R');
     s.latencyMaxMs = 0;
   }
 
@@ -195,9 +196,9 @@ private:
     }
     char *line = faultLines_[(faultHead_ + faultCount_) % MaxFaultLines];
     snprintf(line, sizeof(faultLines_[0]),
-             "DBG VFAULT id=%u code=%u name=%s ms=%lu imot=%.2f iin=%.2f erpm=%.0f duty=%.3f vin=%.1f fetC=%.1f n=%lu\n",
+             "DBG VFAULT id=%u code=%u name=%s ms=%lu imot=%.2f iin=%.2f erpm=%.0f duty=%.3f vin=%.1f fetC=%.1f n=%lu side=%c\n",
              ids_[i], v.fault, vescFaultName(v.fault), (unsigned long)now, v.currentMotor, v.currentIn, v.erpm,
-             v.duty, v.inputVoltage, v.tempFet, (unsigned long)sides_[i].faults);
+             v.duty, v.inputVoltage, v.tempFet, (unsigned long)sides_[i].faults, i == 0 ? 'L' : 'R');
     ++faultCount_;
   }
 
@@ -217,19 +218,19 @@ private:
 // DBG VESC: one VESC's CAN status frames. age = ms since any status frame
 // (-1 = never); ages = per frame type STATUS_1..5 (-1 = never received, so a
 // type the VESC doesn't send shows -1). ipk/iinpk = largest motor/input current
-// since the previous line. Clears those peaks.
-inline void logStatus(VescStatus &v, uint8_t id, uint32_t now)
+// since the previous line. side = L or R (which wheel). Clears those peaks.
+inline void logStatus(VescStatus &v, uint8_t id, char side, uint32_t now)
 {
   long ages[5];
   for (int i = 0; i < 5; ++i)
     ages[i] = v.typeFrames[i] ? (long)(now - v.typeMs[i]) : -1L;
   telemetry::Telemetry::logf(
       "DBG VESC id=%u age=%ld frames=%lu erpm=%ld current=%.1f duty=%.3f fetC=%.1f vin=%.1f motC=%.1f iin=%.1f "
-      "ipk=%.1f iinpk=%.1f ah=%.4f/%.4f wh=%.3f/%.3f tach=%ld pid=%.1f ages=%ld/%ld/%ld/%ld/%ld\n",
+      "ipk=%.1f iinpk=%.1f ah=%.4f/%.4f wh=%.3f/%.3f tach=%ld pid=%.1f ages=%ld/%ld/%ld/%ld/%ld side=%c\n",
       id, v.frames ? (long)(now - v.lastMs) : -1L, (unsigned long)v.frames, (long)v.erpm, v.current, v.duty,
       v.mosfetTempC, v.inputVoltage, v.motorTempC, v.inputCurrent, v.currentPeak, v.inputCurrentPeak, v.ampHours,
       v.ampHoursCharged, v.wattHours, v.wattHoursCharged, (long)v.tachometer, v.pidPos, ages[0], ages[1], ages[2],
-      ages[3], ages[4]);
+      ages[3], ages[4], side);
   vescClearPeaks(v);
 }
 } // namespace vescmon

@@ -687,7 +687,8 @@ static void publishTelemetry()
     case 6:
     case 8:
         // Motor controller health from the CAN status frames (vesc_monitor.h).
-        vescmon::logStatus(measuredMotors[slot == 6 ? 0 : 1], slot == 6 ? motors.leftId : motors.rightId, now);
+        vescmon::logStatus(measuredMotors[slot == 6 ? 0 : 1], slot == 6 ? motors.leftId : motors.rightId,
+                           slot == 6 ? 'L' : 'R', now);
         break;
     case 10:
     case 12:

@@ -23,14 +23,14 @@ Tables (SQLite, in memory, rebuilt on every call):
   vesc   1 Hz 'DBG VESC' per VESC, from the CAN status frames: s, id, age (ms since any status
          frame, -1 never), frames, erpm, current, duty, fetC, vin, motC, iin (input current),
          ipk/iinpk (largest motor/input current since the previous line, signed), ah/ahc, wh/whc
-         (used/charged since VESC boot), tach, pid, age1..age5 (ms since STATUS_1..5, -1 never).
+         (used/charged since VESC boot), tach, pid, age1..age5 (ms since STATUS_1..5, -1 never), side (L/R).
          Lines from older firmware fill only id..vin.
   vval   1 Hz 'DBG VVAL' per VESC, from COMM_GET_VALUES: id, age (ms since the reply, -1 none),
          fault (code now), fetC, motC, imot/iin/curD/curQ (means since the previous poll), duty, erpm,
          vin, ah, ahc, wh, whc, tach, tachAbs, pid, mos1..3, voltD, voltQ, st (bit0 timeout, bit1 kill),
-         faults (episodes since boot), lastFault, asked, replies, lost, lat (slowest reply, ms)
+         faults (episodes since boot), lastFault, asked, replies, lost, lat (slowest reply, ms), side
   vfault 'DBG VFAULT', one per fault change: id, code, name (NONE = cleared), time_ms, imot, iin,
-         erpm, duty, vin, fetC, n (episodes on that VESC since boot)
+         erpm, duty, vin, fetC, n (episodes on that VESC since boot), side
   motor  20 Hz 'DBG M': time_ms, curL/R (motor A), dutyL/R, iinL/R (input A), pidL/R (smoother RPM
          before the clamp to measured ± MAX_RPM_COMMAND_DIFF), accL/R, rateL/R (RPM/s), intL/R,
          lim (slewed speed cap, m/s)
@@ -79,17 +79,19 @@ KV = {
         ("id", ["id"]), ("age", ["age"]), ("frames", ["frames"]), ("erpm", ["erpm"]), ("current", ["current"]),
         ("duty", ["duty"]), ("fetC", ["fetC"]), ("vin", ["vin"]), ("motC", ["motC"]), ("iin", ["iin"]),
         ("ipk", ["ipk"]), ("iinpk", ["iinpk"]), ("ah", ["ah", "ahc"], slash(2)), ("wh", ["wh", "whc"], slash(2)),
-        ("tach", ["tach"]), ("pid", ["pid"]), ("ages", ["age1", "age2", "age3", "age4", "age5"], slash(5))]),
+        ("tach", ["tach"]), ("pid", ["pid"]), ("ages", ["age1", "age2", "age3", "age4", "age5"], slash(5)),
+        ("side", ["side"])]),
     "DBG VVAL ": ("vval", 2, [
         ("id", ["id"]), ("age", ["age"]), ("fault", ["fault"]), ("fetC", ["fetC"]), ("motC", ["motC"]),
         ("imot", ["imot"]), ("iin", ["iin"]), ("iD", ["curD"]), ("iQ", ["curQ"]), ("duty", ["duty"]), ("erpm", ["erpm"]),
         ("vin", ["vin"]), ("ah", ["ah", "ahc"], slash(2)), ("wh", ["wh", "whc"], slash(2)),
         ("tach", ["tach", "tachAbs"], slash(2)), ("pid", ["pid"]), ("mos", ["mos1", "mos2", "mos3"], slash(3)),
         ("vD", ["voltD"]), ("vQ", ["voltQ"]), ("st", ["st"]), ("faults", ["faults"]), ("last", ["lastFault"]),
-        ("n", ["asked", "replies", "lost"], slash(3)), ("lat", ["lat"])]),
+        ("n", ["asked", "replies", "lost"], slash(3)), ("lat", ["lat"]), ("side", ["side"])]),
     "DBG VFAULT ": ("vfault", 3, [
         ("id", ["id"]), ("code", ["code"]), ("name", ["name"]), ("ms", ["time_ms"]), ("imot", ["imot"]),
-        ("iin", ["iin"]), ("erpm", ["erpm"]), ("duty", ["duty"]), ("vin", ["vin"]), ("fetC", ["fetC"]), ("n", ["n"])]),
+        ("iin", ["iin"]), ("erpm", ["erpm"]), ("duty", ["duty"]), ("vin", ["vin"]), ("fetC", ["fetC"]), ("n", ["n"]),
+        ("side", ["side"])]),
     "DBG SYS ": ("sys", 16, [
         ("up", ["up"]), ("loops", ["loops"]), ("loopMax", ["loopMax"]), ("ctrl", ["ctrlMin", "ctrlMax"], slash(2)),
         ("cpuC", ["cpuC"]), ("canRx", ["canRx"]), ("canTxFail", ["canTxFail"]), ("tec", ["tec"]), ("rec", ["rec"]),

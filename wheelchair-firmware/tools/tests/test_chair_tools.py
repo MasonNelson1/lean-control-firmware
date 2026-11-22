@@ -22,17 +22,17 @@ HEADER = ("host_time,time_ms,F,B,L,R,total,userWeight,speed,turn,leftTargetRPM,r
 LINES = [
     "61000,1,2,3,4,10,370,0.1000,0.0000,20.0000,20.0000,15.0000,15.0000,0,14.0000,15.0000,0.0000,0.0000,LEAN",
     "DBG VESC id=2 age=20 frames=1 erpm=-8000 current=-23.0 duty=0.123 fetC=35.2 vin=52.7 motC=-270.0 iin=-4.5 "
-    "ipk=-48.0 iinpk=-6.1 ah=0.1234/0.0000 wh=6.432/0.000 tach=-987654 pid=0.0 ages=20/21/22/23/180",
+    "ipk=-48.0 iinpk=-6.1 ah=0.1234/0.0000 wh=6.432/0.000 tach=-987654 pid=0.0 ages=20/21/22/23/180 side=L",
     # Older firmware: only the first eight fields.
     "DBG VESC id=26 age=3 frames=5197 erpm=0 current=0.0 duty=0.000 fetC=22.5 vin=0.0",
     # Garbled on the radio: tail lost and the next line run in.
     "DBG VESC id=2 age=0 frames=0 erpm=0 current=0.0 duty=0.000 fetC=0.0 vin= 425 409",
     "DBG VVAL id=2 age=80 fault=0 fetC=25.4 motC=-270.0 imot=-41.23 iin=-3.21 iD=0.12 iQ=-41.23 duty=-0.456 "
     "erpm=-8123 vin=52.3 ah=0.1234/0.0567 wh=6.432/2.500 tach=-123456/654321 pid=0.00 mos=30.1/30.2/30.3 "
-    "vD=1.23 vQ=-20.50 st=0 faults=1 last=4 n=12/11/1 lat=9",
-    "DBG VVAL id=26 age=-1 n=0/0/0",
+    "vD=1.23 vQ=-20.50 st=0 faults=1 last=4 n=12/11/1 lat=9 side=L",
+    "DBG VVAL id=26 age=-1 n=0/0/0 side=R",
     "DBG VFAULT id=2 code=4 name=ABS_OVER_CURRENT ms=2000 imot=-48.70 iin=-3.21 erpm=-8123 duty=-0.456 vin=52.3 "
-    "fetC=25.4 n=1",
+    "fetC=25.4 n=1 side=L",
     "DBG M 61023 -23.0 1.0 -0.123 0.010 -4.5 0.2 -50.1 3.0 -512 10 -500 9 0.0 0.0 1.42",
     "DBG SYS up=61 loops=48000 loopMax=850 ctrl=5/6 cpuC=48.2 canRx=123456 canTxFail=0 tec=0 rec=0 "
     "bt=400000/9000 drop=0/0 btFree=600 cfg=0",
@@ -57,9 +57,9 @@ class ChairToolsTest(unittest.TestCase):
 
     def test_sql_tables(self):
         db = chair_sql.load(self.path)
-        rows = db.execute("SELECT id, age, frames, motC, iin, ipk, ah, ahc, tach, age1, age5 FROM vesc ORDER BY s").fetchall()
-        self.assertEqual(rows, [(2, 20, 1, -270, -4.5, -48, 0.1234, 0, -987654, 20, 180),
-                                (26, 3, 5197, None, None, None, None, None, None, None, None)])
+        rows = db.execute("SELECT id, age, frames, motC, iin, ipk, ah, ahc, tach, age1, age5, side FROM vesc ORDER BY s").fetchall()
+        self.assertEqual(rows, [(2, 20, 1, -270, -4.5, -48, 0.1234, 0, -987654, 20, 180, "L"),
+                                (26, 3, 5197, None, None, None, None, None, None, None, None, None)])
         v = db.execute("SELECT fault, imot, curD, curQ, tach, tachAbs, mos3, voltQ, lastFault, asked, replies, lost, lat "
                        "FROM vval WHERE id = 2").fetchone()
         self.assertEqual(v, (0, -41.23, 0.12, -41.23, -123456, 654321, 30.3, -20.5, 4, 12, 11, 1, 9))

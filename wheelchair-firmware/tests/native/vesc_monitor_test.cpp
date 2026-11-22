@@ -205,7 +205,7 @@ int main()
     mon.flushFaults();
     const std::string fault = lastLine(Serial1.output, "DBG VFAULT");
     assert(fault.find("DBG VFAULT id=2 code=4 name=ABS_OVER_CURRENT ms=2000 imot=-48.70") == 0);
-    assert(fault.find(" n=1") != std::string::npos);
+    assert(fault.find(" n=1 side=L") != std::string::npos);
     // Still faulted on the next poll: no new line.
     assert(mon.onReply(reply(2, valuesReply(4, -10.0f)), 2200));
     mon.flushFaults();
@@ -236,7 +236,7 @@ int main()
     Serial1.output.clear();
     mon.update(bus, 100, 2, 26, true); // first poll: the left VESC
     mon.logValues(1, 10);              // nothing received yet
-    assert(lastLine(Serial1.output, "DBG VVAL") == "DBG VVAL id=26 age=-1 n=0/0/0");
+    assert(lastLine(Serial1.output, "DBG VVAL") == "DBG VVAL id=26 age=-1 n=0/0/0 side=R");
     assert(mon.onReply(reply(2, valuesReply(0, -41.23f)), 100));
     mon.logValues(0, 180);
     const std::string vval = lastLine(Serial1.output, "DBG VVAL id=2 ");
@@ -259,12 +259,12 @@ int main()
     const uint8_t s1[8] = {0xFF, 0xFF, 0xE0, 0xC0, 0xFF, 0x1A, 0x00, 0x7B}; // -8000 erpm, -23.0 A, 0.123
     vescDecodeStatus(VESC_STATUS, s1, 8, s, 1000);
     fakeMillis = 1020;
-    vescmon::logStatus(s, 2, 1020);
+    vescmon::logStatus(s, 2, 'L', 1020);
     const std::string vesc = lastLine(Serial1.output, "DBG VESC ");
     assert(vesc.find("DBG VESC id=2 age=20 frames=1 erpm=-8000 current=-23.0 duty=0.123 ") == 0);
-    assert(vesc.find(" ipk=-23.0 ") != std::string::npos && vesc.find(" ages=20/-1/-1/-1/-1") != std::string::npos);
+    assert(vesc.find(" ipk=-23.0 ") != std::string::npos && vesc.find(" ages=20/-1/-1/-1/-1 side=L") != std::string::npos);
     VescStatus never{};
-    vescmon::logStatus(never, 26, 1020);
+    vescmon::logStatus(never, 26, 'R', 1020);
     assert(lastLine(Serial1.output, "DBG VESC id=26").find("age=-1 frames=0") != std::string::npos);
     printf("DBG VESC typical %zu bytes\n", vesc.size() + 1);
   }

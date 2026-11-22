@@ -57,8 +57,11 @@ public:
     rampEndedAt_ = 0;
     rampEnded_ = false;
     rampIneffective_ = false;
+    timedOutMoving_ = false;
     checking_ = false;
-    if (fmaxf(fabsf(left0_), fabsf(right0_)) < DriveConstants::STOP_HANDOFF_RPM)
+    // (The handoff speed is zero when the VESCs regulate down to a standstill;
+    // a ramp still needs something to ramp from.)
+    if (fmaxf(fabsf(left0_), fabsf(right0_)) < fmaxf(DriveConstants::STOP_HANDOFF_RPM, DriveConstants::STOP_DONE_RPM))
       enterBrake(now);
     else
       phase_ = Phase::Ramp;
@@ -72,6 +75,8 @@ public:
   // This stop went to brake current early because the wheels did not slow
   // under the speed commands. Stays set until the next begin().
   bool rampIneffective() const { return rampIneffective_; }
+  // The last stop ended on its time limit with the wheels still turning.
+  bool timedOutMoving() const { return timedOutMoving_; }
   Phase phase() const { return phase_; }
   // The ramp's current wheel-speed commands, for handing back to normal driving.
   float leftRPM() const { return phase_ == Phase::Ramp ? left0_ * scale_ : 0.0f; }
@@ -132,7 +137,21 @@ public:
         }
       }
       if (phase_ == Phase::Ramp)
-        return {Drive::RPM, left0_ * scale_, right0_ * scale_};
+      {
+        float left = left0_ * scale_, right = right0_ * scale_;
+        if (feedback.fresh)
+        {
+          // Never ask a wheel for more speed than it has. If the wheels slow
+          // faster than the ramp (the chair is caught, blocked, or the rider
+          // grips the rims), following the ramp would drive them forward.
+          left = notAbove(left, feedback.leftRPM);
+          right = notAbove(right, feedback.rightRPM);
+          if (fmaxf(fabsf(left), fabsf(right)) < STOP_HANDOFF_RPM)
+            enterBrake(now);
+        }
+        if (phase_ == Phase::Ramp)
+          return {Drive::RPM, left, right};
+      }
     }
     if (phase_ == Phase::Brake)
     {
@@ -149,10 +168,33 @@ public:
         settling_ = false;
       }
       const bool settled = settling_ && now - settledSince_ >= STOP_SETTLE_MS;
+      // Brake current that cannot hold the chair (a steep slope): the wheels
+      // are speeding up under it. End this stop as "still moving" so the
+      // caller starts another, whose speed-command ramp can do more.
+      if (feedback.fresh)
+      {
+        if (!brakeSpeedKnown_)
+        {
+          brakeSpeedKnown_ = true;
+          brakeEntrySpeed_ = measured;
+        }
+        brakeEntrySpeed_ = fminf(brakeEntrySpeed_, measured);
+        if (measured > brakeEntrySpeed_ + STOP_RAMP_LAG_RPM)
+        {
+          timedOutMoving_ = true;
+          phase_ = Phase::Idle;
+          return {Drive::Release, 0.0f, 0.0f};
+        }
+      }
       // With feedback, brake until the wheels have stopped; blind, for a fixed time.
       const uint32_t limit = feedback.fresh ? STOP_BRAKE_LIMIT_MS : STOP_BRAKE_MAX_MS;
       if (settled || now - brakeStartedAt_ >= limit)
+      {
+        // Ran out of time with the wheels still turning (a slope steeper
+        // than the brake current can hold): the caller keeps the chair held.
+        timedOutMoving_ = !settled && feedback.fresh && measured >= STOP_DONE_RPM;
         phase_ = Phase::Idle;
+      }
       else
         return {Drive::Brake, STOP_BRAKE_AMPS, STOP_BRAKE_AMPS};
     }
@@ -160,17 +202,26 @@ public:
   }
 
 private:
+  // The command, limited to the wheel's own speed in the command's direction.
+  static float notAbove(float command, float wheel)
+  {
+    return command >= 0.0f ? fminf(command, fmaxf(wheel, 0.0f)) : fmaxf(command, fminf(wheel, 0.0f));
+  }
+
   void enterBrake(uint32_t now)
   {
     phase_ = Phase::Brake;
     brakeStartedAt_ = now;
     settling_ = false;
+    brakeSpeedKnown_ = false;
   }
 
   Phase phase_ = Phase::Idle;
   float left0_ = 0.0f, right0_ = 0.0f;
   float scale_ = 0.0f, elapsed_ = 0.0f;
   bool rampEnded_ = false, settling_ = false, rampIneffective_ = false, checking_ = false;
+  bool timedOutMoving_ = false, brakeSpeedKnown_ = false;
+  float brakeEntrySpeed_ = 0.0f;
   uint32_t rampEndedAt_ = 0, brakeStartedAt_ = 0, settledSince_ = 0, checkAt_ = 0;
   float checkSpeed_ = 0.0f;
 };

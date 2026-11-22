@@ -82,7 +82,7 @@ public:
     static constexpr float DeadbandMinCounts = 6.0f;
     // Seat: empty again below this share of the threshold, held this long.
     static constexpr float SeatReleaseFraction = 0.6f;
-    static constexpr float SeatOnS = 0.30f, SeatOffS = 0.10f;
+    static constexpr float SeatOnS = 0.30f, SeatOffS = 0.08f;
     // Sensor readings are low-pass filtered with this time constant. The
     // response to a lean stays well inside the 0.1 s of CDR Spec K.
     static constexpr float FilterS = 0.025f;

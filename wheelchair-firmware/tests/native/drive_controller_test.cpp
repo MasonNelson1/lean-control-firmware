@@ -23,6 +23,7 @@ struct Sim
     // The simulated VESC speed loop: wheel acceleration is followGain x the
     // speed error, up to followRPMS (the motor's torque limit).
     float followRPMS = 300.0f, followGain = 60.0f;
+    float brakeRPMS = 100.0f; // how hard 15 A of brake current slows a wheel
     // Below this the simulated VESC lets go of the motor (s_pid_min_erpm:
     // VESC Tool default 900 ERPM = 15.5 wheel RPM).
     float vescMinRPM = 15.5f;
@@ -53,7 +54,14 @@ struct Sim
         if (kind == Kind::RPM && std::fabs(value) >= vescMinRPM && (vescAllowBraking || !wouldBrake))
             rpm += std::fmin(followRPMS, std::fmax(-followRPMS, followGain * (value - rpm))) * dt;
         else if (kind == Kind::Brake)
-            slow(value * 100.0f / STOP_BRAKE_AMPS); // 15 A slows the wheel at 100 RPM/s
+        {
+            // Brake current comes from the motor's own back-EMF, so at low
+            // speed there is less of it than was asked for (the VESC shorts
+            // the phases and gets what the speed gives). Here: at most 1 A
+            // per wheel RPM. 15 A slows the wheel at brakeRPMS.
+            const float amps = std::fmin(value, std::fabs(rpm) * 1.0f);
+            slow(amps * brakeRPMS / STOP_BRAKE_AMPS);
+        }
         else
         {
             if (kind == Kind::Current)
@@ -169,7 +177,12 @@ struct Sim
         const uint32_t start = now;
         for (int k = 0; k < 2000; ++k)
         {
+            const float leftBefore = left, rightBefore = right;
             tick();
+            // With feedback, a stop never asks a wheel for more speed than it has.
+            if (leftAlive && rightAlive && last.left.kind == Kind::RPM)
+                assert(std::fabs(last.left.value) <= std::fabs(leftBefore) + 0.01f &&
+                       std::fabs(last.right.value) <= std::fabs(rightBefore) + 0.01f);
             if (!drive.stopping())
             {
                 assert(braked == expectBrake);
@@ -335,10 +348,10 @@ int main()
         lean(600, 0);
         sim.run(2500);
         loads(0, 65, 0, 0);
-        sim.run(90);
+        sim.run(70);
         assert(sim.drive.mode() == LEAN); // a bump this short is ignored
-        sim.run(30);
-        assert(sim.drive.mode() == DISARM); // empty for 0.1 s
+        sim.run(20);
+        assert(sim.drive.mode() == DISARM); // empty for 80 ms
         const float seconds = sim.expectStop();
         assert(seconds < 1.0f && std::fabs(sim.left) < STOP_DONE_RPM);
         // Sitting back down returns to LEAN, but it needs a fresh calibration.
@@ -852,13 +865,26 @@ int main()
             sim.run(500);
             assert(sim.drive.mode() == DISARM && sim.last.left.kind == Kind::Current && sim.last.left.value == 0);
         }
-        { // A silent VESC in Assist: disarmed. No boost on stale speed.
+        { // A fault in Assist only takes the boost away: the rider is propelling by hand,
+          // so the chair is neither braked nor held.
+            Sim sim;
+            enterAssist(sim, 40.0f);
+            sim.leftAlive = false;
+            for (int k = 0; k < 400; ++k)
+            {
+                sim.tick();
+                assert(sim.drive.mode() == DISARM && sim.drive.fault() == Fault::VescSilent);
+                assert(sim.last.left.kind == Kind::Current && sim.last.left.value == 0 && sim.last.right.value == 0);
+            }
+        }
+        { // Let go on a 1-in-8 ramp for 0.6 s, then catch the rims: that is not a push.
             Sim sim;
             enterAssist(sim);
-            sim.leftAlive = false;
-            sim.tick();
-            assert(sim.drive.mode() == DISARM && sim.drive.fault() == Fault::VescSilent);
-            assert(sim.last.left.kind != Kind::Current || sim.last.left.value == 0);
+            sim.externalRPMS = 1.2f * LINEAR_TO_RPM;
+            assert(boostSeconds(sim, 600) == 0);
+            sim.externalRPMS = -60.0f; // hands on the rims
+            assert(boostSeconds(sim, 1500) == 0); // it boosted downhill here: 11 A against the hands
+            sim.externalRPMS = 0;
         }
     }
     { // Turning the speed knob down at speed slows the chair at the design rate, not in a step.
@@ -1496,6 +1522,128 @@ int main()
             assert(sim.left > 20.0f);
         }
     }
+    { // A stop never drives. DISARM at top speed, and 150 ms later the wheels are stopped
+      // from outside (the chair is caught, or hits something): the ramp is still high,
+      // but nothing above the wheels' own speed is sent. (It sent +50 RPM for 0.7 s.)
+        for (int position : {1, 3})
+        {
+            Sim sim;
+            sim.knobMS = knobs::speedLimitMS(position);
+            sim.rideLean();
+            lean(600, 0);
+            sim.run(4000);
+            sim.press(DISARM, /*release=*/false);
+            sim.run(150);
+            assert(sim.drive.stopping() && sim.last.left.kind == Kind::RPM);
+            for (int k = 0; k < 400; ++k)
+            {
+                sim.left = sim.right = 0; // held
+                sim.tick();
+                if (sim.last.left.kind == Kind::RPM)
+                    assert(sim.last.left.value <= 0.01f && sim.last.right.value <= 0.01f);
+                assert(!(sim.last.left.kind == Kind::Current && sim.last.left.value != 0));
+            }
+            assert(!sim.drive.stopping());
+        }
+        // The same when the rider has fallen out in front of the chair (seat-empty stop).
+        Sim fallen;
+        fallen.rideLean();
+        lean(600, 0);
+        fallen.run(2500);
+        loads(0, 65, 0, 0);
+        fallen.run(250);
+        assert(fallen.drive.mode() == DISARM && fallen.drive.stopping());
+        for (int k = 0; k < 300; ++k)
+        {
+            fallen.left = fallen.right = 0;
+            fallen.tick();
+            if (fallen.last.left.kind == Kind::RPM)
+                assert(fallen.last.left.value <= 0.01f);
+        }
+        lean(0, 0);
+    }
+    { // A stop begun while the wheels lag a braking command (heavy chair, sit up from top
+      // speed, then DISARM): the speed loop goes on braking; it is not handed to brake current.
+        Sim sim;
+        sim.knobMS = knobs::speedLimitMS(3);
+        sim.followRPMS = 40.0f;
+        sim.rideLean();
+        lean(600, 0);
+        sim.run(6000);
+        lean(0, 0);
+        sim.run(2400);
+        assert(sim.left > 40.0f && sim.last.left.kind == Kind::RPM && sim.last.left.value < STOP_HANDOFF_RPM + 1.0f);
+        sim.press(DISARM, false);
+        assert(sim.drive.stopping() && sim.last.left.kind == Kind::RPM);
+        assert(near(sim.last.left.value, STOP_HANDOFF_RPM, 0.5f));
+    }
+    { // DISARM pressed on a slope too steep for the brake current to hold: when the stop
+      // runs out of time the chair is not let go. It keeps being slowed (a new stop each
+      // time it gets going) until DISARM is pressed again.
+        Sim sim;
+        sim.brakeRPMS = 50.0f;
+        sim.rideLean();
+        lean(600, 0);
+        sim.run(2500);
+        sim.externalRPMS = 70.0f; // more than 15 A can hold
+        sim.press(DISARM);
+        float fastest = 0;
+        for (int k = 0; k < 4000; ++k) // twenty seconds
+        {
+            sim.tick();
+            // Never released: always a falling speed command or brake current. (It let go
+            // after five seconds before, and the chair ran away.)
+            assert(!(sim.last.left.kind == Kind::Current));
+            if (k > 400)
+                fastest = std::fmax(fastest, sim.left);
+        }
+        assert(fastest < 40.0f); // kept to a slow roll: slowed by speed command each time the brake current loses
+        sim.externalRPMS = 0;
+        sim.run(8000);
+        assert(std::fabs(sim.left) < STOP_DONE_RPM);
+        sim.press(DISARM); // the rider takes over: a manual chair again
+        assert(sim.last.left.kind == Kind::Current && sim.last.left.value == 0);
+    }
+    { // One wild speed reading from one VESC does not lift the other wheel past the speed limit.
+        Sim sim;
+        sim.knobMS = knobs::speedLimitMS(0);
+        sim.rideLean();
+        lean(600, 0);
+        sim.run(3000);
+        const float top = sim.knobMS * LINEAR_TO_RPM;
+        const float trueLeft = sim.left;
+        sim.left = 200.0f; // one bad frame
+        sim.tick();
+        assert(sim.last.right.kind == Kind::RPM && sim.last.right.value <= top + 0.01f); // it was 88.8 on a 38.8 limit
+        sim.left = trueLeft;
+        sim.run(500);
+        assert(near(sim.last.left.value, top, 1.0f) && near(sim.last.right.value, top, 1.0f));
+    }
+    { // VESCs set up to hold speed down to a standstill ("VESC minimum speed" 0): no zone to
+      // work around. Speed commands go all the way to zero and a zero command holds the chair.
+        Sim sim;
+        sim.vescMinRPM = 0.0f;
+        assert(settings::vescMinSpeed.set(0.0f));
+        sim.drive.applySettings();
+        assert(STOP_HANDOFF_RPM == 0.0f);
+        sim.rideLean();
+        lean(120, 0);
+        sim.run(2500);
+        assert(sim.last.left.kind == Kind::RPM && near(sim.left, sim.last.left.value, 0.2f) && sim.left > 3.0f);
+        lean(0, 0);
+        sim.externalRPMS = 0.8f * LINEAR_TO_RPM; // on a ramp
+        for (int k = 0; k < 1000; ++k)
+        {
+            sim.tick();
+            assert(sim.last.left.kind == Kind::RPM); // the speed loop holds; no brake-current fallback
+        }
+        assert(std::fabs(sim.left) < 1.0f);
+        sim.externalRPMS = 0;
+        sim.press(DISARM);
+        settings::vescMinSpeed.reset();
+        sim.drive.applySettings();
+        assert(STOP_HANDOFF_RPM == 18.0f);
+    }
     { // A chair that nothing is driving does not roll away. On a 1-in-12 ramp
       // (0.8 m/s^2) it is held to a crawl in every state except the ones meant
       // for moving it by hand.
@@ -1775,6 +1923,7 @@ int main()
                 {
                     if (remoteOn && k % 2 == 0)
                         sim.remote(remoteL, remoteR);
+                    const float wheelBefore[2] = {sim.left, sim.right};
                     sim.tick();
                     const auto mode = sim.drive.mode();
                     const auto &l = sim.last.left;
@@ -1790,8 +1939,9 @@ int main()
                     for (const auto *w : {&l, &r})
                     {
                         assert(std::isfinite(w->value));
+                        // (A wheel a slope has pushed past top speed is ramped down from where it is.)
                         if (w->kind == Kind::RPM)
-                            assert(std::fabs(w->value) <= fastest + 0.01f);
+                            assert(std::fabs(w->value) <= std::fmax(fastest, std::fabs(wheelBefore[w == &r])) + 0.01f);
                         if (w->kind == Kind::Brake)
                             assert(w->value >= 0 && w->value <= STOP_BRAKE_AMPS);
                         if (w->kind == Kind::Current)

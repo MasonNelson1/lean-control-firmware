@@ -17,8 +17,8 @@
 //     then stop speeding up within PushMaxMs. The motor is not helping then,
 //     so that is the rider. Speeding up that goes on and on is a slope, not a
 //     push, however steep: it never earns a boost.
-//   - The end of the push starts one boost, which fades to nothing over
-//     BoostMs. Its size still follows the team's curve (assist response, max
+//   - A tenth of a second after the push ends, if the wheel is not being
+//     slowed, one boost starts and fades to nothing over BoostMs. Its size still follows the team's curve (assist response, max
 //     boost) and on/off pulsing, and it still drops to the slowdown fraction
 //     if the wheel slows.
 //   - Nothing more happens until the boost is over and a new push is seen.
@@ -107,18 +107,28 @@ public:
                 pushStartedAt = now;
             }
         }
+        else if (push == Push::Ending)
+        {
+            // One window after the speeding-up ended: if the wheel is being
+            // slowed (a chair let roll down a ramp and then caught by the
+            // rims looks like a push up to here), it earns nothing.
+            if (now - pushEndedAt >= PushWindowMs)
+            {
+                push = Push::None;
+                if (std::fabs(currRpm) >= minRpm && gained > -PushEndAccelMS2 * perWindow)
+                {
+                    boosting = true;
+                    pulseOn = false;
+                    boostStartedAt = now;
+                    direction = currRpm > 0.0f ? 1.0f : -1.0f;
+                }
+            }
+        }
         else if (gained < PushEndAccelMS2 * perWindow)
         {
             // The speeding-up has ended. If it was short it was a push.
-            const bool wasPush = push == Push::Rising;
-            push = Push::None;
-            if (wasPush && std::fabs(currRpm) >= minRpm)
-            {
-                boosting = true;
-                pulseOn = false;
-                boostStartedAt = now;
-                direction = currRpm > 0.0f ? 1.0f : -1.0f;
-            }
+            push = push == Push::Rising ? Push::Ending : Push::None;
+            pushEndedAt = now;
         }
         else if (now - pushStartedAt > PushMaxMs)
         {
@@ -155,7 +165,9 @@ private:
     uint32_t lastMS = 0, lastSampleMs = 0, boostStartedAt = 0, rearmAt = 0, pushStartedAt = 0;
     bool waitingToRearm = false, pulseOn = false;
     // Rising: speeding up fast enough to be a push. Sustained: it has gone on too long to be one.
-    enum class Push : uint8_t { None, Rising, Sustained } push = Push::None;
+    // Ending: it has just stopped speeding up; one more window decides.
+    enum class Push : uint8_t { None, Rising, Sustained, Ending } push = Push::None;
+    uint32_t pushEndedAt = 0;
     float history[History]{};
     uint8_t samples = 0;
     float minRpm = 1.0f;

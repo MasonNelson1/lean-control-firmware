@@ -115,6 +115,7 @@ private:
     // A fault stopped the chair: hold it, rider aboard or not, until someone
     // presses DISARM or arms a mode.
     bool faultHold_ = false;
+    bool faultInAssist_ = false; // the fault being handled this tick was raised in Assist
     // A back lean that began while rolling forward only brakes (see tick()).
     bool reverseLocked_ = false;
     float sentLeftRPM_ = 0.0f, sentRightRPM_ = 0.0f;

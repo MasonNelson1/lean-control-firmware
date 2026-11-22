@@ -17,7 +17,7 @@
 //     speed" on the dashboard to match.
 //   App, "Timeout": 200 ms, and "Timeout Brake Current": 15 A. These decide
 //     what the chair does if this firmware hangs (see watchdog.h).
-//   App, CAN status rate: 50 Hz. Under 20 Hz the chair faults as "VESC silent".
+//   App, CAN status rate: 50 Hz. Under 25 Hz the chair faults as "VESC silent".
 //   Speed PID, "Ramp ERPMs per second" (s_pid_ramp_erpms_s): the VESC's own
 //     limit on how fast a speed command may change. Keep it at its default
 //     (25000) or higher, or it slows every stop.
@@ -117,11 +117,12 @@ constexpr float REVERSE_SPEED_FRACTION = 0.5f;
 constexpr float NEUTRAL_TRIM_AFTER_S = 2.0f;
 
 // ---- Motor controller health -----------------------------------------------
-// A VESC whose speed frames stop for this long is treated as silent: the
-// 0.1 s of CDR Spec B. VESC Tool sends status at 50 Hz by default (20 ms), so
-// this is five missed frames. It needs the status rate to stay at 20 Hz or
-// more; the HEALTH line reports the measured rate (vescL / vescR).
-constexpr uint32_t VESC_STALE_MS = 100;
+// A VESC whose speed frames stop for this long is treated as silent. With one
+// control tick on top that is inside the 0.1 s of CDR Spec B. VESC Tool sends
+// status at 50 Hz by default (20 ms), so this is four missed frames. It needs
+// the status rate to stay at 25 Hz or more; the HEALTH line reports the
+// measured rate (vescL / vescR).
+constexpr uint32_t VESC_STALE_MS = 80;
 
 // ---- Turning (MotionSmoother.h) --------------------------------------------
 // How fast the chair's turn rate may build up and die away, in deg/s per

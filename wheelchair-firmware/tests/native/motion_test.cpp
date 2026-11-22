@@ -373,6 +373,45 @@ static void stopTests()
         assert(blind.update(dt, STOP_BRAKE_MAX_MS - 5, {0, 0, false}).drive == StopController::Drive::Brake);
         assert(blind.update(dt, STOP_BRAKE_MAX_MS, {0, 0, false}).drive == StopController::Drive::Release);
     }
+    { // The ramp never asks a wheel for more speed than it has. Wheels that stop dead
+      // (caught, blocked) take the command with them and the stop goes to brake current.
+        StopController stop;
+        stop.begin(150.0f, 150.0f, 0);
+        auto out = stop.update(dt, 5, {150.0f, 150.0f, true});
+        assert(out.drive == StopController::Drive::RPM && out.left <= 150.0f);
+        out = stop.update(dt, 10, {60.0f, 90.0f, true}); // slowed far faster than the ramp
+        assert(out.drive == StopController::Drive::RPM && out.left <= 60.0f && out.right <= 90.0f);
+        out = stop.update(dt, 15, {0.0f, 0.0f, true});
+        assert(out.drive == StopController::Drive::Brake);
+        // A wheel pushed backwards is not driven forward either.
+        StopController reversed;
+        reversed.begin(100.0f, 100.0f, 0);
+        out = reversed.update(dt, 5, {-20.0f, 100.0f, true});
+        assert(out.drive == StopController::Drive::RPM && out.left == 0.0f && out.right > 0.0f);
+        // Without feedback the ramp is all there is.
+        StopController blind;
+        blind.begin(150.0f, 150.0f, 0);
+        out = blind.update(dt, 5, {0.0f, 0.0f, false});
+        assert(out.drive == StopController::Drive::RPM && out.left > 140.0f);
+    }
+    { // Brake current that is losing (the wheels speed up under it) ends the stop as
+      // "still moving", so the caller can start another instead of waiting out the limit.
+        StopController stop;
+        stop.begin(10.0f, 10.0f, 0);
+        assert(stop.update(dt, 5, {10.0f, 10.0f, true}).drive == StopController::Drive::Brake);
+        assert(stop.update(dt, 500, {8.0f, 8.0f, true}).drive == StopController::Drive::Brake);
+        assert(stop.update(dt, 600, {17.0f, 17.0f, true}).drive == StopController::Drive::Brake);
+        assert(stop.update(dt, 700, {19.0f, 19.0f, true}).drive == StopController::Drive::Release);
+        assert(!stop.active() && stop.timedOutMoving());
+        // A normal stop does not report that.
+        const auto normal = runStop(100.0f, 100.0f, true, 400.0f);
+        (void)normal;
+        StopController done;
+        done.begin(10.0f, 10.0f, 0);
+        done.update(dt, 5, {1.0f, 1.0f, true});
+        assert(done.update(dt, 5 + STOP_SETTLE_MS, {1.0f, 1.0f, true}).drive == StopController::Drive::Release);
+        assert(!done.timedOutMoving());
+    }
     { // cancel() and non-finite speeds.
         StopController stop;
         stop.begin(100.0f, 100.0f, 0);

@@ -190,8 +190,8 @@ namespace settings
     // is not driven. Lower s_pid_min_erpm in VESC Tool on both VESCs, check on
     // the bench that a 5 RPM command is followed, then set this to match.
     ConfigField<float> vescMinSpeed(registry(), 64,
-                                    {motor, "VESC minimum speed", "Wheel speed below which the VESCs will not drive in speed mode: their s_pid_min_erpm setting divided by 58.2. Keep it equal to what VESC Tool says. Stops switch to brake current just above it.", "RPM", false, true},
-                                    15.5f, 1.0f, 30.0f);
+                                    {motor, "VESC minimum speed", "Wheel speed below which the VESCs will not drive in speed mode: their s_pid_min_erpm setting divided by 58.2. Keep it equal to what VESC Tool says. Stops switch to brake current just above it. 0 means the VESCs hold speed down to a standstill.", "RPM", false, true},
+                                    15.5f, 0.0f, 30.0f);
 
     PidProfile::PidProfile(Group &group, uint16_t firstId)
         : lowTau(registry(), firstId,

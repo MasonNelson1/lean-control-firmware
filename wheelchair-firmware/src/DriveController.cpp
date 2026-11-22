@@ -48,7 +48,10 @@ void DriveController::begin(bool afterWatchdogReset)
 void DriveController::applySettings()
 {
     lean_.updateResponseCurve();
-    STOP_HANDOFF_RPM = settings::vescMinSpeed.get() + STOP_HANDOFF_MARGIN_RPM;
+    // 0 means the VESCs regulate speed all the way down to a standstill: then
+    // there is no zone to work around, and a zero speed command holds the chair.
+    const float vescMin = settings::vescMinSpeed.get();
+    STOP_HANDOFF_RPM = vescMin > 0.0f ? vescMin + STOP_HANDOFF_MARGIN_RPM : 0.0f;
     // setTuning() preserves the existing motion and error history.
     motion_.setTuning(settings::normalPid.tuning());
 }
@@ -86,7 +89,10 @@ ModeStateMachine::Actions DriveController::updateButtons(ModeStateMachine::Input
 void DriveController::raiseFault(Fault fault)
 {
     fault_ = fault;
-    faultHold_ = true;
+    // In Assist the rider is propelling by hand: a fault only takes the boost
+    // away. Everywhere else the chair is stopped and then held.
+    faultInAssist_ = modeState_.current() == ASSIST;
+    faultHold_ = !faultInAssist_;
     // An unplugged sensor does not show up here: the sensors are two-wire,
     // so an open circuit reads the same as an unloaded sensor. (LeanDriveMode
     // makes sure that cannot create motion.)
@@ -124,7 +130,14 @@ void DriveController::beginStop(const TickInput &in, bool fromMeasured)
     // speed: while the chair is accelerating the command leads the wheel, and
     // a stop that started from the command would keep speeding up at first.
     const auto start = [](float sent, float wheel) {
-        return sent >= 0.0f ? std::min(sent, std::max(wheel, 0.0f)) : std::max(sent, std::min(wheel, 0.0f));
+        const float from = sent >= 0.0f ? std::min(sent, std::max(wheel, 0.0f)) : std::max(sent, std::min(wheel, 0.0f));
+        // The command was already near zero but this wheel is still fast (it
+        // lags a braking command): start at the handoff speed, so the speed
+        // loop goes on braking it down instead of handing over to brake
+        // current at once.
+        if (std::fabs(wheel) > STOP_HANDOFF_RPM + 4.0f && std::fabs(from) < STOP_HANDOFF_RPM)
+            return std::copysign(STOP_HANDOFF_RPM, wheel);
+        return from;
     };
     stop_.begin(start(sentLeftRPM_, in.leftRPM), start(sentRightRPM_, in.rightRPM), in.now);
 }
@@ -146,13 +159,14 @@ void DriveController::applySeat(const TickInput &in)
             if (driving_)
                 beginStop(in, /*fromMeasured=*/false);
         }
-        else if (previous == ASSIST)
+        else if (previous == ASSIST && !faultInAssist_)
         {
             // DISARM stops the chair from every mode, and so does an empty
             // seat. Assist drives by current, so the stop starts from the
-            // measured wheel speeds.
+            // measured wheel speeds. (A fault in Assist only drops the boost.)
             beginStop(in, /*fromMeasured=*/true);
         }
+        faultInAssist_ = false;
         driving_ = false;
         motion_.reset();
         assist_.reset();
@@ -179,7 +193,7 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
         // REMOTE armed on a moving chair) is stopped the usual way, with the
         // ramp and its soft start, not grabbed with full brake current.
         const bool rolling = in.leftFresh && in.rightFresh &&
-                             std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) >= STOP_HANDOFF_RPM;
+                             std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) >= std::max(STOP_HANDOFF_RPM, STOP_DONE_RPM);
         if (!(holds() && rolling))
             return parked(in);
         stop_.begin(in.leftRPM, in.rightRPM, in.now);
@@ -188,6 +202,8 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
     const bool fresh = in.leftFresh && in.rightFresh;
     const auto out = stop_.update(in.dt, in.now, {in.leftRPM, in.rightRPM, fresh,
                                                   std::max(std::fabs(in.leftAmps), std::fabs(in.rightAmps))});
+    if (stop_.timedOutMoving())
+        faultHold_ = true; // still rolling: keep it held until DISARM is pressed or a mode is armed
     if (stop_.rampIneffective() && !brakingHintGiven_)
     {
         brakingHintGiven_ = true;
@@ -214,7 +230,7 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
     case StopController::Drive::Brake:
         return {{MotorCommand::Kind::Brake, out.left}, {MotorCommand::Kind::Brake, out.right}};
     default:
-        return release();
+        return parked(in); // the stop is over: held or released, by the usual rules
     }
 }
 
@@ -321,6 +337,13 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         const float linearError = clampTo((left + right) / 2.0f - measuredLinear, -room, room);
         left = measuredLinear + linearError + measuredTurn + turnError;
         right = measuredLinear + linearError - measuredTurn - turnError;
+        // One wheel's bad speed reading must not lift the other wheel's
+        // command: neither goes past the speed limit, unless the wheel itself
+        // is already faster than that.
+        const float maxRPM = speedLimitMS_ * LINEAR_TO_RPM;
+        const float leftCap = std::max(maxRPM, std::fabs(in.leftRPM)), rightCap = std::max(maxRPM, std::fabs(in.rightRPM));
+        left = clampTo(left, -leftCap, leftCap);
+        right = clampTo(right, -rightCap, rightCap);
         // The command itself may not run further ahead than what is sent.
         motion_.limitLead(measuredLinear, measuredTurn, MAX_RPM_COMMAND_DIFF);
     }

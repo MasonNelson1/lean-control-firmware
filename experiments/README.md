@@ -189,3 +189,18 @@ Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans
    - Strong support for issue #13 (centre-of-pressure lean math).
 5. Asymmetry: right carries ≈175 more than left at neutral, and the right lean peaks higher (+590 vs +510 over neutral). Rider posture or sensor/amp gain differences; worth one swap test (swap the L and R sensor cables).
 6. Forward is still the weakest axis: CoP y swing +0.33 forward vs −0.16 back from passive-neutral, but the forward reading needs a big lean.
+
+## Plan: sensitivity sweeps (Charles, 2026-11-21)
+**Goal:** know how sensitive the sensors are at *every* lean position, not just the held end points. Ideally Parker can make micro-movements anywhere in the range and the chair responds.
+
+**Data:** `DBG R` lines give raw counts for all four sensors at 20 Hz (firmware after commit "Telemetry: 20 Hz raw sensor line"). Query the `raw` table in `chair_sql.py`.
+
+**Protocol (one sweep per direction, rider counts out loud):** start in `active-neutral`, lean **slowly and evenly** to full over a 5-count, hold 2, return evenly over a 5-count, then hold neutral 3 s. Do it for forward, back (to `back-touch`), left and right, twice each. ≈2 min total.
+
+**Analysis:**
+- Treat sweep progress as linear in time (an even count).
+- Plot centre of pressure (and each raw sensor) against progress 0→100 %.
+- The slope is the sensitivity. Flat stretches are dead zones; steep stretches are where the chair will feel twitchy.
+- Show all four directions on one chart, with a sensitivity strip under each.
+
+**Better ground truth, later:** strap a phone to the rider's chest running a sensor-logging app (e.g. phyphox) to record torso angle, then plot signal vs actual lean angle instead of time.

@@ -273,3 +273,10 @@ Noise at rest: σx 0.005, σy 0.010.
 Noise at rest σx 0.005, σy 0.011.
 
 **Interpretation:** no back-sensor position clearly wins. The back-lean dots overlap across B2/B5/B6, and the lean-to-lean spread (≈0.03) is as big as the differences between positions. Back stays at ≈ half the side range wherever the sensor sits, so the limit looks physical (the backrest takes the load during a back lean), not a hole-position problem. Per Charles's rule ("if B6 isn't clearly better, keep B5"): **keep B5**. Higher-value next steps: the centre-of-pressure math (#13), drilling side holes behind centre (seesaw), or sensing load on the backrest itself.
+
+### Notes after E6 (Charles & Mason, 23:08–23:12)
+- **Charles/Mason's view on back:** the limit is mostly how far you *can* lean back. The backrest stops the lean at about half (or less) of a forward lean. That fits the data as well as "the backrest takes the load"; without a torso-angle measurement the two can't be separated. Either way it's physical; the team accepts it ("we're not gonna lean as much back anyway").
+- **Seating position between runs** shifts the side baseline. Neutral CoP x was 0.077 (S1), 0.127 (E5), 0.067 (E6). That's why neutral must be re-zeroed each time the rider sits (calibration), and why the sides need reps.
+- **Idea: square formation** (sensors at the corners instead of a plus). Every lean then loads two sensors and the seesaw pivot lines change. Worth a test later.
+- Chart `E4-sensor-deltas.html`: change per sensor from active-neutral for each lean. Sides carry ~2/3 of the forward signal and as much of the back signal as the back sensor does.
+- **Next (Charles):** front-sensor position. Keep B6 (no different from B5) and move only the front (F5 → F2), so one variable changes. Prediction from the seesaw model: the front still reads ≈0 at neutral as long as the rider's centre of mass is behind the side line.

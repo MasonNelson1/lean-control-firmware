@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Which Sensors Move</title>
+<style>
+:root{--s1:var(--chart-1,#2a78d6);--s2:var(--chart-2,#eb6834);--s3:var(--chart-3,#1baf7a);--s4:var(--chart-4,#eda100);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.sq{width:12px;height:12px;border-radius:3px;display:inline-block}
+.wrap{position:relative}svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--pop);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:nowrap;color:var(--ink)}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+</style></head><body>
+<h1>Which sensors move when you lean</h1>
+<p>Mason, E4 (22:18), F5 B2 L5 R5. Change in raw counts from <i>active neutral</i> to each held lean. Bars right of zero = more load; left = less load.</p>
+<div class="take"><b>What it shows</b><ul>
+<li><b>Forward:</b> the front rises +222, but left and right each rise about as much (+171, +164), and the back drops −145. Two-thirds of the forward signal is <i>not</i> on the front sensor.</li>
+<li><b>Back:</b> the back rises +138, but the right side drops even more (−162), and the left drops −82. Side sensors unloading is as big a back-lean signal as the back sensor loading.</li>
+<li><b>Left/right:</b> the side sensors swing 400–500 counts. That's the strongest signal on the chair.</li>
+<li>So reading the front sensor alone for forward and the back sensor alone for back throws most of the information away. The centre-of-pressure math uses all four.</li></ul></div>
+<div class="legend"><span class="key"><span class="sq" style="background:var(--s1)"></span>Front</span><span class="key"><span class="sq" style="background:var(--s2)"></span>Back</span><span class="key"><span class="sq" style="background:var(--s3)"></span>Left</span><span class="key"><span class="sq" style="background:var(--s4)"></span>Right</span></div>
+<div class="wrap" id="c"></div>
+<script>
+const L=['forward','back-touch','left','right'],S=['Front','Back','Left','Right'],C=['--s1','--s2','--s3','--s4'];
+const D={'forward':[222,-145,171,164],'back-touch':[-15,138,-82,-162],'left':[22,15,439,-240],'right':[-2,78,-161,499]};
+const W=700,M={l:90,r:40,t:6},bh=12,gap=3,grp=4*(bh+gap)+18,H=M.t+grp*L.length+24,min=-300,max=550,x=v=>M.l+(v-min)/(max-min)*(W-M.l-M.r);
+let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Change in each sensor by lean">`;
+for(let v=-200;v<=500;v+=100)s+=`<line x1="${x(v)}" x2="${x(v)}" y1="${M.t}" y2="${H-24}" stroke="var(--line)"/><text x="${x(v)}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--ink2)">${v>0?'+':''}${v}</text>`;
+L.forEach((k,i)=>{const y0=M.t+i*grp;s+=`<text x="${M.l-10}" y="${y0+2*(bh+gap)+4}" text-anchor="end" font-size="12" fill="var(--ink)">${k}</text>`;
+ D[k].forEach((v,j)=>{const yy=y0+j*(bh+gap),a=x(Math.min(v,0)),b=x(Math.max(v,0)),w=Math.max(b-a,1),r=Math.min(3,w/2);
+  s+=v>=0?`<path d="M${a} ${yy} H${b-r} Q${b} ${yy} ${b} ${yy+r} V${yy+bh-r} Q${b} ${yy+bh} ${b-r} ${yy+bh} H${a} Z" fill="var(${C[j]})"/>`:`<path d="M${b} ${yy} H${a+r} Q${a} ${yy} ${a} ${yy+r} V${yy+bh-r} Q${a} ${yy+bh} ${a+r} ${yy+bh} H${b} Z" fill="var(${C[j]})"/>`;
+  s+=`<text x="${v>=0?b+4:a-4}" y="${yy+bh-2}" text-anchor="${v>=0?'start':'end'}" font-size="10" fill="var(--ink2)">${v>0?'+':''}${v}</text><rect data-t="${k} · ${S[j]}: ${v>0?'+':''}${v} counts" x="${M.l}" y="${yy}" width="${W-M.l-M.r}" height="${bh}" fill="transparent"/>`})});
+s+=`<line x1="${x(0)}" x2="${x(0)}" y1="${M.t}" y2="${H-24}" stroke="var(--ink2)"/></svg><div class="tip"></div>`;
+const el=document.getElementById('c');el.innerHTML=s;const tip=el.querySelector('.tip');
+el.querySelectorAll('[data-t]').forEach(h=>{h.addEventListener('pointermove',e=>{const r=el.getBoundingClientRect();tip.style.display='block';tip.textContent=h.dataset.t;tip.style.left=Math.min(e.clientX-r.left+10,r.width-180)+'px';tip.style.top=(e.clientY-r.top-34)+'px'});h.addEventListener('pointerleave',()=>tip.style.display='none')});
+</script></body></html>

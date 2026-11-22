@@ -126,3 +126,20 @@ Chart of E2 vs E3: `E2-E3-leans.html` (open in a browser).
 2. **Replicated:** the front sensor is ~zero at `passive-neutral`, `active-neutral` and all back leans, so it only senses `forward`. `back-touch` loads the back sensor more than `back-pivot` (≈950 vs ≈810).
 3. **New, and important for consistency:** `active-neutral` vs `passive-neutral` alone moves the back sensor ≈100–150 counts. That's half to two-thirds of a full back lean (`back-touch` ≈ +250 over `passive-neutral`). Calibrating in one neutral posture and riding in the other shifts the lean reading by about half a back lean. "Neutral" has to be defined and coached, or the math has to be insensitive to it.
 4. Moving from back leans to `forward` and then `passive-neutral` brings the back reading back to its start (+20–50). Mason's calibrate-while-leaning-forward trick effectively resets the posture to a low-back neutral.
+
+---
+
+## Plan: sensor position study (from 2026-11-21, led by Claude)
+**Physics first (Charles's seesaw model):** with four point supports, the plate tips about the line through the two side sensors (y = 0). In every run so far the rider's centre of mass sits *behind* that line, so the plate tips back and the front sensor lifts to zero. **No front/back hole choice can change that, and moving the side sensors in or out along their arm can't either. Only moving the side line (or the whole plus) back puts the front sensor under load at neutral.** That needs new holes.
+
+**Tests with the existing holes:**
+- **E4: back-sensor lever.** `F5 B5 L5 R5` (back moved from B2 → B5, mirroring the front). Question: does a back lean give a bigger, cleaner swing, and does the passive/active-neutral gap grow with it (the ratio is what matters)?
+- **E5: front preload.** Back to the best of B2/B5. Tighten only the front bolt(s) so the front sensor reads ≈ +100 counts with the seat empty. Question: does a front sensor that starts loaded drop on `back-min`/`back-touch`, making it a second back-lean signal (what Mason's lean-forward calibration trick does by accident)?
+- **Later, after drilling: side line moved back** (≈2–3" behind (0,0)), the real seesaw test.
+
+**Every configuration change:** 30 s empty seat (preload check), then the rider protocol:
+`passive-neutral` 10 s → `active-neutral` 10 s → `forward` 5 s ×2 → `back-min` 5 s ×2 → `back-touch` 5 s ×2 → `back-pivot` 5 s ×1 → `left` 5 s ×2 → `right` 5 s ×2 → `passive-neutral` 10 s → `reseat` ×2 (10 s each).
+
+**Scored on:** back-lean swing over `active-neutral`, front swing on `forward`, the passive/active-neutral gap as a fraction of the back-lean swing (smaller is better), left/right symmetry, and reseat repeatability.
+
+**Limitation until the DBG firmware is uploaded:** left/right gains are 0.01, so the side sensors can't be seen. That is a big hole for a seesaw study.

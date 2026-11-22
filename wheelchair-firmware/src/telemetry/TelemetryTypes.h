@@ -8,6 +8,10 @@ namespace telemetry
 {
     struct SensorTelemetry
     {
+        // Channels F/B/L/R (the CSV's F,B,L,R columns). Directions on the plus
+        // layout; on the corner layout F = back-left, B = back-right,
+        // L = front-left, R = front-right (force above the empty plate). Names
+        // kept so the CSV, dashboard and old logs stay compatible.
         int front;
         int back;
         int left;

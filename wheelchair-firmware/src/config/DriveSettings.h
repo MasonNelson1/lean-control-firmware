@@ -2,6 +2,7 @@
 
 #include "Protocol.h"
 #include "../common.h"
+#include "../driveModes/lean_layout.h"
 
 namespace settings
 {
@@ -20,7 +21,15 @@ namespace settings
 
     extern config::EnumField<common::mode, 4> defaultMode;
     extern config::ConfigField<float> deadband;
-    extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain;
+    extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain; // plus layout only
+
+    // Which seat sensor layout the lean math assumes (lean_layout.h).
+    extern config::EnumField<lean::SensorLayout, 2> sensorLayout;
+    // Corner layout: rider-facing tuning, in inches of centre-of-pressure travel.
+    extern config::ConfigField<float> cornerDeadzone, reachForward, reachBack, reachLeft, reachRight, passiveMargin;
+    // Corner layout: per-channel empty-plate baseline (raw counts) and force gain.
+    extern config::ConfigField<uint16_t> emptyPlateF, emptyPlateB, emptyPlateL, emptyPlateR;
+    extern config::ConfigField<float> cornerGainF, cornerGainB, cornerGainL, cornerGainR;
     extern config::ProfileField<2> leanForewardBackResponse;
     extern config::ProfileField<2> leanSideToSideResponse;
     extern config::ProfileField<2> assistResponse;

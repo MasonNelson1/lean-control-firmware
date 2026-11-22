@@ -3,9 +3,12 @@
     python3 tools/chair_summary.py            # last 10 s
     python3 tools/chair_summary.py 60         # last 60 s
     python3 tools/chair_summary.py all        # whole tap session
+    CHAIR_TAP=other.csv python3 tools/chair_summary.py   # another log
 
-Prints link health, mode and mode changes, per-signal min/mean/max, wheel
-target vs actual, warnings, and the firmware's text messages, de-duplicated.
+Prints link health, mode and mode changes, the sensor layout, per-signal
+min/mean/max, the centre of pressure (corner layout), wheel target vs actual,
+warnings, and the firmware's text messages, de-duplicated (the 20 Hz DBG R and
+DBG COP lines are summarised, not listed).
 Runs under plain WSL python (it only reads the file chair_tap.py writes).
 """
 
@@ -14,8 +17,11 @@ import datetime as dt
 import os
 import sys
 from collections import OrderedDict
+import re
 
-PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "live", "current.csv")
+# Corner layout: which corner each channel sits at (lean::CornerPositions).
+CORNER_NAMES = {"F": " back-left", "B": " back-right", "L": " front-left", "R": " front-right"}
+PATH = os.environ.get("CHAIR_TAP") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "live", "current.csv")
 NUM = ["F", "B", "L", "R", "total", "userWeight", "speed", "turn", "leftTargetRPM", "rightTargetRPM",
        "leftSmoothedRPM", "rightSmoothedRPM", "leftActualRPM", "rightActualRPM",
        "leftBoostCurrent", "rightBoostCurrent"]
@@ -57,14 +63,24 @@ def main():
     if window != "all":
         lines = [r for r in lines if last_t - secs(r[0]) <= float(window)]
 
-    rows, texts = [], OrderedDict()
+    rows, texts, cops, layout = [], OrderedDict(), [], None
     for r in lines:
         if len(r) == len(header):
             rows.append(dict(zip(header, r)))
-        else:
-            msg = ",".join(r[1:]).strip()
-            first, count = texts.get(msg, (r[0], 0))
-            texts[msg] = (first, count + 1)
+            continue
+        msg = ",".join(r[1:]).strip()
+        if msg.startswith("DBG R "):
+            continue
+        if msg.startswith("DBG COP "):
+            parts = msg.split()
+            if len(parts) == 8:
+                cops.append([num(v) for v in parts[3:8]])
+            continue
+        m = re.search(r" layout=(\w+)", msg) if msg.startswith("DBG SENSORS ") else None
+        if m:
+            layout = m.group(1)
+        first, count = texts.get(msg, (r[0], 0))
+        texts[msg] = (first, count + 1)
 
     span = (secs(lines[-1][0]) - secs(lines[0][0])) or 1e-9
     print(f"window {lines[0][0]} -> {lines[-1][0]} ({span:.1f} s), {len(rows)} rows "
@@ -78,10 +94,16 @@ def main():
                 changes.append(f"{r['host_time']} {r['mode']}")
                 prev = r["mode"]
         print("mode now:", rows[-1]["mode"], "| changes:", ", ".join(changes) if len(changes) > 1 else "none")
+        print("sensor layout:", layout or "not reported (firmware before 2026-11-22: plus)")
+        names = CORNER_NAMES if layout == "CORNER" else {}
         print(f"{'signal':18} {'min':>8} {'mean':>8} {'max':>8}")
         cols = {k: [num(r[k]) for r in rows] for k in NUM}
         for k in NUM:
-            print(f"{k:18} {stats(cols[k])}")
+            print(f"{(k + names.get(k, '')):18} {stats(cols[k])}")
+        if cops:
+            print(f"centre of pressure, inches ({len(cops)} samples):")
+            for i, name in enumerate(("x", "y", "dx from neutral", "dy from neutral", "total load")):
+                print(f"  {name:16} {stats([c[i] for c in cops])}")
         stopped = sum(r["stopped"] == "1" for r in rows)
         print(f"stopped flag: {stopped}/{len(rows)} rows")
 

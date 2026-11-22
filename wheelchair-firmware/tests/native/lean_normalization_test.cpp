@@ -21,6 +21,9 @@ static void sensors(int f, int b, int l, int r) {
 static bool near(float a, float b) { return std::fabs(a - b) < 0.00001f; }
 
 int main() {
+    // These tests cover the plus layout's math (the corner layout is the default).
+    const auto plus = static_cast<uint8_t>(lean::SensorLayout::Plus);
+    assert(settings::sensorLayout.update(&plus, 1));
     setGain(settings::frontGain, 1);
     setGain(settings::rearGain, 1);
     setGain(settings::leftGain, 1);

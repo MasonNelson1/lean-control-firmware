@@ -10,7 +10,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 
 function harness({secure = true, openError = null, backend = true, configWire = false} = {}) {
   const elements = new Map();
-  const messages = [], frames = [], commands = [];
+  const messages = [], frames = [], commands = [], plateLines = [];
+  let plateResets = 0;
   let controller, now = 0, closed = false, requestOptions;
   const port = {
     readable: new ReadableStream({start(value) { controller = value; }}),
@@ -31,6 +32,7 @@ function harness({secure = true, openError = null, backend = true, configWire = 
       return elements.get(selector);
     },
     graphs() {}, showMode() {}, sensors() {},
+    plateLine: line => plateLines.push(line), resetPlate: () => { plateResets++; },
     appendConsole: line => messages.push(line),
     applyTelemetry: (rows, stale, source) => frames.push({rows: rows.slice(), stale, source}),
     setInterval() { return 1; }, clearInterval() {}, setTimeout, clearTimeout,
@@ -38,7 +40,8 @@ function harness({secure = true, openError = null, backend = true, configWire = 
   if (configWire) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'config-protocol.js'), 'utf8'), context);
   vm.runInContext(source, context);
   return {
-    context, elements, frames, messages, commands,
+    context, elements, frames, messages, commands, plateLines,
+    get plateResets() { return plateResets; },
     run: code => vm.runInContext(code, context),
     send: value => controller.enqueue(typeof value === 'string' ? new TextEncoder().encode(value) : value),
     fail() {
@@ -142,7 +145,7 @@ test('sensor panel displays active gains beside the sensor counts', () => {
     dynamicGains: {F: 1.23, B: 2.34, L: 1, R: 0.98},
     document: {querySelectorAll: () => panels},
     $: () => ({classList: {toggle() {}}}),
-    smoothedDirection: () => null, drawDirection() {},
+    smoothedDirection: () => null, drawDirection() {}, drawPlate() {},
   });
   vm.runInContext(code, context);
   context.sensors({F: 100, B: 200, L: 300, R: 400, total: 1000});
@@ -152,6 +155,21 @@ test('sensor panel displays active gains beside the sensor counts', () => {
   context.dynamicGains = null;
   context.sensors(null);
   assert.equal(panels[0].querySelector('.gain').textContent, '—');
+});
+
+test('DBG lines feed the plate view, stay out of the console, and the plate resets with the connection', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  const resetsAtConnect = h.plateResets;
+  assert.ok(resetsAtConnect >= 1);
+  h.send('DBG SENSORS raw=1/2/3/4 floors=0/0/0/0 W=370 seatLoad=0 seated=0 calibrated=0 calActive=0 railed=0 layout=CORNER\n' +
+         'DBG COP 1234 0.19 0.43 nan nan 2507\nDBG R 1 2 3 4 5\nCalibration complete\n');
+  await settle();
+  assert.deepEqual(h.plateLines.map(line => line.split(' ')[1]), ['SENSORS', 'COP', 'R']);
+  assert.deepEqual(h.messages.filter(m => m.startsWith('DBG')), []);
+  assert.ok(h.messages.includes('Calibration complete'));
+  await h.context.disconnectBluetooth();
+  assert.ok(h.plateResets > resetsAtConnect);
 });
 
 test('reads fragmented lines, marks stale data, clears history after device reboot, and disconnects cleanly', async () => {
@@ -350,7 +368,7 @@ test('sensor panel handles missing direction fields without throwing or drawing 
       return elements.get(id);
     },
     smoothedDirection: () => null,
-    drawDirection: (id, value) => vectors.push([id, value]),
+    drawDirection: (id, value) => vectors.push([id, value]), drawPlate() {},
   });
   vm.runInContext(code, context);
   context.sensors({F: 100, B: 200, L: 300, R: 400, total: 1000, userWeight: 370, stopped: 0});

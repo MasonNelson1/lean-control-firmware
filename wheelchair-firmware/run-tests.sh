@@ -18,6 +18,7 @@ CONFIG_SRC=(src/config/Registry.cpp src/config/Persistence.cpp src/config/Protoc
 SETTINGS_SRC=(src/config/DriveSettings.cpp "${CONFIG_SRC[@]}")
 # lean_stubs supplies Arduino.h (pins, analogRead); config_stubs supplies EEPROM.h.
 LEAN_INC=(-I tests/native/lean_stubs -I tests/native/config_stubs -I src)
+LEAN_SRC=(src/driveModes/LeanDriveMode.cpp src/driveModes/lean_layout.cpp)
 
 failures=()
 
@@ -47,9 +48,15 @@ run_native() {
     native telemetry           -I tests/native/telemetry_stubs -I src tests/native/telemetry_test.cpp \
                                src/telemetry/TelemetryFrame.cpp src/telemetry/Telemetry.cpp
     native lean_normalization  "${LEAN_INC[@]}" tests/native/lean_normalization_test.cpp \
-                               src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
+                               "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
     native dynamic_calibration "${LEAN_INC[@]}" tests/native/dynamic_calibration_test.cpp \
-                               src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
+                               "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
+    native corner_layout       "${LEAN_INC[@]}" tests/native/corner_layout_test.cpp \
+                               "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
+    native corner_calibration  "${LEAN_INC[@]}" tests/native/corner_calibration_test.cpp \
+                               "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
+    native plus_golden         "${LEAN_INC[@]}" tests/native/plus_golden_test.cpp \
+                               "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
 }
 
 run_viewer() {

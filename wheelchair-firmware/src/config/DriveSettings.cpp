@@ -19,7 +19,7 @@ namespace settings
         // Construct roots before child groups, and all groups before their fields.
         Group drive(registry(), 1, "Drive behavior");
         Group lean(registry(), 2, "Lean control");
-        Group gains(registry(), 3, "Sensor gains", false, &lean);
+        Group gains(registry(), 3, "Plus layout gains", false, &lean);
         // Group ID 4 is retired with the directional saturation factors.
         Group response(registry(), 5, "Response curves", false, &lean);
         Group timing(registry(), 6, "Communication and timing", true);
@@ -28,8 +28,12 @@ namespace settings
         Group pid(registry(), 9, "Wheel RPM PID", true);
         Group normal(registry(), 10, "Normal operation", true, &pid);
         Group transition(registry(), 11, "Transitions (reserved)", true, &pid);
+        Group corner(registry(), 12, "Corner layout reach", false, &lean);
+        Group cornerSensors(registry(), 13, "Corner layout sensors", true);
 
         constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}, {common::ASSIST, "ASSIST"}};
+        constexpr Choice Layouts[] = {{static_cast<uint8_t>(lean::SensorLayout::Plus), "PLUS"},
+                                      {static_cast<uint8_t>(lean::SensorLayout::Corner), "CORNER"}};
         constexpr float DefaultForewardBackKnee[] = {0.21f, 0.09f};
         constexpr float DefaultAssistKnee[] = {0.44f, 0.61f};
         constexpr float DefaultLeftRightKnee[] = {0.35f, 0.20f};
@@ -62,19 +66,71 @@ namespace settings
                                            {drive, "Startup drive mode", "Drive mode selected at power-on. LEAN requires calibration and REMOTE requires a fresh controller command.", "", true},
                                            common::DISARM, Modes);
     ConfigField<float> deadband(registry(), 2,
-                                {drive, "Lean deadband", "Normalized lean input below this magnitude is treated as zero before shaping."},
+                                {drive, "Lean deadband", "Normalized lean input below this magnitude is treated as zero before shaping. Plus layout only; the corner layout has its own deadzone in inches."},
                                 0.05f, 0.01f, 1.0f);
 
     ConfigField<float> frontGain(registry(), 10,
-                                 {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor.", "×"}, 2, 0.01f, 100);
+                                 {gains, "Front gain", "Multiplier applied to the front sensor after subtracting its calibrated floor. Plus layout only.", "×"}, 2, 0.01f, 100);
     ConfigField<float> rearGain(registry(), 11,
-                                {gains, "Rear gain", "Multiplier applied to the rear sensor after subtracting its calibrated floor.", "×"}, 3, 0.01f, 100);
+                                {gains, "Rear gain", "Multiplier applied to the rear sensor after subtracting its calibrated floor. Plus layout only.", "×"}, 3, 0.01f, 100);
     ConfigField<float> leftGain(registry(), 12,
-                                {gains, "Left gain", "Multiplier applied to the left sensor after subtracting its calibrated floor.", "×"}, 1, 0.01f, 100);
+                                {gains, "Left gain", "Multiplier applied to the left sensor after subtracting its calibrated floor. Plus layout only.", "×"}, 1, 0.01f, 100);
     ConfigField<float> rightGain(registry(), 13,
-                                 {gains, "Right gain", "Multiplier applied to the right sensor after subtracting its calibrated floor.", "×"}, 1, 0.01f, 100);
+                                 {gains, "Right gain", "Multiplier applied to the right sensor after subtracting its calibrated floor. Plus layout only.", "×"}, 1, 0.01f, 100);
 
     // Field IDs 20-23 are retired; normalize lean differences by rider weight.
+
+    // Sensor layout and the corner layout's settings (IDs 90-107). The math is in
+    // driveModes/lean_layout.h, which also holds the defaults and the sensor
+    // positions. These 18 fields take 109 bytes of each saved profile, leaving
+    // about 7 (the "every setting fits one saved profile" test guards this).
+    EnumField<lean::SensorLayout, 2> sensorLayout(registry(), 90,
+                                                  {lean, "Sensor layout", "PLUS: one sensor in front of, behind, left and right of centre, steering from front-minus-back and right-minus-left. CORNER: one sensor at each corner, steering from the rider's centre of pressure. Takes effect at the next calibration."},
+                                                  lean::SensorLayout::Corner, Layouts);
+    ConfigField<float> cornerDeadzone(registry(), 91,
+                                      {corner, "Deadzone", "Centre-of-pressure travel from neutral, per axis, that is ignored. Output ramps up from zero at its edge.", "in"},
+                                      lean::DefaultDeadzone, 0.0f, lean::MaxDeadzone);
+    ConfigField<float> reachForward(registry(), 92,
+                                    {corner, "Full lean forward", "Centre-of-pressure travel forward of neutral (of the relaxed posture, when one is captured) that gives full forward speed. A dynamic calibration overrides this for the current rider.", "in"},
+                                    lean::DefaultReachForward, lean::MinReach, lean::MaxReach);
+    ConfigField<float> reachBack(registry(), 93,
+                                 {corner, "Full lean back", "Distance behind neutral (a positive number) that gives full reverse. A dynamic calibration overrides this for the current rider.", "in"},
+                                 lean::DefaultReachBack, lean::MinReach, lean::MaxReach);
+    ConfigField<float> reachLeft(registry(), 94,
+                                 {corner, "Full lean left", "Distance left of neutral (a positive number) that gives a full left turn. A dynamic calibration overrides this for the current rider.", "in"},
+                                 lean::DefaultReachLeft, lean::MinReach, lean::MaxReach);
+    ConfigField<float> reachRight(registry(), 95,
+                                  {corner, "Full lean right", "Distance right of neutral that gives a full right turn. A dynamic calibration overrides this for the current rider.", "in"},
+                                  lean::DefaultReachRight, lean::MinReach, lean::MaxReach);
+    ConfigField<float> passiveMargin(registry(), 96,
+                                     {corner, "Relaxed posture margin", "After a second calibrate press captures the relaxed posture, speed stays zero from the upright to the relaxed posture plus this margin at each end. Replaces the deadzone on the forward/back axis.", "in"},
+                                     lean::DefaultPassiveMargin, 0.0f, lean::MaxDeadzone);
+
+    // Channel names are the ADC pins'. On today's chair F = back-left, B = back-right,
+    // L = front-left, R = front-right (lean::CornerPositions).
+    ConfigField<uint16_t> emptyPlateF(registry(), 100,
+                                      {cornerSensors, "Empty plate F (back-left)", "Raw reading of channel F with the plate on and nobody seated. Force is counted above this.", "ADC counts"},
+                                      lean::DefaultEmptyPlateF, 0, 4095);
+    ConfigField<uint16_t> emptyPlateB(registry(), 101,
+                                      {cornerSensors, "Empty plate B (back-right)", "Raw reading of channel B with the plate on and nobody seated. Force is counted above this.", "ADC counts"},
+                                      lean::DefaultEmptyPlateB, 0, 4095);
+    ConfigField<uint16_t> emptyPlateL(registry(), 102,
+                                      {cornerSensors, "Empty plate L (front-left)", "Raw reading of channel L with the plate on and nobody seated. Force is counted above this.", "ADC counts"},
+                                      lean::DefaultEmptyPlateL, 0, 4095);
+    ConfigField<uint16_t> emptyPlateR(registry(), 103,
+                                      {cornerSensors, "Empty plate R (front-right)", "Raw reading of channel R with the plate on and nobody seated. Force is counted above this.", "ADC counts"},
+                                      lean::DefaultEmptyPlateR, 0, 4095);
+    // Gains default to 1. E10's bare-sensor test hinted back-right read about half,
+    // but the plate-on known-weight check (E11) located 28.2 lb within 0.4" with all
+    // gains at 1, so the system needs no correction today.
+    ConfigField<float> cornerGainF(registry(), 104,
+                                   {cornerSensors, "Gain F (back-left)", "Multiplier on channel F's force above the empty plate, to even out sensor sensitivity.", "×"}, 1.0f, 0.1f, 10.0f);
+    ConfigField<float> cornerGainB(registry(), 105,
+                                   {cornerSensors, "Gain B (back-right)", "Multiplier on channel B's force above the empty plate, to even out sensor sensitivity.", "×"}, 1.0f, 0.1f, 10.0f);
+    ConfigField<float> cornerGainL(registry(), 106,
+                                   {cornerSensors, "Gain L (front-left)", "Multiplier on channel L's force above the empty plate, to even out sensor sensitivity.", "×"}, 1.0f, 0.1f, 10.0f);
+    ConfigField<float> cornerGainR(registry(), 107,
+                                   {cornerSensors, "Gain R (front-right)", "Multiplier on channel R's force above the empty plate, to even out sensor sensitivity.", "×"}, 1.0f, 0.1f, 10.0f);
 
 
     // The knee is one atomic value, so input/output constraints can be checked

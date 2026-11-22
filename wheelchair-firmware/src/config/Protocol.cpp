@@ -153,6 +153,10 @@ bool Protocol::selectProfile(uint8_t slot) {
     uint8_t old[Persistence::PayloadCapacity];
     const size_t oldLength = snapshot(registry_, old, sizeof(old));
     if (!oldLength) return false;
+    // Like Persistence::load(): a profile saved by older firmware lacks newer
+    // fields, and those must take their defaults rather than whatever the
+    // previously active profile held. Incompatible records also stay at default.
+    registry_.defaults();
     applyTlvs(registry_, payload, length);
     if (validate_ && !validate_()) {
         applyTlvs(registry_, old, oldLength);

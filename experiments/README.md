@@ -362,3 +362,29 @@ The first left attempt (23:52:29–51) was unstable because the jug wasn't sitti
 - **Left vs right agree** in the careful run (152 vs 150), and left was never low. **The riders' right bias is real.**
 - **Front vs back gains are unknown** (equal in one run, 2:1 in the other). That matters for fore-aft centre of pressure and the square's front/back placement.
 - **Better test (tomorrow):** with the plate and its rubber stoppers on, the real contact, put a known weight at marked spots directly over each sensor and at (0,0). That measures the system as it's actually used, and gives each sensor's gain plus a centre-of-pressure accuracy check in one go.
+
+## E11: plate-on known weight, rectangle layout (2026-11-22)
+**Setup:** rectangle (corner) layout, plate and seat on. A 28.2 lb weight set at four marked spots in plate inches (origin at the old plus centre, x right, y forward). Gains all 1.0. Wall times and the data file are not in this branch; the results below are as reported by the team.
+
+| True spot | Measured CoP | Error |
+|---|---|---|
+| (0, −2.19) | (−0.15, −1.95) | 0.28" |
+| (−2.375, 0) | (−2.43, +0.19) | 0.20" |
+| (0, +2.25) | (+0.40, +2.37) | 0.42" |
+| (+2.125, 0) | (+2.38, +0.31) | 0.40" |
+
+**Interpretation:** the centre-of-pressure math locates a known load within 0.4" (typically 0.25") with unit gains, through the real plate and stoppers. E10's "back-right reads half" was a bare-sensor contact artefact, so the firmware keeps gains at 1.0. Rider calibration (neutral, relaxed posture, reach) is relative, so a fixed offset of this size cancels; what remains is small next to a 1.3–2" lean.
+
+## Corner-layout firmware replay of E9 (`tools/replay_cop.py`)
+Runs the E9 sweep through the firmware's corner math (constants read from `lean_layout.h` and `DriveSettings.cpp`), calibrated on the active-neutral hold. Speed and turn are after the response curves.
+
+| Hold | Neutral only: speed / turn | With relaxed posture (`--passive passive-neutral`): speed / turn |
+|---|---|---|
+| passive-neutral | **+0.140** / 0 (slump creeps) | **0** / 0 |
+| active-neutral | 0 / 0 | 0 / 0 |
+| forward | +0.987 / +0.073 | +0.495 / +0.073 (reach measured from relaxed; 2.0" default is long, a hold calibration gives 1.32" and full speed) |
+| right | −0.062 / +0.982 | −0.092 / +0.982 |
+| left | 0 / −0.968 | −0.004 / −0.968 |
+| back-touch | −0.977 / +0.011 | −0.979 / +0.011 |
+
+`--jumps`: the largest healthy CoP change between 20 Hz samples was 0.54" (11.7 in/s); getting out of the seat reached 1.17" per 50 ms. A channel dropping to 372 counts jumps the CoP by F ≥1.96", B ≥1.07", R ≥0.53" (1.06" for 95% of postures), L ≥0.22" (1.13" median). The firmware stops and disarms on a step over 0.75" between control ticks.

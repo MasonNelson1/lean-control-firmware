@@ -94,6 +94,11 @@ async def line_received(line):
         history.append(value)
         last_change[0]=time.monotonic()
         while history and value['time_ms']-history[0]['time_ms']>60000: history.popleft()
+    elif kind=='text' and line.startswith('DBG '):
+        # Debug lines stay out of the console, as over Bluetooth. The browser's
+        # plate view reads the layout, neutral zone and centre of pressure.
+        if line.startswith(('DBG SENSORS ', 'DBG CORNER ', 'DBG COP ')):
+            await emit({'plate': line})
     elif kind=='text' and line.strip():
         console.append(line); await emit({'console':line})
 async def note(s):
@@ -185,6 +190,8 @@ async def config_protocol_script(): return FileResponse(ROOT/'config-protocol.js
 async def configuration_script(): return FileResponse(ROOT/'configuration.js', media_type='text/javascript')
 @app.get('/pid-preview.js')
 async def pid_preview_script(): return FileResponse(ROOT/'pid-preview.js', media_type='text/javascript')
+@app.get('/plate-view.js')
+async def plate_view_script(): return FileResponse(ROOT/'plate-view.js', media_type='text/javascript')
 
 # Profile files are handled only by the dashboard; these routes never access a
 # serial connection or change the running/saved wheelchair configuration.

@@ -166,7 +166,8 @@
     }
 
     .force-map {
-      height: 240px;
+      /* min-height, not height: corner-layout labels wrap to two lines */
+      min-height: 240px;
       display: grid;
       grid-template: repeat(3, 1fr)/repeat(3, 1fr);
       gap: 10px;
@@ -240,6 +241,20 @@
       color: #93a2b2;
       font-size: 10px;
       letter-spacing: 1px
+    }
+
+    .plate {
+      width: 100%;
+      height: 320px;
+      display: block;
+      background: white
+    }
+
+    .plate-legend {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #718095;
+      text-align: center
     }
 
     .seat svg {
@@ -843,7 +858,7 @@
             <div class="panelhead">
               <div>
                 <h2>Sensor & lean input</h2>
-                <div class="sub">Four-point force distribution</div>
+                <div class="sub" id="layout-name" title="From the firmware's Sensor layout setting">Four-point force distribution</div>
               </div><span id="drive" class="badge off">Waiting</span>
             </div>
             <div class="sensor-body">
@@ -891,6 +906,15 @@
                   <div class="track">
                     <div class="fill"></div>
                   </div>
+                </div>
+              </div>
+              <div id="plate-block" hidden>
+                <div style="margin-top:24px" class="direction-title">Centre of pressure · seat plate, inches</div>
+                <canvas id="plate" class="plate" aria-label="Centre of pressure on the seat plate, with the neutral zone and full-lean box"></canvas>
+                <div class="plate-legend">● centre of pressure · + neutral · ○ relaxed · grey box: no output · blue box: full lean · sensor dots sized by load</div>
+                <div class="coordinates">
+                  <div>CoP x / y (in)<strong id="cop-xy">—</strong></div>
+                  <div>From neutral (in)<strong id="cop-offset">—</strong></div>
                 </div>
               </div>
               <div class="metrics">
@@ -943,8 +967,11 @@
       </section>
     </div>
   </div>
+  <script src="./plate-view.js"></script>
   <script>
     let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'bluetooth', usbConnected = false, dynamicGains = null;
+    // Seat layout and centre of pressure from the DBG SENSORS/CORNER/COP lines (plate-view.js).
+    let plate = PlateView.createState();
     const $ = s => document.querySelector(s);
     function appendConsole(line) { const p = $('pre'); p.textContent = (p.textContent + line + '\n').split('\n').slice(-400).join('\n'); if ($('#scroll').checked) p.scrollTop = p.scrollHeight }
     function applyTelemetry(rows, stale, source) { latest = rows; lastRow = latest.at(-1) || null; showMode(lastRow, stale); $('#status').textContent = `${source} · ${stale ? 'Waiting for telemetry' : 'Receiving telemetry'}`; $('#status').classList.toggle('off', stale); if (!paused) { displayed = latest; graphs() } sensors(lastRow) }
@@ -1126,6 +1153,39 @@
       g.fill();
     }
 
+    // Channel tiles follow the firmware's layout: on CORNER they sit at the
+    // corners they measure, and the plate diagram appears.
+    function applyLayout() {
+      const layout = PlateView.layoutOf(plate);
+      for (const el of document.querySelectorAll('.sensor')) {
+        const channel = layout.channels[el.dataset.key];
+        el.querySelector('label').textContent = channel.label;
+        el.style.gridArea = channel.area;
+      }
+      $('#layout-name').textContent = `Four-point force distribution · ${plate.layout ? layout.name : 'layout not reported'}`;
+      $('#plate-block').hidden = plate.layout !== 'CORNER';
+    }
+    function drawPlate() {
+      if (plate.layout !== 'CORNER') return;
+      const [g, w, h] = surface('plate');
+      PlateView.draw(g, w, h, plate, lastRow, performance.now());
+      const cop = plate.latest;
+      const fixed = (a, b) => a === null || b === null || a === undefined || b === undefined ? '—' : `${a.toFixed(2)} / ${b.toFixed(2)}`;
+      $('#cop-xy').textContent = fixed(cop?.x, cop?.y);
+      $('#cop-offset').textContent = fixed(cop?.dx, cop?.dy);
+    }
+    // Every firmware line goes through here; only plate lines change anything.
+    function plateLine(line) {
+      const before = plate.layout;
+      if (!PlateView.handleLine(plate, line, performance.now())) return;
+      if (plate.layout !== before) applyLayout();
+      drawPlate();
+    }
+    function resetPlate() {
+      plate = PlateView.createState();
+      applyLayout();
+    }
+
     function sensors(r) {
       for (const el of document.querySelectorAll('.sensor')) {
         const value = r?.[el.dataset.key];
@@ -1146,13 +1206,14 @@
       $('#smoothed-turn').textContent = smoothed?.turn.toFixed(3) ?? '—';
       drawDirection('vector', Number.isFinite(r?.speed) && Number.isFinite(r?.turn) ? r : null);
       drawDirection('smoothed-vector', smoothed);
+      drawPlate();
     }
     function connect() {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
       ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() };
       ws.onclose = () => {
         if (connectionMode === 'usb') {
-          setDynamicGains(null);
+          resetConnectionStatus();
           showMode(lastRow, true);
           $('#status').textContent = 'Server disconnected';
           $('#status').classList.add('off');
@@ -1163,12 +1224,13 @@
         const d = JSON.parse(e.data);
         if (connectionMode !== 'usb' || !usbConnected) return;
         if ('dynamicGains' in d) setDynamicGains(d.dynamicGains);
+        if (d.plate) plateLine(d.plate);
         if (d.console) appendConsole(d.console);
         if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay');
       };
     }
     $('#variable-scaling').onchange = graphs;
-    $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); graphs(); sensors(null); if (dashboardBackend) connect();
+    $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); applyLayout(); graphs(); sensors(null); if (dashboardBackend) connect();
   </script>
   <script src="./vendor/fflate-0.8.3.js"></script>
   <script src="./profile-files.js"></script>

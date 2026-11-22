@@ -308,6 +308,28 @@ static void protocolTests() {
         CHECK(f.command(Command::ProfileMove, {4, 5}) == Status::Ok);
         CHECK(!f.protocol.selectProfile(4) && f.protocol.selectProfile(5));
     });
+    test("selecting a profile from older firmware gives its missing fields their defaults", [] {
+        Fixture f;
+        // A profile saved before field b existed: only a's record.
+        const uint8_t older[] = {10, 0, uint8_t(Type::U16), 2, 42, 0};
+        uint8_t name[Persistence::ProfileNameSize] = "Older";
+        CHECK(f.persistence.writeProfile(2, name, older, sizeof(older)));
+        CHECK(put(f.b, uint16_t{77})); // left over from the previously active profile
+        CHECK(f.protocol.selectProfile(2));
+        CHECK(f.a.get() == 42 && f.b.get() == 6);
+    });
+    test("a rejected profile selection restores every field, including ones it lacked", [] {
+        static bool accept = true;
+        Fixture f([] { return accept; });
+        const uint8_t older[] = {10, 0, uint8_t(Type::U16), 2, 42, 0};
+        uint8_t name[Persistence::ProfileNameSize] = "Older";
+        CHECK(f.persistence.writeProfile(2, name, older, sizeof(older)));
+        CHECK(put(f.a, uint16_t{9}) && put(f.b, uint16_t{77}));
+        accept = false;
+        CHECK(!f.protocol.selectProfile(2));
+        accept = true;
+        CHECK(f.a.get() == 9 && f.b.get() == 77);
+    });
     static_assert(static_cast<uint8_t>(Status::NotDisarmed) == 5, "Keep the dashboard status identifier stable");
     test("leaving DISARM before a queued write executes rejects the change", [] {
         Fixture f;

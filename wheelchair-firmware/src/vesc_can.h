@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <FlexCAN_T4.h>
+#include "vesc_decode.h"
 
 // ============================================================
 // VESC CAN protocol helpers (see CLAUDE.md "VESC CAN protocol")
@@ -13,39 +14,11 @@ typedef FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> VescBus; // CAN1: TX 22, RX 23
 
 const uint32_t VESC_CAN_BAUD = 500000;
 
-// Packet types
+// Command packet types. Status types and decoding are in vesc_decode.h.
 const uint8_t VESC_SET_DUTY = 0;    // int32 duty * 100000
 const uint8_t VESC_SET_ERPM = 3;    // int32 erpm, unscaled.
 const uint8_t VESC_SET_CURRENT = 1; // int32 amps * 1000
-const uint8_t VESC_STATUS = 9;      // ERPM, current, duty
-const uint8_t VESC_STATUS_4 = 16;   // MOSFET temp, motor temp, input current
-const uint8_t VESC_STATUS_5 = 27;   // tachometer, input voltage
 constexpr float VESC_ERPM_PER_WHEEL_RPM = 14.5454f * 4.0f;
-
-// Latest status reported by one VESC.
-struct VescStatus
-{
-  uint8_t id; // controller id (set this, the rest starts at 0)
-  int32_t erpm;
-  float current; // motor current, A
-  float duty;    // duty the VESC is running
-  float mosfetTempC;
-  float inputVoltage;
-  uint32_t frames; // status frames received
-  uint32_t rpmFrames;
-  uint32_t lastRpmMs;
-  uint32_t lastMs; // millis() of the last one
-};
-
-inline int32_t vescBe32(const uint8_t *p)
-{
-  return (int32_t)(((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-                   ((uint32_t)p[2] << 8) | (uint32_t)p[3]);
-}
-inline int16_t vescBe16(const uint8_t *p)
-{
-  return (int16_t)(((uint16_t)p[0] << 8) | p[1]);
-}
 
 inline void vescBegin(VescBus &bus)
 {
@@ -54,6 +27,13 @@ inline void vescBegin(VescBus &bus)
   bus.setMaxMB(16);
   bus.enableFIFO();
   bus.setFIFOFilter(ACCEPT_ALL);
+}
+
+// Command frames the CAN driver refused (TX queue full), for DBG SYS.
+inline uint32_t &vescTxFailures()
+{
+  static uint32_t failures = 0;
+  return failures;
 }
 
 // One command frame: int32 payload, big-endian.
@@ -67,7 +47,8 @@ inline void vescSend(VescBus &bus, uint8_t id, uint8_t type, int32_t value)
   m.buf[1] = (value >> 16) & 0xFF;
   m.buf[2] = (value >> 8) & 0xFF;
   m.buf[3] = value & 0xFF;
-  bus.write(m);
+  if (!bus.write(m))
+    ++vescTxFailures(); // TX queue full: this command was dropped (counted for DBG SYS)
 }
 
 inline void vescSetDuty(VescBus &bus, uint8_t id, float duty)
@@ -87,39 +68,13 @@ inline void vescSetCurrent(VescBus &bus, uint8_t id, float amps)
   vescSend(bus, id, VESC_SET_CURRENT, (int32_t)lroundf(amps * 1000.0f));
 }
 
-// Decode a received frame into the matching entry of vescs[]. Anything that
-// isn't a status frame from one of those ids is ignored.
+// Decode a received frame into v if it is a status frame (STATUS_1..5) from
+// controllerId. Anything else is ignored.
 inline void vescHandleFrame(const CAN_message_t &msg, uint8_t controllerId, VescStatus &v)
 {
-  if (!msg.flags.extended)
+  if (!msg.flags.extended || (msg.id & 0xFF) != controllerId)
     return;
-  uint8_t ctrlId = msg.id & 0xFF;
-  uint8_t type = (msg.id >> 8) & 0xFF;
-  if (controllerId != ctrlId)
-    return;
-  if (type == VESC_STATUS && msg.len >= 8)
-  {
-    v.erpm = vescBe32(&msg.buf[0]);
-    v.rpmFrames++;
-    v.lastRpmMs = millis();
-    v.current = vescBe16(&msg.buf[4]) / 10.0f;
-    v.duty = vescBe16(&msg.buf[6]) / 1000.0f;
-  }
-  else if (type == VESC_STATUS_4 && msg.len >= 2)
-  {
-    v.mosfetTempC = vescBe16(&msg.buf[0]) / 10.0f;
-  }
-  else if (type == VESC_STATUS_5 && msg.len >= 6)
-  {
-    v.inputVoltage = vescBe16(&msg.buf[4]) / 10.0f;
-  }
-  else
-  {
-    return;
-  }
-  v.frames++;
-  v.lastMs = millis();
-  return;
+  vescDecodeStatus((msg.id >> 8) & 0xFF, msg.buf, msg.len, v, millis());
 }
 
 // True if this VESC has reported status within timeoutMs.

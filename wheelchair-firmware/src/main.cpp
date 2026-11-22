@@ -3,6 +3,7 @@
 #include "vesc_can.h"
 #include "vesc_probe.h"
 #include "vesc_apply.h"
+#include "vesc_monitor.h"
 #include "rpm_setpoint_pid.h"
 #include "common.h"
 #include "driveModes/DriveMode.h"
@@ -54,15 +55,32 @@ static telemetry::MotorCommands motorTelemetry{};
 static telemetry::Telemetry telemetryOutput;
 static MotorTargets assistBoostCurrent{};
 
+// Timing and link counters for the once-a-second DBG SYS line (telemetry only).
+static struct
+{
+    uint32_t loops = 0, loopMaxUs = 0;        // since the last DBG SYS
+    uint32_t ctrlMaxMs = 0, ctrlMinMs = ~0u;  // control tick spacing since the last DBG SYS
+    uint32_t canRx = 0;                       // CAN frames read since boot
+} sysStats;
+static uint32_t configReplyBytes = 0; // configuration replies sent over Bluetooth since boot
+
+static void noteControlTick(uint32_t gapMs)
+{
+    sysStats.ctrlMaxMs = max(sysStats.ctrlMaxMs, gapMs);
+    sysStats.ctrlMinMs = min(sysStats.ctrlMinMs, gapMs);
+}
+
 // This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
 // where the value is the percentage of the speed-knob max speed (full input = selected top speed).
 // PID smoothing is applied prior to using the setpoints.
+// Speed cap after the slew below (m/s); file scope only so DBG M can log it.
+static float speedLimitMS = 0.0f;
+
 void setMotorPower(double left, double right, float dt)
 {
     // Turning the speed knob up takes effect at once (the PID still limits
     // acceleration). Turning it down lowers the cap no faster than the design
     // braking rate, so the smoother never sees a step drop in its speed limit.
-    static float speedLimitMS = 0.0f;
     speedLimitMS = knobs::slewDown(speedLimitMS, userMaxSpeedMS, MAX_ACCEL, dt);
 
     const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
@@ -162,6 +180,7 @@ static bool activateProfile(int slot)
     motorTelemetry = {};
     for (auto &motor : measuredMotors)
         motor = {};
+    telemetry::Telemetry::logf("DBG EVT %lu profile slot=%d\n", static_cast<unsigned long>(millis()), slot + 1);
     return true;
 }
 
@@ -212,11 +231,11 @@ static void updateKnobs()
 }
 void setup()
 {
-    // Worst-case burst when the 1 Hz lines and a 20 Hz group land in one loop:
-    // DYNAMIC_GAINS ≈45, DBG SENSORS ≈150, DBG CORNER ≈150, 2× DBG VESC ≈170,
-    // DBG R ≈30, DBG COP ≈40, CSV row ≈110: ≈700 bytes, plus room for the VESC
-    // probe lines on charles/dev-setup (≈100). Telemetry drops whole lines rather
-    // than block when this is full.
+    // Once-a-second lines each have their own 20 Hz tick (publishTelemetry), so
+    // the largest single tick is a 20 Hz group (CSV ≈95, DBG R ≈30, COP ≈35,
+    // M ≈75) plus DBG VVAL ≈260: ≈ 500 bytes. A 50 ms tick drains ≈ 576 bytes
+    // at 115200 baud. Telemetry drops whole lines rather than block when this is
+    // full and counts them (DBG SYS drop=).
     static uint8_t bluetoothTxBuffer[1024];
 
     // set up serial and telemetry stuff
@@ -266,6 +285,21 @@ void setup()
     telemetry::Telemetry::logf("Setup successful, ready to drive.\n");
 }
 
+// DBG EVT for every debounced press and release, accepted by the mode state
+// machine or not (a press with the seat empty is discarded there).
+static void logButtonEvents(const ModeStateMachine::Inputs &input)
+{
+    const struct
+    {
+        const char *name;
+        const ModeStateMachine::Button &button;
+    } buttons[] = {{"lean", input.lean}, {"remote", input.remote}, {"disarm", input.disarm}, {"cal", input.calibrate}};
+    for (const auto &b : buttons)
+        if (b.button.pressed || b.button.released)
+            telemetry::Telemetry::logf("DBG EVT %lu btn %s %s\n", static_cast<unsigned long>(millis()), b.name,
+                                       b.button.pressed ? "down" : "up");
+}
+
 // Hardware adapter: the state machine owns all pending presses and timers.
 static void updateModeInputs()
 {
@@ -295,11 +329,17 @@ static void updateModeInputs()
     input.profileSettled = profileKnob.settled();
     input.pendingProfile = pendingProfile;
     input.calibrationActive = leanMode.calibrationActive();
+    logButtonEvents(input);
+    const mode selectedBefore = modeState.selected();
     // Refresh only the seat reading, leaving the control/telemetry sample intact.
     if (modeState.needsSeatSample(input))
         leanMode.sampleSensors(/*seatOnly=*/true);
     input.seated = leanMode.isSeated();
     const auto actions = modeState.update(input, millis());
+    if (modeState.selected() != selectedBefore)
+        telemetry::Telemetry::logf("DBG EVT %lu select %s->%s cur=%s seated=%d\n", static_cast<unsigned long>(millis()),
+                                   modeName(selectedBefore), modeName(modeState.selected()),
+                                   modeName(modeState.current()), input.seated ? 1 : 0);
     if (actions.resetRemote)
         remoteMode.reset();
     if (actions.resetAssist)
@@ -363,6 +403,9 @@ static void applySeatedLatch()
     if (transition.resetLean)
         leanMode.reset();
     telemetry::Telemetry::logf("Mode: %s\n", modeName(modeState.current()));
+    telemetry::Telemetry::logf("DBG EVT %lu mode %s sel=%s why=%s\n", static_cast<unsigned long>(millis()),
+                               modeName(modeState.current()), modeName(modeState.selected()),
+                               transition.seatDisarm ? "seat-empty" : "selected");
 }
 
 static void updateDrive()
@@ -376,6 +419,7 @@ static void updateDrive()
     {
         return;
     }
+    noteControlTick(now - tSend);
     tSend = now;
 
     const bool calibrationRequested = modeState.takeCalibrationRequest();
@@ -387,6 +431,9 @@ static void updateDrive()
     if (SENSOR_RAIL_DISARM && modeState.current() == LEAN && leanMode.sensorAtRail())
     {
         telemetry::Telemetry::logf("Sensor reading at ADC rail; disarming.\n");
+        const auto &raw = leanMode.getRawReadings();
+        telemetry::Telemetry::logf("DBG EVT %lu rail-disarm raw=%d/%d/%d/%d\n", static_cast<unsigned long>(now),
+                                   raw[0], raw[1], raw[2], raw[3]);
         modeState.requestDisarm();
     }
     applySeatedLatch();
@@ -397,6 +444,8 @@ static void updateDrive()
         leftRPMSetpointPID.reset();
         rightRPMSetpointPID.reset();
         motorTelemetry = {};
+        telemetry::Telemetry::logf("DBG EVT %lu cal-press held=%lu\n", static_cast<unsigned long>(now),
+                                   static_cast<unsigned long>(now - calibrationPressedAt));
         leanMode.beginCalibration(calibrationPressedAt);
         leanMode.sampleSensors();
         // Calibration updates the seat threshold as well as the neutral floors.
@@ -406,6 +455,7 @@ static void updateDrive()
     {
         if (leanMode.updateCalibration(millis(), calibrateButton.getState() == LOW))
         {
+            telemetry::Telemetry::logf("DBG EVT %lu cal-end disarm\n", static_cast<unsigned long>(millis()));
             modeState.requestDisarm();
             applySeatedLatch();
         }
@@ -428,6 +478,9 @@ static void updateDrive()
         if (SENSOR_RAIL_DISARM && leanMode.centreOfPressureJumped())
         {
             telemetry::Telemetry::logf("Centre of pressure jumped; sensor fault suspected; disarming.\n");
+            const auto &raw = leanMode.getRawReadings();
+            telemetry::Telemetry::logf("DBG EVT %lu cop-jump raw=%d/%d/%d/%d\n", static_cast<unsigned long>(now),
+                                       raw[0], raw[1], raw[2], raw[3]);
             modeState.requestDisarm();
         }
         break;
@@ -479,15 +532,21 @@ static void replyToConfiguration()
     const uint32_t revision = settings::protocol.revision();
     const size_t length = settings::protocol.reply(response, modeState.current() == DISARM);
     if (settings::protocol.revision() != revision)
+    {
         applyRuntimeSettings();
+        telemetry::Telemetry::logf("DBG EVT %lu settings rev=%lu\n", static_cast<unsigned long>(millis()),
+                                   static_cast<unsigned long>(settings::protocol.revision()));
+    }
     // The leading zero distinguishes PacketSerial responses from legacy CSV.
     Serial1.write(static_cast<uint8_t>(0));
     packetSerial.send(response, length);
+    configReplyBytes += length + length / 254 + 3; // COBS-framed, approximately
 }
 
 // Read-only VESC firmware-version probe (see vesc_probe.h).
 static vescprobe::Reply probeReply;
 static vescapply::Applier vescApplier; // one-shot approved VESC settings write (vesc_apply.h)
+static vescmon::Monitor vescMonitor;   // read-only GET_VALUES poll + fault watch (vesc_monitor.h)
 static uint32_t probeAsked = 0, probeFrames = 0, probeReplies = 0;
 // A config reply being streamed out as hex, a chunk per telemetry tick.
 static uint8_t confDump[1024];
@@ -530,39 +589,119 @@ static void streamConfDump()
     confDumpOff += n;
 }
 
+// 20 Hz: what each VESC reports and what the RPM smoother is doing.
+//   DBG M ms curL curR dutyL dutyR iinL iinR pidL pidR accL accR rateL rateR intL intR limit
+// cur/duty/iin from STATUS_1/STATUS_4 (A, A). pid = the smoother's own RPM
+// before the clamp to measured ± MAX_RPM_COMMAND_DIFF (the CSV's smoothed RPM
+// is after it), acc and rate in RPM/s, int in RPM·s, limit = slewed speed cap m/s.
+static void publishMotorLine(uint32_t now)
+{
+    const VescStatus &l = measuredMotors[0], &r = measuredMotors[1];
+    const RPMSetpointPID &pl = leftRPMSetpointPID, &pr = rightRPMSetpointPID;
+    telemetry::Telemetry::logf("DBG M %lu %.1f %.1f %.3f %.3f %.1f %.1f %.1f %.1f %.0f %.0f %.0f %.0f %.1f %.1f %.2f\n",
+                               static_cast<unsigned long>(now), l.current, r.current, l.duty, r.duty,
+                               l.inputCurrent, r.inputCurrent, pl.rpm(), pr.rpm(), pl.acceleration(),
+                               pr.acceleration(), pl.filteredRate(), pr.filteredRate(), pl.integral(),
+                               pr.integral(), speedLimitMS);
+}
+
+// 1 Hz: the Teensy itself. loopMax µs and loops since the last line; ctrl =
+// control tick spacing min/max ms; cpuC = die temperature; canRx frames and
+// canTxFail refused command frames since boot; tec/rec = CAN error counters;
+// bt = Bluetooth bytes/lines written since boot, drop = bytes/lines dropped
+// for lack of TX space, btFree = least TX space seen this second, cfg =
+// configuration reply bytes.
+static void publishSystemLine(uint32_t now)
+{
+    const auto &link = telemetry::Telemetry::link();
+    const uint32_t ecr = FLEXCAN1_ECR; // read-only error counters
+    telemetry::Telemetry::logf("DBG SYS up=%lu loops=%lu loopMax=%lu ctrl=%lu/%lu cpuC=%.1f canRx=%lu canTxFail=%lu "
+                               "tec=%lu rec=%lu bt=%lu/%lu drop=%lu/%lu btFree=%d cfg=%lu\n",
+                               static_cast<unsigned long>(now / 1000), static_cast<unsigned long>(sysStats.loops),
+                               static_cast<unsigned long>(sysStats.loopMaxUs),
+                               static_cast<unsigned long>(sysStats.ctrlMinMs == ~0u ? 0 : sysStats.ctrlMinMs),
+                               static_cast<unsigned long>(sysStats.ctrlMaxMs), tempmonGetTemp(),
+                               static_cast<unsigned long>(sysStats.canRx), static_cast<unsigned long>(vescTxFailures()),
+                               static_cast<unsigned long>(ecr & 0xFF), static_cast<unsigned long>((ecr >> 8) & 0xFF),
+                               static_cast<unsigned long>(link.bytes), static_cast<unsigned long>(link.lines),
+                               static_cast<unsigned long>(link.droppedBytes), static_cast<unsigned long>(link.droppedLines),
+                               telemetry::Telemetry::takeMinFree(), static_cast<unsigned long>(configReplyBytes));
+    sysStats.loops = sysStats.loopMaxUs = sysStats.ctrlMaxMs = 0;
+    sysStats.ctrlMinMs = ~0u;
+}
+
+// 1 Hz: knobs (position 1-4 / raw ADC / S settled, F faulted, - settling),
+// buttons as raw levels (1 = held: lean remote disarm cal), the profile knob's
+// pending and active slots (0 = none), selected and current mode, seat.
+static void publishInputsLine()
+{
+    const auto knob = [](const knobs::RotarySwitch &k) { return k.faulted() ? 'F' : k.settled() ? 'S' : '-'; };
+    const auto held = [](ezButton &b) { return b.getStateRaw() == LOW ? 1 : 0; };
+    telemetry::Telemetry::logf("DBG IO spd=%d/%u/%c prof=%d/%u/%c btn=%d%d%d%d pend=%d act=%d sel=%s cur=%s seated=%d\n",
+                               speedKnob.position() + 1, static_cast<unsigned>(speedKnob.lastRaw()), knob(speedKnob),
+                               profileKnob.position() + 1, static_cast<unsigned>(profileKnob.lastRaw()), knob(profileKnob),
+                               held(leanModeButton), held(remoteModeButton), held(disarmModeButton), held(calibrateButton),
+                               pendingProfile + 1, activeProfile + 1, modeName(modeState.selected()),
+                               modeName(modeState.current()), leanMode.isSeated() ? 1 : 0);
+}
+
+// Once-a-second lines go out on their own 20 Hz tick (slot = tick % 20) so no
+// tick sends more than ≈ 500 bytes. Sent together (≈ 700 bytes in one burst)
+// the HC-06 lost the tail of the burst: in the 2026-11-22 tap the last line of
+// it (DBG VESC) arrived intact only 82-88% of the time against ≈ 99.6% for the
+// 20 Hz lines. The config dump streams on odd ticks, which carry no slot line.
 static void publishTelemetry()
 {
     const uint32_t now = millis();
-    static uint32_t lastGainStatusMs = 0;
-    if (now - lastGainStatusMs >= 1000)
+    if (!telemetryOutput.due(now))
+        return;
+    static uint32_t tick = 0;
+    const uint32_t slot = tick++ % 20;
+    switch (slot)
     {
-        lastGainStatusMs = now;
+    case 0:
         leanMode.publishDynamicGains();
         leanMode.publishSensorStatus();
+        break;
+    case 2:
         leanMode.publishCornerStatus();
+        break;
+    case 4:
+    {
         // Every 5 s one read-only GET to one VESC, cycling: firmware version,
         // motor config, app config; left then right. A full cycle takes 30 s.
+        // The monitor sends it when no other reply is in flight.
         static uint8_t probeTick = 0;
         if (++probeTick % 5 == 0 && !vescApplier.active())
         {
             static const uint8_t comms[3] = {vescprobe::COMM_FW_VERSION, vescprobe::COMM_GET_MCCONF, vescprobe::COMM_GET_APPCONF};
-            const uint8_t slot = (probeTick / 5) % 6;
-            vescprobe::ask(can1, slot < 3 ? motors.leftId : motors.rightId, comms[slot % 3]);
+            const uint8_t probeSlot = (probeTick / 5) % 6;
+            vescMonitor.queueProbe(probeSlot < 3 ? motors.leftId : motors.rightId, comms[probeSlot % 3]);
             ++probeAsked;
         }
         telemetry::Telemetry::logf("DBG VESCPROBE asked=%lu frames=%lu replies=%lu\n", static_cast<unsigned long>(probeAsked),
                                    static_cast<unsigned long>(probeFrames), static_cast<unsigned long>(probeReplies));
-        // Motor controller health; age = ms since the last status frame (large = VESC silent).
-        for (const VescStatus *v : {&measuredMotors[0], &measuredMotors[1]})
-            telemetry::Telemetry::logf("DBG VESC id=%u age=%lu frames=%lu erpm=%ld current=%.1f duty=%.3f fetC=%.1f vin=%.1f\n",
-                                       v == &measuredMotors[0] ? motors.leftId : motors.rightId,
-                                       v->frames ? static_cast<unsigned long>(now - v->lastMs) : 0UL,
-                                       static_cast<unsigned long>(v->frames), static_cast<long>(v->erpm),
-                                       v->current, v->duty, v->mosfetTempC, v->inputVoltage);
+        publishSystemLine(now);
+        break;
     }
-    if (!telemetryOutput.due(now))
-        return;
-    streamConfDump();
+    case 6:
+    case 8:
+        // Motor controller health from the CAN status frames (vesc_monitor.h).
+        vescmon::logStatus(measuredMotors[slot == 6 ? 0 : 1], slot == 6 ? motors.leftId : motors.rightId,
+                           slot == 6 ? 'L' : 'R', now);
+        break;
+    case 10:
+    case 12:
+        vescMonitor.logValues(slot == 10 ? 0 : 1, now); // COMM_GET_VALUES, fault code included
+        break;
+    case 14:
+        publishInputsLine();
+        break;
+    default:
+        if (slot % 2)
+            streamConfDump();
+        break;
+    }
     // Lean samples on each control tick; other modes sample for display only.
     if (modeState.current() != LEAN)
         leanMode.sampleSensors();
@@ -578,6 +717,7 @@ static void publishTelemetry()
         // 20 Hz centre of pressure in inches (corner layout only).
         leanMode.publishCentreOfPressure(now);
     }
+    publishMotorLine(now);
     telemetry::TelemetryFrame frame;
     frame.timeMs = now;
     frame.mode = modeState.current();
@@ -598,12 +738,19 @@ static void publishTelemetry()
 
 void loop()
 {
+    static uint32_t loopStartUs = micros();
+    const uint32_t loopUs = micros() - loopStartUs; // the previous loop, start to start
+    loopStartUs += loopUs;
+    sysStats.loopMaxUs = max(sysStats.loopMaxUs, loopUs);
+    ++sysStats.loops;
+
     updateKnobs();
     updateModeInputs();
     packetSerial.update();
     CAN_message_t feedback;
     for (int i = 0; i < 32 && can1.read(feedback); ++i)
     {
+        ++sysStats.canRx;
         vescHandleFrame(feedback, motors.leftId, measuredMotors[0]);
         vescHandleFrame(feedback, motors.rightId, measuredMotors[1]);
         if (feedback.flags.extended && (feedback.id & 0xFF) == vescprobe::PROBE_CAN_ID)
@@ -613,17 +760,22 @@ void loop()
             ++probeReplies;
             if (vescApplier.active())
                 vescApplier.onReply(probeReply);
-            else
+            else if (!vescMonitor.onReply(probeReply, millis()))
                 logProbeReply();
             probeReply.done = false;
         }
     }
+    vescMonitor.flushFaults(); // a DBG VFAULT goes out as soon as there is room
     {
         const bool disarmed = modeState.current() == DISARM;
-        vescApplier.maybeStart(vescFresh(measuredMotors[0], 500) && vescFresh(measuredMotors[1], 500), disarmed,
-                               motors.leftId, motors.rightId);
+        // The applier starts only when no monitor/probe reply is in flight; while it
+        // runs, the monitor asks nothing (both share the reply path to PROBE_CAN_ID).
+        vescApplier.maybeStart(vescFresh(measuredMotors[0], 500) && vescFresh(measuredMotors[1], 500) &&
+                                   !vescMonitor.busy(millis()),
+                               disarmed, motors.leftId, motors.rightId);
         vescApplier.update(can1, disarmed);
         vescApplier.repeatSummary();
+        vescMonitor.update(can1, millis(), motors.leftId, motors.rightId, !vescApplier.active());
     }
     updateDrive();
     updateModeLEDs();

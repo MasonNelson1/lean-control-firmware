@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Runs every host-side test: native firmware tests (g++), dashboard JS tests
-# (node) and dashboard Python tests. No hardware needed.
+# Runs every host-side test: native firmware tests (g++), laptop tools tests
+# (python3), dashboard JS tests (node) and dashboard Python tests. No hardware needed.
 #
 #   ./run-tests.sh            # everything
 #   ./run-tests.sh native     # just the C++ tests
+#   ./run-tests.sh tools      # just the laptop tools (tools/tests)
 #   ./run-tests.sh viewer     # just the dashboard tests
 #
 # Python: set VIEWER_PYTHON to a venv's python with debugViewer/requirements.txt
@@ -57,6 +58,10 @@ run_native() {
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
     native plus_golden         "${LEAN_INC[@]}" tests/native/plus_golden_test.cpp \
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
+    native vesc_decode         -I src tests/native/vesc_decode_test.cpp
+    # vesc_stubs supplies Arduino.h (millis, Serial1) and FlexCAN_T4.h (records frames).
+    native vesc_monitor        -I tests/native/vesc_stubs -I tests/native -I src tests/native/vesc_monitor_test.cpp \
+                               src/telemetry/Telemetry.cpp src/telemetry/TelemetryFrame.cpp
 }
 
 run_viewer() {
@@ -84,11 +89,21 @@ run_viewer() {
     fi
 }
 
+run_tools() {
+    echo "== Laptop tools tests (chair_sql, chair_summary)"
+    if python3 -B -m unittest discover -s tools/tests >"$OUT/tools-py.log" 2>&1; then
+        echo "ok  $(grep -E '^Ran ' "$OUT/tools-py.log")"
+    else
+        echo "FAILED"; tail -30 "$OUT/tools-py.log"; failures+=(tools-python)
+    fi
+}
+
 case "${1:-all}" in
     native) run_native ;;
     viewer) run_viewer ;;
-    all)    run_native; run_viewer ;;
-    *)      echo "usage: $0 [native|viewer|all]"; exit 2 ;;
+    tools)  run_tools ;;
+    all)    run_native; run_tools; run_viewer ;;
+    *)      echo "usage: $0 [native|tools|viewer|all]"; exit 2 ;;
 esac
 
 echo

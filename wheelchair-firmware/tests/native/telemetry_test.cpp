@@ -92,7 +92,25 @@ int main()
     assert(Serial.output == "Test 42\n" && Serial1.output == Serial.output);
     Serial.output.clear();
     Serial1.output.clear();
-    telemetry::Telemetry::logf("%s", std::string(300, 'x').c_str());
+    // Lines up to 399 bytes go out (DBG VVAL can reach ≈ 370); longer ones are never truncated.
+    telemetry::Telemetry::logf("%s", std::string(399, 'x').c_str());
+    assert(Serial.output.size() == 399 && Serial1.output.size() == 399);
+    Serial.output.clear();
+    Serial1.output.clear();
+    telemetry::Telemetry::logf("%s", std::string(400, 'x').c_str());
     assert(Serial.output.empty() && Serial1.output.empty());
+
+    // Link accounting (DBG SYS): written and dropped Bluetooth bytes and lines.
+    const auto sent = telemetry::Telemetry::link();
+    telemetry::Telemetry::takeMinFree(); // start a fresh minimum
+    telemetry::Telemetry::logf("abc\n");
+    Serial1.capacity = 3;
+    telemetry::Telemetry::logf("abcd\n");
+    const auto &now = telemetry::Telemetry::link();
+    assert(now.bytes == sent.bytes + 4 && now.lines == sent.lines + 1);
+    assert(now.droppedBytes == sent.droppedBytes + 5 && now.droppedLines == sent.droppedLines + 1);
+    assert(telemetry::Telemetry::takeMinFree() == 3 && !telemetry::Telemetry::hasRoom(4));
+    Serial1.capacity = 512;
+    assert(telemetry::Telemetry::takeMinFree() == 3 && telemetry::Telemetry::hasRoom(512));
     puts("Telemetry CSV, timing, and transport regression tests passed");
 }

@@ -231,8 +231,8 @@ void LeanDriveMode::publishDynamicGains() const
 
 void LeanDriveMode::publishSensorStatus() const
 {
-    telemetry::Telemetry::logf("DBG SENSORS raw=%d/%d/%d/%d floors=%d/%d/%d/%d W=%d seatLoad=%d seated=%d calibrated=%d calActive=%d\n",
+    telemetry::Telemetry::logf("DBG SENSORS raw=%d/%d/%d/%d floors=%d/%d/%d/%d W=%d seatLoad=%d seated=%d calibrated=%d calActive=%d railed=%d\n",
                                rawReadings[0], rawReadings[1], rawReadings[2], rawReadings[3],
                                floorF, floorB, floorL, floorR, userWeightEstimate, seatLoad,
-                               isSeated() ? 1 : 0, initiallyCalibrated ? 1 : 0, calibrationActive() ? 1 : 0);
+                               isSeated() ? 1 : 0, initiallyCalibrated ? 1 : 0, calibrationActive() ? 1 : 0, railed ? 1 : 0);
 }

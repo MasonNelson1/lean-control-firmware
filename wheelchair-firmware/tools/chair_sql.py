@@ -25,7 +25,7 @@ import sqlite3
 
 LIVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "live", "current.csv")
 SENS = re.compile(r"DBG SENSORS raw=(-?\d+)/(-?\d+)/(-?\d+)/(-?\d+) floors=(-?\d+)/(-?\d+)/(-?\d+)/(-?\d+) "
-                  r"W=(-?\d+) seatLoad=(-?\d+) seated=(\d) calibrated=(\d) calActive=(\d)")
+                  r"W=(-?\d+) seatLoad=(-?\d+) seated=(\d) calibrated=(\d) calActive=(\d)(?: railed=(\d))?")
 VESC = re.compile(r"DBG VESC id=(\d+) age=(\d+) frames=(\d+) erpm=(-?\d+) current=(\S+) duty=(\S+) fetC=(\S+) vin=(\S+)")
 TREND = """SELECT CAST(s/{n} AS INT)*{n} AS s0, MIN(host_time) AS at, mode,
   ROUND(AVG(F),1) F, ROUND(AVG(B),1) B, ROUND(AVG(L),1) L, ROUND(AVG(R),1) R,
@@ -56,7 +56,7 @@ def load(path):
         db.execute(f"CREATE TABLE t ({', '.join(cols)})")
         db.execute("CREATE TABLE msg (s, host_time, kind, text)")
         db.execute("CREATE TABLE sens (s, rawF, rawB, rawL, rawR, floorF, floorB, floorL, floorR, "
-                   "W, seatLoad, seated, calibrated, calActive)")
+                   "W, seatLoad, seated, calibrated, calActive, railed)")
         db.execute("CREATE TABLE vesc (s, id, age, frames, erpm, current, duty, fetC, vin)")
         t0 = None
         for r in reader:
@@ -73,7 +73,7 @@ def load(path):
             db.execute("INSERT INTO msg VALUES (?,?,?,?)", (s, r[0], "CORRUPT" if text[:1].isdigit() else text.split(" ")[0], text))
             m = SENS.search(text)
             if m:
-                db.execute(f"INSERT INTO sens VALUES ({','.join('?' * 14)})", [s] + [int(g) for g in m.groups()])
+                db.execute(f"INSERT INTO sens VALUES ({','.join('?' * 15)})", [s] + [None if g is None else int(g) for g in m.groups()])
             m = VESC.search(text)
             if m:
                 db.execute(f"INSERT INTO vesc VALUES ({','.join('?' * 9)})", [s] + [num(g) for g in m.groups()])

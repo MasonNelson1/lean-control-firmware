@@ -4,8 +4,8 @@
 #include "../config/DriveSettings.h"
 #include "../drive_constants.h"
 
-// Push assist for one wheel: when the rider pushes the rim, the motor adds
-// current in the same direction for a short time.
+// Push assist for one wheel: after the rider pushes the rim, the motor adds
+// current in the same direction for a short time, so each push carries further.
 //
 // The boost used to depend on wheel speed alone, all the time. Boost raises
 // speed and speed raised boost, so a small nudge ran the chair up to the speed
@@ -13,32 +13,33 @@
 //
 // Now a boost has to be earned by a push, and a push only counts while the
 // motor is giving no boost:
-//   - With the boost off, the wheel must speed up by PushGainRPM within
-//     PushWindowMs. The motor is not helping then, so that is the rider.
-//   - That starts one boost, which fades to nothing over BoostMs. Its size
-//     still follows the team's curve (assist response, max boost) and pulse
-//     pattern, and it still drops to the slowdown fraction if the wheel slows.
+//   - With the boost off, the wheel must speed up at PushAccelMS2 or more, and
+//     then stop speeding up within PushMaxMs. The motor is not helping then,
+//     so that is the rider. Speeding up that goes on and on is a slope, not a
+//     push, however steep: it never earns a boost.
+//   - The end of the push starts one boost, which fades to nothing over
+//     BoostMs. Its size still follows the team's curve (assist response, max
+//     boost) and on/off pulsing, and it still drops to the slowdown fraction
+//     if the wheel slows.
 //   - Nothing more happens until the boost is over and a new push is seen.
 // So the motor can lengthen each push but can never keep the chair going, or
 // start it, on its own.
 class PushAssist
 {
 public:
-    // A push: at least 1 m/s^2 for a tenth of a second (3.2 wheel RPM gained),
-    // unboosted. A wheelchair ramp at the legal limit (1 in 12) gives
-    // 0.8 m/s^2 before rolling resistance, so rolling down one does not count.
+    // A push starts when the wheel gains speed at 1 m/s^2 or more (3.2 wheel
+    // RPM in a tenth of a second) and ends when that falls under 0.3 m/s^2.
     static constexpr float PushAccelMS2 = 1.0f;
+    static constexpr float PushEndAccelMS2 = 0.3f;
     static constexpr uint32_t PushWindowMs = 100;
-    static constexpr uint32_t SampleMs = 20; // VESC speed frames arrive at 50 Hz
-    static constexpr uint32_t BoostMs = 700; // one boost, fading out
+    static constexpr uint32_t PushMaxMs = 1000; // longer than this is not a push
+    static constexpr uint32_t SampleMs = 20;    // VESC speed frames arrive at 50 Hz
+    static constexpr uint32_t BoostMs = 700;    // one boost, fading out
     // After a boost, wait this long before watching for the next push, so the
     // speed the VESC reports has caught up with what the boost did.
     static constexpr uint32_t RearmMs = 100;
     // Boost is full up to 85% of the speed-knob limit and zero from 100%.
     static constexpr float speedCapFadeFraction = 0.15f;
-    // The team's pulse pattern within a boost: 5 ms on, 5 ms off.
-    static constexpr uint32_t PulseMs = 10;
-    static constexpr uint32_t PulseOnMs = 5;
 
     // Boost current (A, signed like the wheel speed) for this tick.
     float update(float currRpm, uint32_t now, float maxRPM)
@@ -60,12 +61,17 @@ public:
             {
                 boosting = false;
                 samples = 0; // what follows must be seen unboosted from the start
+                push = Push::None;
                 rearmAt = now + RearmMs;
                 waitingToRearm = true;
                 return 0.0f;
             }
-            if (elapsed % PulseMs >= PulseOnMs)
-                return 0.0f; // the off half of the pulse
+            // The team's pulsing: on for one control tick, off for the next
+            // (5 ms on, 5 ms off at the default control period). Counting
+            // ticks keeps it at half the time whatever the control period is.
+            pulseOn = !pulseOn;
+            if (!pulseOn)
+                return 0.0f;
             const float fade = 1.0f - static_cast<float>(elapsed) / BoostMs;
             const float scale = slowing ? settings::assistSlowdownBoostFraction.get() : 1.0f;
             return direction * fade * scale * calcBoost(currRpm, maxRPM);
@@ -89,15 +95,34 @@ public:
         if (samples < History)
             return 0.0f;
 
+        // Speed gained over the window, in the direction the wheel now turns.
         const float before = history[History - 1];
-        const float pushGain = PushAccelMS2 * DriveConstants::LINEAR_TO_RPM * PushWindowMs / 1000.0f;
-        // Faster than a window ago, in the direction it is now turning.
         const float gained = currRpm >= 0.0f ? currRpm - before : before - currRpm;
-        if (std::fabs(currRpm) >= minRpm && gained >= pushGain)
+        const float perWindow = DriveConstants::LINEAR_TO_RPM * PushWindowMs / 1000.0f;
+        if (push == Push::None)
         {
-            boosting = true;
-            boostStartedAt = now;
-            direction = currRpm > 0.0f ? 1.0f : -1.0f;
+            if (std::fabs(currRpm) >= minRpm && gained >= PushAccelMS2 * perWindow)
+            {
+                push = Push::Rising;
+                pushStartedAt = now;
+            }
+        }
+        else if (gained < PushEndAccelMS2 * perWindow)
+        {
+            // The speeding-up has ended. If it was short it was a push.
+            const bool wasPush = push == Push::Rising;
+            push = Push::None;
+            if (wasPush && std::fabs(currRpm) >= minRpm)
+            {
+                boosting = true;
+                pulseOn = false;
+                boostStartedAt = now;
+                direction = currRpm > 0.0f ? 1.0f : -1.0f;
+            }
+        }
+        else if (now - pushStartedAt > PushMaxMs)
+        {
+            push = Push::Sustained; // a slope: wait for it to end, then start over
         }
         return 0.0f;
     }
@@ -107,6 +132,8 @@ public:
         initialized = false;
         boosting = false;
         waitingToRearm = false;
+        pulseOn = false;
+        push = Push::None;
         samples = 0;
         direction = 0.0f;
         baselineRPM = 0.0f;
@@ -125,8 +152,10 @@ private:
     bool boosting = false;
     float direction = 0.0f;
     float baselineRPM = 0.0f;
-    uint32_t lastMS = 0, lastSampleMs = 0, boostStartedAt = 0, rearmAt = 0;
-    bool waitingToRearm = false;
+    uint32_t lastMS = 0, lastSampleMs = 0, boostStartedAt = 0, rearmAt = 0, pushStartedAt = 0;
+    bool waitingToRearm = false, pulseOn = false;
+    // Rising: speeding up fast enough to be a push. Sustained: it has gone on too long to be one.
+    enum class Push : uint8_t { None, Rising, Sustained } push = Push::None;
     float history[History]{};
     uint8_t samples = 0;
     float minRpm = 1.0f;

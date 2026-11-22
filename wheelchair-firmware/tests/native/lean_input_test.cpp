@@ -269,14 +269,16 @@ int main()
         }
         assert(trim.mode.command().speed == 0);   // absorbed
         assert(drifted(0).speed == 0);            // and the old posture is not a lean the other way: lost load never counts
-        // The bound: a quarter of that direction's range (100 of the back range's 400 counts).
+        // The bound: 15% of that direction's range (60 of the back range's 400 counts).
         loads(NeutralF, NeutralB + 300, NeutralL, NeutralR);
         for (int k = 0; k < 60000; ++k)
         {
             trim.sample();
             trim.mode.trimNeutral(TickS);
         }
-        assert(std::fabs(trim.mode.command().speed - shaped(-200.0f / back, deadband, speedKnee)) < 0.01f);
+        assert(std::fabs(trim.mode.command().speed - shaped(-240.0f / back, deadband, speedKnee)) < 0.01f);
+        // Sitting back up from that slump (the back sensor at its calibrated load again) is no lean at all.
+        assert(drifted(0).speed == 0);
         // Not while uncalibrated or calibrating.
         trim.mode.reset();
         trim.mode.trimNeutral(TickS);

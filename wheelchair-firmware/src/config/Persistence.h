@@ -59,6 +59,9 @@ public:
     bool saveCalibration();
     void refreshDirty(); // Call after changing RAM values, before deciding whether to save.
     bool dirty() const { return dirty_; }
+    // False when the last load() found no valid saved bank (a new board, or a
+    // save cut short by power loss) and the values are the firmware defaults.
+    bool loadedSaved() const { return loadedSaved_; }
 
 private:
     struct Slot {
@@ -74,6 +77,7 @@ private:
     void (*repair_)();
     uint32_t savedSignature_ = 0;
     bool dirty_ = false;
+    bool loadedSaved_ = false;
 };
 
 } // namespace config

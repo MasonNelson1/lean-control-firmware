@@ -92,6 +92,14 @@ int main()
     assert(Serial.output == "Test 42\n" && Serial1.output == Serial.output);
     Serial.output.clear();
     Serial1.output.clear();
+    // A USB host that is attached but not reading must not stall the control
+    // loop: the line is dropped there too, and Bluetooth still gets it.
+    Serial.capacity = 4;
+    telemetry::Telemetry::logf("Test %d\n", 43);
+    output.publish(f);
+    assert(Serial.output.empty() && Serial1.output == "Test 43\n" + csv);
+    Serial.capacity = 512;
+    Serial1.output.clear();
     telemetry::Telemetry::logf("%s", std::string(300, 'x').c_str());
     assert(Serial.output.empty() && Serial1.output.empty());
     puts("Telemetry CSV, timing, and transport regression tests passed");

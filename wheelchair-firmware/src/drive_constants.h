@@ -63,6 +63,14 @@ constexpr uint32_t STOP_BRAKE_MAX_MS = 1500;
 // for at most this long after the ramp ends before going to brake current.
 constexpr uint32_t STOP_RAMP_OVERRUN_MS = 1000;
 
+// ---- Reverse ---------------------------------------------------------------
+// Full back lean (or full back stick) drives at this share of the speed-knob
+// limit. The rider cannot see behind, and leaning back is also how they brake.
+// Half keeps reverse usable on the slowest knob position, where it is 19 wheel
+// RPM: just above the 15.5 RPM under which a VESC at its default minimum-ERPM
+// setting will not drive.
+constexpr float REVERSE_SPEED_FRACTION = 0.5f;
+
 // ---- Neutral trim (LeanDriveMode::trimNeutral) ------------------------------
 // The chair must have stood still at neutral lean for this long before neutral
 // starts to follow the sensors.

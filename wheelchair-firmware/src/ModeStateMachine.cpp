@@ -81,6 +81,9 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
         confirmingProfile_ = NoProfile;
     }
 
+    actions.disarmPressed = disarmPressed;
+    if (disarmPressed && !in.seated && selectedMode_ == DISARM && currentMode_ == DISARM)
+        actions.toggleFreewheel = true;
     if (disarmPressed)
     {
         // Only a press that starts with the chair already disarmed can go on

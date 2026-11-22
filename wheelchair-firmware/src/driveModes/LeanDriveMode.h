@@ -109,10 +109,12 @@ public:
     // shows tens of counts an hour) and a rider settling in the seat do not
     // build up into a lean that starts the chair creeping. It can only act
     // on what is already inside the deadband, and each sensor's neutral
-    // stays within TrimMaxFraction of its range of the calibrated value.
+    // stays within TrimMaxFraction of its range of the calibrated value (so
+    // a rider who slumps for a long time and then sits up gets a few percent
+    // of command at most, not a lurch).
     void trimNeutral(float dt);
     static constexpr float TrimTauS = 10.0f;
-    static constexpr float TrimMaxFraction = 0.25f;
+    static constexpr float TrimMaxFraction = 0.15f;
 
     // Calibration button, in LEAN. A short press captures neutral once the
     // rider has let go and sat still. Holding for RangeHoldMs also measures

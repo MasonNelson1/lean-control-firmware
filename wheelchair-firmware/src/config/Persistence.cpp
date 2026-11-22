@@ -77,6 +77,7 @@ void Persistence::load() {
     registry_.defaults();
     if (active.valid) applyTlvs(registry_, payload, active.length);
     if (repair_) repair_();
+    loadedSaved_ = active.valid;
 
     // Compare later edits against the loaded values after migration and repair.
     const size_t length = snapshot(registry_, payload, sizeof(payload));
@@ -122,6 +123,7 @@ bool Persistence::write(uint8_t *payload, uint16_t length) {
     if (!committed.valid || committed.length != length ||
         crc32(payload, length) != signature) return false;
     savedSignature_ = signature;
+    loadedSaved_ = true;
     return true;
 }
 

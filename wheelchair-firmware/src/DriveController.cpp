@@ -39,6 +39,9 @@ void DriveController::begin(bool afterWatchdogReset)
     motion_.reset();
     stop_.cancel();
     driving_ = false;
+    freewheel_ = false;
+    faultHold_ = false;
+    reverseLocked_ = false;
     fault_ = afterWatchdogReset ? Fault::WatchdogReset : Fault::None;
 }
 
@@ -69,12 +72,21 @@ ModeStateMachine::Actions DriveController::updateButtons(ModeStateMachine::Input
         remote_.reset();
     if (actions.resetAssist)
         assist_.reset();
+    if (actions.disarmPressed)
+        faultHold_ = false; // acknowledged: back to the normal DISARM rules
+    if (actions.toggleFreewheel)
+    {
+        freewheel_ = !freewheel_;
+        telemetry::Telemetry::logf(freewheel_ ? "Free-wheel: the empty chair can be pushed by hand. Press DISARM again to hold it.\n"
+                                              : "Holding the empty chair again.\n");
+    }
     return actions;
 }
 
 void DriveController::raiseFault(Fault fault)
 {
     fault_ = fault;
+    faultHold_ = true;
     // An unplugged sensor does not show up here: the sensors are two-wire,
     // so an open circuit reads the same as an unloaded sensor. (LeanDriveMode
     // makes sure that cannot create motion.)
@@ -125,6 +137,8 @@ void DriveController::applySeat(const TickInput &in)
         return;
 
     lean_.cancelCalibration(); // also ends a tare when leaving DISARM
+    freewheel_ = false;
+    reverseLocked_ = false;
     if (modeState_.current() == DISARM)
     {
         if (previous == LEAN || previous == REMOTE)
@@ -160,7 +174,7 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
     commands_ = {};
     sentLeftRPM_ = sentRightRPM_ = 0.0f;
     if (!stop_.active())
-        return release();
+        return parked(in);
 
     const bool fresh = in.leftFresh && in.rightFresh;
     const auto out = stop_.update(in.dt, in.now, {in.leftRPM, in.rightRPM, fresh});
@@ -186,6 +200,56 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
     default:
         return release();
     }
+}
+
+// What the motors do when nothing is driving and no stop is running.
+//
+// A chair that is not being driven must not roll away. It used to be released
+// here in every case, so after a stop on a ramp it rolled off, with or without
+// its rider. Now it is held: any wheel that starts to turn gets brake current
+// (which can slow a wheel but never drive it). The exceptions are the states
+// in which someone is meant to move the chair by hand:
+//   - Assist: the rider is pushing the rims.
+//   - DISARM with a rider in the seat: it is a manual chair, and the rider
+//     has the rims. (Not straight after a fault: the rider was not expecting
+//     the stop, so the chair stays held until DISARM is pressed.)
+//   - DISARM with the seat empty, after DISARM has been tapped to ask for
+//     free-wheel (to push the empty chair around).
+// Holding is damping, not a parking brake: on a slope the chair creeps.
+DriveController::MotorCommand DriveController::parked(const TickInput &in) const
+{
+    const common::mode mode = modeState_.current();
+    const bool hold = mode == LEAN || mode == REMOTE ||
+                      (mode == DISARM && (faultHold_ || (!lean_.isSeated() && !freewheel_)));
+    if (!hold)
+        return release();
+    if (!(in.leftFresh && in.rightFresh))
+    {
+        // No wheel speed to go by (a silent VESC): brake both and keep braking.
+        return {{MotorCommand::Kind::Brake, STOP_BRAKE_AMPS}, {MotorCommand::Kind::Brake, STOP_BRAKE_AMPS}};
+    }
+    const auto wheel = [](float rpm) -> MotorCommand::Wheel {
+        if (std::fabs(rpm) < DEADZONE_REST_RPM)
+            return {MotorCommand::Kind::Current, 0.0f};
+        return {MotorCommand::Kind::Brake,
+                clampTo(DEADZONE_BRAKE_AMPS_PER_RPM * std::fabs(rpm), DEADZONE_BRAKE_MIN_AMPS, STOP_BRAKE_AMPS)};
+    };
+    return {wheel(in.leftRPM), wheel(in.rightRPM)};
+}
+
+// The largest turn (half the difference between the wheels) allowed right
+// now: the full-lean turn rate, less at speed so that speed x turn rate
+// (sideways acceleration) stays under its limit. The speed used is the faster
+// of what is commanded and what the wheels report.
+float DriveController::turnLimitRPM(const TickInput &in) const
+{
+    const float speedMS = std::max(std::fabs(motion_.linearRPM()),
+                                   std::fabs(in.leftRPM + in.rightRPM) / 2.0f) / LINEAR_TO_RPM;
+    float turnRate = settings::maxTurnRate.get() * DegToRad;
+    const float lateral = settings::maxLateralAccel.get();
+    if (speedMS * turnRate > lateral)
+        turnRate = lateral / speedMS;
+    return turnRate * settings::trackWidth.get() / 2.0f * LINEAR_TO_RPM;
 }
 
 DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, float linearTargetRPM, float turnTargetRPM)
@@ -311,6 +375,8 @@ void DriveController::saveCalibration()
 DriveController::MotorCommand DriveController::tick(const TickInput &in)
 {
     lean_.sample(in.dt);
+    if (lean_.isSeated())
+        freewheel_ = false; // someone sat down: back to the normal rules
     const bool calPressed = calPressed_;
     calPressed_ = false;
     const bool calibrationRequested = modeState_.takeCalibrationRequest();
@@ -329,7 +395,10 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         else if (!fresh)
             raiseFault(Fault::VescSilent); // every drive mode needs wheel-speed feedback
         else
+        {
             fault_ = Fault::None;
+            faultHold_ = false;
+        }
     }
 
     // ---- Calibration button -------------------------------------------------
@@ -403,7 +472,10 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         const float travelRPM = driving_ ? motion_.linearRPM() : (in.leftRPM + in.rightRPM) / 2.0f;
         const auto command = lean_.command(maxRPM > 0.0f ? travelRPM / maxRPM : 0.0f);
         if (command.stopped)
+        {
+            restingS_ = 0.0f;
             return stopOrRelease(in);
+        }
 
         // Standing still at neutral for a while: let neutral follow the
         // rider's posture and the sensors' slow drift (LeanDriveMode::trimNeutral).
@@ -413,19 +485,21 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         if (restingS_ >= NEUTRAL_TRIM_AFTER_S)
             lean_.trimNeutral(in.dt);
 
-        const float linearTargetRPM = command.speed * speedLimitMS_ * LINEAR_TO_RPM;
-        // Turn is a rate in deg/s, not a share of the speed knob. At speed it
-        // is capped so that speed x turn rate (sideways acceleration) stays
-        // under the limit. The speed used is the faster of what is commanded
-        // and what the wheels report.
-        const float speedMS = std::max(std::fabs(motion_.linearRPM()),
-                                       std::fabs(in.leftRPM + in.rightRPM) / 2.0f) / LINEAR_TO_RPM;
-        float turnRate = settings::maxTurnRate.get() * DegToRad;
-        const float lateral = settings::maxLateralAccel.get();
-        if (speedMS * turnRate > lateral)
-            turnRate = lateral / speedMS;
-        const float turnTargetRPM = command.turn * turnRate * settings::trackWidth.get() / 2.0f * LINEAR_TO_RPM;
-        return driveRPM(in, linearTargetRPM, turnTargetRPM);
+        // Leaning back is how the rider brakes, and a startled rider leans
+        // back and stays there. So a back lean that began while the chair was
+        // rolling forward only brakes it to a standstill. Reverse needs the
+        // rider to come back to neutral first, and is slower than forward.
+        if (travelRPM > STOP_DONE_RPM)
+            reverseLocked_ = true;
+        else if (command.speed == 0.0f)
+            reverseLocked_ = false;
+        float speed = command.speed;
+        if (speed < 0.0f)
+            speed = reverseLocked_ ? 0.0f : speed * REVERSE_SPEED_FRACTION;
+
+        // Turn is a rate in deg/s, not a share of the speed knob.
+        const float turnTargetRPM = command.turn * turnLimitRPM(in);
+        return driveRPM(in, speed * maxRPM, turnTargetRPM);
     }
 
     case REMOTE:
@@ -436,7 +510,14 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         const float maxRPM = speedLimitMS_ * LINEAR_TO_RPM;
         const float left = clampTo(targets.left, -1.0f, 1.0f) * maxRPM;
         const float right = clampTo(targets.right, -1.0f, 1.0f) * maxRPM;
-        return driveRPM(in, (left + right) / 2.0f, (left - right) / 2.0f);
+        // The same limits as LEAN: reverse is slower, and the turn is held to
+        // the turn-rate and sideways-acceleration limits (stick hard over at
+        // full speed asked for a pivot far past what the chair can take).
+        float linear = (left + right) / 2.0f;
+        if (linear < 0.0f)
+            linear *= REVERSE_SPEED_FRACTION;
+        const float turnLimit = turnLimitRPM(in);
+        return driveRPM(in, linear, clampTo((left - right) / 2.0f, -turnLimit, turnLimit));
     }
 
     case ASSIST:

@@ -140,6 +140,26 @@ int main()
             assert(sm.selected() == (assist ? ASSIST : DISARM));
         }
     }
+    { // A DISARM tap while disarmed with nobody seated is the free-wheel gesture, and only then.
+        SM sm;
+        sm.begin(DISARM);
+        SM::Inputs in; // unseated
+        in.disarm.edge = true;
+        assert(!sm.update(in, 10).toggleFreewheel);
+        in = {};
+        in.disarm.pressed = true;
+        assert(sm.update(in, 60).toggleFreewheel);
+        assert(!sm.update({}, 70).toggleFreewheel && sm.selected() == DISARM);
+        assert(!sm.update({}, 2000).resetAssist); // and never Assist with an empty seat
+        // Seated: not the gesture (that press is the Assist hold).
+        sm.begin(DISARM);
+        assert(!sm.update(press(DISARM), 100).toggleFreewheel);
+        // The press that disarms REMOTE with an empty seat is a stop, not the gesture.
+        sm.begin(REMOTE);
+        in = {};
+        in.disarm.edge = in.disarm.pressed = true;
+        assert(!sm.update(in, 100).toggleFreewheel && sm.selected() == DISARM);
+    }
     { // An empty seat ends Assist for good: it does not come back when someone sits down.
         SM sm;
         sm.begin(DISARM);

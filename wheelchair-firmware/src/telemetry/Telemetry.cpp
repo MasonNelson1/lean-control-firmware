@@ -16,9 +16,12 @@ namespace telemetry
 
     void Telemetry::write(const char *data, size_t length)
     {
-        Serial.write(reinterpret_cast<const uint8_t *>(data), length);
-        // Drop a complete Bluetooth line if busy, instead of blocking control or
+        // Drop a complete line if a port is busy, instead of blocking control or
         // inserting a partial line into the shared CSV/configuration stream.
+        // (USB too: with a host attached but not reading, a write can stall
+        // for about 120 ms.)
+        if (Serial.availableForWrite() >= static_cast<int>(length))
+            Serial.write(reinterpret_cast<const uint8_t *>(data), length);
         if (Serial1.availableForWrite() >= static_cast<int>(length))
             Serial1.write(reinterpret_cast<const uint8_t *>(data), length);
     }
@@ -36,7 +39,7 @@ namespace telemetry
 
     void Telemetry::publish(const TelemetryFrame &frame)
     {
-        if (!headerPrinted_)
+        if (!headerPrinted_ && Serial.availableForWrite() >= static_cast<int>(strlen(CsvHeader)))
         {
             // Bluetooth's existing protocol is headerless CSV; keep it that way.
             Serial.write(reinterpret_cast<const uint8_t *>(CsvHeader), strlen(CsvHeader));

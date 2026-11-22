@@ -39,8 +39,20 @@ tick before motor commands.
   after each push on the rims (the wheel must speed up by itself first) and
   gives nothing otherwise, so it cannot start or keep the chair moving. An
   empty seat ends it; it has to be selected again.
-- In LEAN and REMOTE, a chair standing at neutral resists being rolled (the
-  motors brake). Press DISARM before pushing it by hand.
+- A chair that nothing is driving is held: a wheel that starts to roll gets
+  brake current. This is damping, not a parking brake (on a slope the chair
+  creeps). It is not held in Assist, or in DISARM with a rider in the seat:
+  there the rider has the rims. After a fault stop it is held even with a
+  rider aboard, until DISARM is pressed.
+- **To push the empty chair by hand**, tap DISARM while it is disarmed with
+  the seat empty. The DISARM LED winks off once a second while it free-wheels.
+  Tap again, sit down or select a mode to end it.
+- **Reverse** is half the forward speed limit. A back lean that starts while
+  the chair rolls forward only brakes it to a stop; come back to neutral
+  before leaning back to reverse.
+- If the log says "No valid saved settings were found" at power-on, the
+  settings bank was lost (for example power cut during a save): tare and
+  calibrate again, and check the dashboard settings.
 - A fast-blinking DISARM LED means a fault disarmed the chair (failed seat
   sensor, silent VESC, watchdog restart). The dashboard's health badge names
   it. It clears when a mode is armed again.

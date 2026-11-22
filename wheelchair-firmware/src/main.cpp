@@ -211,6 +211,9 @@ void setup()
     delay(200);
     if (watchdogReset)
         telemetry::Telemetry::logf("Restarted by the watchdog: the firmware had stopped responding.\n");
+    if (!settings::persistence.loadedSaved())
+        telemetry::Telemetry::logf("No valid saved settings were found: running on firmware defaults. "
+                                   "Tare the sensors and run the range calibration again.\n");
     telemetry::Telemetry::logf("Mode: %s\n", modeName(drive.mode()));
     drive.lean().publishRanges();
     telemetry::Telemetry::logf("Setup successful, ready to drive.\n");
@@ -263,10 +266,12 @@ static void updateModeLEDs()
     const mode current = drive.mode();
     digitalWrite(common::PIN_LEAN_LED, current == LEAN ? HIGH : LOW);
     digitalWrite(common::PIN_REMOTE_LED, current == REMOTE ? HIGH : LOW);
-    // DISARM: solid, or a fast blink when a fault put the chair there (it
-    // stays until a mode is armed again). Assist: slow blink.
+    // DISARM: solid; a fast blink when a fault put the chair there (it stays
+    // until a mode is armed again); a slow wink off while the empty chair is
+    // free-wheeling. Assist: slow blink.
     const bool faulted = drive.fault() != DriveController::Fault::None;
-    const bool disarmLED = current == DISARM ? (!faulted || (now / 100) % 2 == 0)
+    const bool disarmLED = current == DISARM ? (faulted ? (now / 100) % 2 == 0
+                                                        : !drive.freewheeling() || (now / 100) % 10 != 0)
                                              : current == ASSIST && drive.modeState().assistLEDOn(now);
     digitalWrite(common::PIN_DISARM_LED, disarmLED ? HIGH : LOW);
     // Calibration LED: lean calibration in LEAN, the sensor tare in DISARM.
@@ -359,11 +364,12 @@ static void publishStatus(uint32_t now)
         lastFrames[i] = frames;
     }
     drive.lean().publishRanges();
-    telemetry::Telemetry::logf("HEALTH fault=%s seated=%d load=%d vescL=%lu vescR=%lu stop=%d cal=%d\n",
+    // saved=0: the settings are firmware defaults, not a saved bank (see setup()).
+    telemetry::Telemetry::logf("HEALTH fault=%s seated=%d load=%d vescL=%lu vescR=%lu stop=%d cal=%d saved=%d\n",
                                DriveController::faultName(drive.fault()), drive.lean().isSeated() ? 1 : 0,
                                drive.lean().totalLoad(), static_cast<unsigned long>(vescRateHz[0]),
                                static_cast<unsigned long>(vescRateHz[1]), drive.stopping() ? 1 : 0,
-                               drive.lean().calibrated() ? 1 : 0);
+                               drive.lean().calibrated() ? 1 : 0, settings::persistence.loadedSaved() ? 1 : 0);
 }
 
 static void publishTelemetry()

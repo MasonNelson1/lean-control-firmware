@@ -30,6 +30,11 @@ public:
     {
         bool resetRemote = false;
         bool resetAssist = false;
+        // DISARM tapped while already disarmed with nobody in the seat: the
+        // caller toggles free-wheel (see DriveController::parked).
+        bool toggleFreewheel = false;
+        // A debounced DISARM press was accepted (in any state).
+        bool disarmPressed = false;
         int activateProfile = NoProfile;
     };
     struct Transition

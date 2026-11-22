@@ -189,6 +189,24 @@ int main() {
         settings::persistence.load();
         CHECK(settings::deadband.get() == edited && settings::rangeRight.get() == 555);
     });
+    test("a lost settings bank is reported, not silently replaced by defaults", [] {
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+        CHECK(settings::rangeForward.set(450) && settings::persistence.saveCalibration());
+        settings::persistence.load();
+        CHECK(settings::persistence.loadedSaved() && settings::rangeForward.get() == 450);
+        // Power lost during a save: the commit byte was cleared and never rewritten.
+        EEPROM.bytes[0] = 0;
+        settings::persistence.load();
+        CHECK(!settings::persistence.loadedSaved());
+        CHECK(settings::rangeForward.get() == 600); // defaults, and the firmware knows it
+        // The next successful save clears the condition.
+        CHECK(settings::persistence.saveCalibration() && settings::persistence.loadedSaved());
+        for (auto &byte : EEPROM.bytes) byte = 0xff; // a new board
+        settings::persistence.load();
+        CHECK(!settings::persistence.loadedSaved());
+        CHECK(settings::persistence.save() && settings::persistence.loadedSaved());
+    });
     test("a failed EEPROM write is reported and leaves RAM intact", [] {
         CHECK(settings::rangeRight.set(600));
         EEPROM.failWrites = true;

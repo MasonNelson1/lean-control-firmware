@@ -72,6 +72,8 @@ public:
     // The fault that caused the last disarm; cleared when a mode is armed again.
     Fault fault() const { return fault_; }
     bool stopping() const { return stop_.active(); }
+    // The empty chair has been let go to be pushed by hand (see parked()).
+    bool freewheeling() const { return freewheel_; }
     const telemetry::MotorCommands &commands() const { return commands_; }
     MotorTargets assistCurrent() const { return assistCurrent_; }
 
@@ -82,6 +84,8 @@ private:
     MotorCommand stopOrRelease(const TickInput &input);
     MotorCommand driveRPM(const TickInput &input, float linearTargetRPM, float turnTargetRPM);
     static MotorCommand release() { return {{MotorCommand::Kind::Current, 0.0f}, {MotorCommand::Kind::Current, 0.0f}}; }
+    MotorCommand parked(const TickInput &input) const;
+    float turnLimitRPM(const TickInput &input) const;
     void saveCalibration();
     void watchLowSpeed(const TickInput &input, float left, float right);
 
@@ -103,6 +107,13 @@ private:
     bool bootTimed_ = false;
     // How long the chair has stood still at neutral lean (for the neutral trim).
     float restingS_ = 0.0f;
+    // DISARM was tapped with the seat empty: do not hold the chair.
+    bool freewheel_ = false;
+    // A fault stopped the chair: hold it, rider aboard or not, until someone
+    // presses DISARM or arms a mode.
+    bool faultHold_ = false;
+    // A back lean that began while rolling forward only brakes (see tick()).
+    bool reverseLocked_ = false;
     float sentLeftRPM_ = 0.0f, sentRightRPM_ = 0.0f;
     float speedLimitMS_ = 0.0f;
     // Low-speed diagnostic (watchLowSpeed).

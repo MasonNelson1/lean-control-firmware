@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ezButton.h>
 #include "vesc_can.h"
+#include "vesc_probe.h"
 #include "rpm_setpoint_pid.h"
 #include "common.h"
 #include "driveModes/DriveMode.h"
@@ -469,6 +470,24 @@ static void replyToConfiguration()
     packetSerial.send(response, length);
 }
 
+// Read-only VESC firmware-version probe (see vesc_probe.h).
+static vescprobe::Reply probeReply;
+static uint32_t probeAsked = 0, probeFrames = 0, probeReplies = 0;
+
+static void logProbeReply()
+{
+    const auto &r = probeReply;
+    if (r.len >= 3 && r.data[0] == vescprobe::COMM_FW_VERSION)
+    {
+        char hw[33] = {0};
+        for (uint16_t i = 3, j = 0; i < r.len && j < sizeof(hw) - 1 && r.data[i]; ++i, ++j)
+            hw[j] = static_cast<char>(r.data[i]);
+        telemetry::Telemetry::logf("DBG VESCFW id=%u fw=%u.%02u hw=%s len=%u crc=%d\n", r.fromId, r.data[1], r.data[2], hw, r.len, r.crcOk);
+    }
+    else
+        telemetry::Telemetry::logf("DBG VESCFW id=%u cmd=%u len=%u crc=%d\n", r.fromId, r.len ? r.data[0] : 255, r.len, r.crcOk);
+}
+
 static void publishTelemetry()
 {
     const uint32_t now = millis();
@@ -478,6 +497,15 @@ static void publishTelemetry()
         lastGainStatusMs = now;
         leanMode.publishDynamicGains();
         leanMode.publishSensorStatus();
+        // Every 5 s ask one VESC (alternating) for its firmware version. Read-only.
+        static uint8_t probeTick = 0;
+        if (++probeTick % 5 == 0)
+        {
+            vescprobe::askFwVersion(can1, (probeTick / 5) % 2 ? motors.leftId : motors.rightId);
+            ++probeAsked;
+        }
+        telemetry::Telemetry::logf("DBG VESCPROBE asked=%lu frames=%lu replies=%lu\n", static_cast<unsigned long>(probeAsked),
+                                   static_cast<unsigned long>(probeFrames), static_cast<unsigned long>(probeReplies));
         // Motor controller health; age = ms since the last status frame (large = VESC silent).
         for (const VescStatus *v : {&measuredMotors[0], &measuredMotors[1]})
             telemetry::Telemetry::logf("DBG VESC id=%u age=%lu frames=%lu erpm=%ld current=%.1f duty=%.3f fetC=%.1f vin=%.1f\n",
@@ -524,6 +552,14 @@ void loop()
     {
         vescHandleFrame(feedback, motors.leftId, measuredMotors[0]);
         vescHandleFrame(feedback, motors.rightId, measuredMotors[1]);
+        if (feedback.flags.extended && (feedback.id & 0xFF) == vescprobe::PROBE_CAN_ID)
+            ++probeFrames;
+        if (vescprobe::handleFrame(feedback, probeReply))
+        {
+            ++probeReplies;
+            logProbeReply();
+            probeReply.done = false;
+        }
     }
     updateDrive();
     updateModeLEDs();

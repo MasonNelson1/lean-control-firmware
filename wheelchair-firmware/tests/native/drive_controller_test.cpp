@@ -1663,6 +1663,144 @@ int main()
         sim.press(LEAN);
         assert(sim.drive.mode() == LEAN && !sim.drive.lean().calibrated());
     }
+    { // Random everything: leans, seat, buttons, remote, VESC dropouts, sensor shorts,
+      // slopes, speed knob. Safety rules that must hold on every tick, whatever happens.
+        uint32_t seed = 987654321;
+        const auto random = [&seed](int low, int high) {
+            seed = seed * 1664525u + 1013904223u;
+            return low + static_cast<int>((seed >> 8) % static_cast<uint32_t>(high - low + 1));
+        };
+        const float fastest = MAX_SPEED * LINEAR_TO_RPM;
+        // What the random rides actually reached, so the rules above are known to have been tried.
+        long leanDriving = 0, remoteDriving = 0, assistTicks = 0, stoppingTicks = 0, faults = 0, braking = 0;
+        for (int ride = 0; ride < 120; ++ride)
+        {
+            Sim sim;
+            sim.vescMinRPM = ride % 2 ? 15.5f : 3.0f;
+            assert(settings::vescMinSpeed.set(sim.vescMinRPM));
+            sim.drive.applySettings();
+            bool riderIn = false, remoteOn = false, shorted = false;
+            float remoteL = 0, remoteR = 0;
+            int forward = 0, side = 0;
+            uint32_t emptySince = 0, silentSince = 0, shortedSince = 0;
+            const auto posture = [&] {
+                if (riderIn)
+                    lean(forward, side);
+                else
+                    loads(0, 65, 0, 0);
+                if (shorted)
+                    sensorInputs[PIN_L] = 4095;
+            };
+            posture();
+            for (int step = 0; step < 60; ++step)
+            {
+                switch (random(0, 13))
+                {
+                case 0: riderIn = !riderIn; if (!riderIn) emptySince = sim.now; break;
+                case 1: case 2: forward = random(-400, 600); side = random(-500, 500); break;
+                case 3: forward = side = 0; break;
+                case 4: sim.pending.lean.edge = sim.pending.lean.pressed = true; break;
+                case 5: sim.pending.remote.edge = sim.pending.remote.pressed = true; break;
+                case 6: sim.pending.disarm.edge = sim.pending.disarm.pressed = true; break; // and held
+                case 7: sim.pending.disarm.released = true; break;
+                case 8: sim.pending.calibrate.pressed = true; sim.calHeld = random(0, 1); break;
+                case 9: remoteOn = !remoteOn; remoteL = random(-100, 100) / 100.0f; remoteR = random(-100, 100) / 100.0f; break;
+                case 10: remoteL = remoteR = 0; remoteOn = true; break;
+                case 11:
+                    if (random(0, 3) == 0)
+                    {
+                        sim.leftAlive = !sim.leftAlive;
+                        if (!sim.leftAlive) silentSince = sim.now;
+                    }
+                    else
+                        sim.leftAlive = true;
+                    break;
+                case 12:
+                    shorted = random(0, 5) == 0;
+                    if (shorted) shortedSince = sim.now;
+                    break;
+                default:
+                    sim.knobMS = knobs::speedLimitMS(random(0, 3));
+                    sim.externalRPMS = random(0, 4) == 0 ? random(-25, 25) : 0;
+                    sim.calHeld = false;
+                    break;
+                }
+                posture();
+                const int ticks = random(10, 400);
+                for (int k = 0; k < ticks; ++k)
+                {
+                    if (remoteOn && k % 2 == 0)
+                        sim.remote(remoteL, remoteR);
+                    sim.tick();
+                    const auto mode = sim.drive.mode();
+                    const auto &l = sim.last.left;
+                    const auto &r = sim.last.right;
+                    const bool moving = l.kind == Kind::RPM && std::fabs(l.value) > 5.0f;
+                    leanDriving += mode == LEAN && moving;
+                    remoteDriving += mode == REMOTE && moving;
+                    assistTicks += mode == ASSIST;
+                    stoppingTicks += sim.drive.stopping();
+                    faults += sim.drive.fault() != Fault::None;
+                    braking += l.kind == Kind::Brake;
+                    // 1. Every command is a finite number inside its range.
+                    for (const auto *w : {&l, &r})
+                    {
+                        assert(std::isfinite(w->value));
+                        if (w->kind == Kind::RPM)
+                            assert(std::fabs(w->value) <= fastest + 0.01f);
+                        if (w->kind == Kind::Brake)
+                            assert(w->value >= 0 && w->value <= STOP_BRAKE_AMPS);
+                        if (w->kind == Kind::Current)
+                            assert(std::fabs(w->value) <= settings::assistMaxBoostAmps.get());
+                        // 2. Driving current only ever comes from Assist.
+                        if (w->kind == Kind::Current && w->value != 0)
+                            assert(mode == ASSIST);
+                    }
+                    // 3. LEAN and Assist never run with the seat empty for more than its hold time.
+                    if (!riderIn && !shorted && sim.now - emptySince > 200)
+                        assert(mode != LEAN && mode != ASSIST);
+                    // 4. No powered mode without feedback from both VESCs, and no boost or
+                    //    speed-up on stale speed.
+                    if (!sim.leftAlive && sim.now - silentSince > 10)
+                    {
+                        assert(mode == DISARM);
+                        assert(!(l.kind == Kind::Current && l.value != 0));
+                    }
+                    // 5. A shorted sensor ends LEAN and Assist within 30 ms.
+                    if (shorted && sim.now - shortedSince > 30)
+                        assert(mode != LEAN && mode != ASSIST);
+                    // 6. In DISARM the only wheel-speed commands are a stop's falling ramp.
+                    if (mode == DISARM && (l.kind == Kind::RPM || r.kind == Kind::RPM))
+                        assert(sim.drive.stopping());
+                    // 7. A stopped remote never drives.
+                    if (mode == REMOTE && sim.drive.remoteStopped() && !sim.drive.stopping())
+                        assert(l.kind != Kind::RPM && r.kind != Kind::RPM);
+                    // 8. LEAN without a calibration never drives.
+                    if (mode == LEAN && !sim.drive.lean().calibrated() && !sim.drive.stopping())
+                        assert(l.kind != Kind::RPM && r.kind != Kind::RPM);
+                }
+            }
+            // 9. From wherever that ended: level ground, DISARM, and the chair comes to rest.
+            sim.externalRPMS = 0;
+            sim.leftAlive = true;
+            shorted = false;
+            riderIn = true;
+            forward = side = 0;
+            posture();
+            sim.pending = {};
+            sim.calHeld = false;
+            sim.run(50);
+            sim.press(DISARM);
+            sim.run(6000);
+            assert(sim.drive.mode() == DISARM || sim.drive.mode() == ASSIST);
+            assert(std::fabs(sim.left) < STOP_DONE_RPM && std::fabs(sim.right) < STOP_DONE_RPM);
+            settings::vescMinSpeed.reset();
+            settings::registry().defaults();
+        }
+        settings::persistence.refreshDirty();
+        assert(leanDriving > 2000 && remoteDriving > 2000 && assistTicks > 2000);
+        assert(stoppingTicks > 2000 && faults > 2000 && braking > 2000);
+    }
     assert(std::string(DriveController::faultName(Fault::None)) == "NONE");
     assert(std::string(DriveController::faultName(Fault::SensorRail)) == "SENSOR_RAIL");
     assert(std::string(DriveController::faultName(Fault::VescSilent)) == "VESC_SILENT");

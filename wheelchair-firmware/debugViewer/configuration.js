@@ -782,7 +782,7 @@
     pidPlots.clear();
     const panel = byId('config-groups');
     panel.replaceChildren();
-    if (loaded && page !== 'telemetry') {
+    if (loaded && (page === 'configuration' || page === 'advanced')) {
       for (const group of groups.values()) {
         if (!group.parent && group.advanced === (page === 'advanced')) panel.append(renderGroup(group));
       }
@@ -794,15 +794,21 @@
 
   function selectPage(next) {
     page = next;
+    const configPage = page === 'configuration' || page === 'advanced';
     byId('telemetry-page').hidden = page !== 'telemetry';
-    byId('config-page').hidden = page === 'telemetry';
+    byId('config-page').hidden = !configPage;
+    const vescPage = byId('vesc-page');
+    if (vescPage) vescPage.hidden = page !== 'vesc';
     for (const item of document.querySelectorAll('[data-page]')) {
       if (item.dataset.page === page) item.setAttribute('aria-current', 'page');
       else item.removeAttribute('aria-current');
     }
-    if (page === 'telemetry') {
-      graphs();
-      sensors(lastRow);
+    if (page === 'telemetry' || page === 'vesc') {
+      if (page === 'telemetry') {
+        graphs();
+        sensors(lastRow);
+      }
+      if (typeof renderVesc === 'function') renderVesc();
     } else {
       byId('config-heading').textContent = page === 'advanced' ? 'Advanced Configuration' : 'Configuration';
       if (link.port && !loaded && !busy) discover();
@@ -824,7 +830,7 @@
     byId('config-profiles').replaceChildren();
     canWrite = false;
     if (port) run(listProfiles).then(() => {
-      if (link.port === port && page !== 'telemetry' && !loaded) discover();
+      if (link.port === port && (page === 'configuration' || page === 'advanced') && !loaded) discover();
     });
     render();
     return closing;

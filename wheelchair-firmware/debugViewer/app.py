@@ -99,6 +99,9 @@ async def line_received(line):
         # plate view reads the layout, neutral zone and centre of pressure.
         if line.startswith(('DBG SENSORS ', 'DBG CORNER ', 'DBG COP ')):
             await emit({'plate': line})
+        # The read-only VESC panel: health, faults, firmware and settings dumps.
+        elif line.startswith(('DBG VESC ', 'DBG VVAL ', 'DBG VFAULT ', 'DBG VESCFW ', 'DBG VCONF ')):
+            await emit({'vesc': line})
     elif kind=='text' and line.strip():
         console.append(line); await emit({'console':line})
 async def note(s):
@@ -192,6 +195,10 @@ async def configuration_script(): return FileResponse(ROOT/'configuration.js', m
 async def pid_preview_script(): return FileResponse(ROOT/'pid-preview.js', media_type='text/javascript')
 @app.get('/plate-view.js')
 async def plate_view_script(): return FileResponse(ROOT/'plate-view.js', media_type='text/javascript')
+@app.get('/vesc-panel.js')
+async def vesc_panel_script(): return FileResponse(ROOT/'vesc-panel.js', media_type='text/javascript')
+@app.get('/vesc-conf-layout.js')
+async def vesc_conf_layout_script(): return FileResponse(ROOT/'vesc-conf-layout.js', media_type='text/javascript')
 
 # Profile files are handled only by the dashboard; these routes never access a
 # serial connection or change the running/saved wheelchair configuration.

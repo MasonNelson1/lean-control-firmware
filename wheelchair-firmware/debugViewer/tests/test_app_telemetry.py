@@ -140,11 +140,18 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
                  'DBG CORNER neutral=nan/nan passive=nan/nan dead=nan/nan/nan/nan full=nan/nan/nan/nan reachCal=0 empty=391/406/427/400 auto=0',
                  'DBG COP 1234 0.19 0.43 nan nan 2507',
                  'DBG R 1234 927 756 1058 1390',
-                 'DBG VESC id=2 age=13 frames=1 erpm=0 current=0.0 duty=0.000 fetC=24.0 vin=0.0']
+                 'DBG VESC id=2 age=13 frames=1 erpm=0 current=0.0 duty=0.000 fetC=24.0 vin=0.0',
+                 'DBG VVAL id=2 age=-1 n=0/0/0 side=L',
+                 'DBG VFAULT id=2 code=4 name=ABS_OVER_CURRENT ms=2000 imot=-48.70 iin=-3.21 erpm=-8123 duty=-0.456 vin=52.3 fetC=25.4 n=1 side=L',
+                 'DBG VESCFW id=2 fw=6.06 hw=60_MK6 len=72 crc=1',
+                 'DBG VCONF id=2 cmd=14 len=484 off=0 0e2efd2c4200000000000000',
+                 'DBG M 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0',
+                 'DBG SYS up=1 loops=1 loopMax=1 ctrl=5/5 cpuC=40.0 canRx=0 canTxFail=0 tec=0 rec=0 bt=0/0 drop=0/0 btFree=1000 cfg=0']
         with patch.object(viewer, "emit", emit):
             for line in lines:
                 await viewer.line_received(line)
-        self.assertEqual(events, [{'plate': line} for line in lines[:3]])
+        # Plate lines feed the plate view; VESC lines the read-only VESC panel; the rest only the log.
+        self.assertEqual(events, [{'plate': line} for line in lines[:3]] + [{'vesc': line} for line in lines[4:9]])
         self.assertFalse(viewer.console)
         self.assertFalse(viewer.history)
 
@@ -184,6 +191,10 @@ class AssetTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_plate_view_asset(self):
         self.assertTrue(Path((await viewer.plate_view_script()).path).is_file())
+
+    async def test_vesc_panel_assets(self):
+        self.assertTrue(Path((await viewer.vesc_panel_script()).path).is_file())
+        self.assertTrue(Path((await viewer.vesc_conf_layout_script()).path).is_file())
 
     async def test_main_page_has_configuration_navigation(self):
         self.assertIn(b"config-page", (await viewer.index()).body)

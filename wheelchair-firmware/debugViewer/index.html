@@ -801,6 +801,34 @@
         margin-bottom: 12px
       }
     }
+    .vesc-health { margin-bottom: 20px }
+    .vesc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; padding: 16px 22px 20px }
+    .vesc-empty { margin: 0 }
+    .vesc-card { border: 1px solid #dce3ea; border-left: 5px solid #22a280; border-radius: 10px; padding: 12px 14px }
+    .vesc-card.stale { border-left-color: #cc9244 }
+    .vesc-card.none { border-left-color: #aab4c0; opacity: .75 }
+    .vesc-card.fault { border-left-color: #c0392b; background: #fdf3f2 }
+    .vesc-card header { display: flex; justify-content: space-between; align-items: flex-start; margin: 0 0 10px; gap: 10px }
+    .vesc-card h3 { margin: 0; font-size: 15px }
+    .vesc-state { font-size: 12px; font-weight: 650; padding: 4px 10px; border-radius: 12px; background: #e3f4ee; color: #17714f; white-space: nowrap }
+    .vesc-state.stale { background: #f8ecd9; color: #8a5a17 }
+    .vesc-state.none { background: #eceff3; color: #5d6a79 }
+    .vesc-state.fault { background: #c0392b; color: white }
+    .vesc-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; margin-bottom: 10px }
+    .vesc-metric span, .vesc-line span { display: block; color: #8691a0; font-size: 11px; text-transform: uppercase; letter-spacing: .3px }
+    .vesc-metric strong { font-size: 20px; font-variant-numeric: tabular-nums }
+    .vesc-metric em { display: block; font-style: normal; color: #6b7685; font-size: 12px; font-variant-numeric: tabular-nums }
+    .vesc-metric.warn strong { color: #c0392b }
+    .vesc-line { font-size: 13px; padding: 6px 0; border-top: 1px solid #eef1f5; font-variant-numeric: tabular-nums }
+    .vesc-line.warn { color: #a93226 }
+    .vesc-settings-wrap { padding: 0 22px 22px; overflow-x: auto }
+    .vesc-settings { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums }
+    .vesc-settings th, .vesc-settings td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #eef1f5; vertical-align: top }
+    .vesc-settings thead th { position: sticky; top: 0; background: white; font-size: 13px }
+    .vesc-settings td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px }
+    .vesc-settings tr.group th { background: #f5f7fa; font-size: 12px; color: #5d6a79 }
+    .vesc-settings tr.differs td { background: #fff8e6 }
+    #vesc-filter { min-width: 200px }
   </style>
 </head>
 
@@ -810,6 +838,7 @@
       <button type="button" data-page="telemetry" aria-current="page">Dashboard / Telemetry</button>
       <button type="button" data-page="configuration">Configuration</button>
       <button type="button" data-page="advanced">Advanced Configuration</button>
+      <button type="button" data-page="vesc">VESC settings</button>
     </nav>
     <div class="dashboard-content">
       <header>
@@ -827,6 +856,15 @@
       <div id="telemetry-page">
         <p id="bluetooth-help" class="sub">Pair the HC-06 in your system Bluetooth settings and connect using desktop
           Chrome at localhost or HTTPS. Live sensor telemetry is available in every drive mode.</p>
+        <section class="panel vesc-health" aria-labelledby="vesc-health-heading">
+          <div class="panelhead">
+            <div>
+              <h2 id="vesc-health-heading">Motor controllers</h2>
+              <div class="sub">VESC status frames and GET_VALUES polls · read-only · full settings under VESC settings</div>
+            </div>
+          </div>
+          <div id="vesc-cards" class="vesc-cards" aria-live="polite"></div>
+        </section>
         <main>
           <section class="panel">
             <div class="panelhead">
@@ -938,6 +976,19 @@
           <pre aria-live="polite"></pre>
         </section>
       </div>
+      <section id="vesc-page" class="panel vesc-page" hidden aria-labelledby="vesc-heading">
+        <div class="panelhead">
+          <div>
+            <h2 id="vesc-heading">VESC settings</h2>
+            <div class="sub">Every setting each VESC reports (COMM_GET_MCCONF / COMM_GET_APPCONF, firmware 6.06 layout).
+              Read-only: this dashboard never changes VESC settings. The chair resends each VESC's settings every 30 s.</div>
+          </div>
+          <div class="controls"><input id="vesc-filter" type="search" placeholder="Filter settings"
+              aria-label="Filter settings by name"><label><input id="vesc-only-different" type="checkbox"> Only
+              differences</label></div>
+        </div>
+        <div id="vesc-settings" class="vesc-settings-wrap"></div>
+      </section>
       <section id="config-page" class="panel configuration" hidden aria-labelledby="config-heading">
         <header>
           <h2 id="config-heading">Configuration</h2>
@@ -968,6 +1019,8 @@
     </div>
   </div>
   <script src="./plate-view.js"></script>
+  <script src="./vesc-conf-layout.js"></script>
+  <script src="./vesc-panel.js"></script>
   <script>
     let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'bluetooth', usbConnected = false, dynamicGains = null;
     // Seat layout and centre of pressure from the DBG SENSORS/CORNER/COP lines (plate-view.js).
@@ -1186,6 +1239,7 @@
       applyLayout();
     }
 
+
     function sensors(r) {
       for (const el of document.querySelectorAll('.sensor')) {
         const value = r?.[el.dataset.key];
@@ -1208,6 +1262,7 @@
       drawDirection('smoothed-vector', smoothed);
       drawPlate();
     }
+
     function connect() {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
       ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() };
@@ -1225,12 +1280,36 @@
         if (connectionMode !== 'usb' || !usbConnected) return;
         if ('dynamicGains' in d) setDynamicGains(d.dynamicGains);
         if (d.plate) plateLine(d.plate);
+        if (d.vesc) vescLine(d.vesc);
         if (d.console) appendConsole(d.console);
         if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay');
       };
     }
     $('#variable-scaling').onchange = graphs;
     $('#pause').onclick = () => { paused = !paused; $('#pause').textContent = paused ? 'Resume graphs' : 'Pause graphs'; if (!paused) { displayed = latest; graphs() } }; $('#window').onchange = graphs; window.addEventListener('resize', () => { graphs(); sensors(lastRow) }); applyLayout(); graphs(); sensors(null); if (dashboardBackend) connect();
+  </script>
+  <script>
+    // VESC health cards and the VESC settings page (vesc-panel.js), read-only.
+    let vesc = VescPanel.createState(), vescRenderPending = false;
+    function renderVesc() {
+      vescRenderPending = false;
+      if (!$('#telemetry-page').hidden) $('#vesc-cards').innerHTML = VescPanel.renderHealth(vesc, performance.now());
+      if (!$('#vesc-page').hidden)
+        $('#vesc-settings').innerHTML = VescPanel.renderDetails(vesc, {filter: $('#vesc-filter').value, onlyDifferent: $('#vesc-only-different').checked});
+    }
+    function vescLine(line) {
+      if (!VescPanel.handleLine(vesc, line, performance.now()) || vescRenderPending) return;
+      vescRenderPending = true;
+      requestAnimationFrame(renderVesc);
+    }
+    function resetVesc() {
+      vesc = VescPanel.createState();
+      renderVesc();
+    }
+    $('#vesc-filter').oninput = renderVesc;
+    $('#vesc-only-different').onchange = renderVesc;
+    setInterval(() => { if (!$('#telemetry-page').hidden) renderVesc() }, 500); // ages and staleness tick on
+    renderVesc();
   </script>
   <script src="./vendor/fflate-0.8.3.js"></script>
   <script src="./profile-files.js"></script>

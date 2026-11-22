@@ -45,6 +45,8 @@ public:
         // Measured wheel speeds, and whether each VESC reported recently.
         float leftRPM = 0, rightRPM = 0;
         bool leftFresh = false, rightFresh = false;
+        // Motor current each VESC reports (A; negative when braking).
+        float leftAmps = 0, rightAmps = 0;
         float speedLimitMS = 0;     // speed-knob selection
         bool calButtonHeld = false; // raw level of the calibration button
     };
@@ -84,6 +86,7 @@ private:
     MotorCommand stopOrRelease(const TickInput &input);
     MotorCommand driveRPM(const TickInput &input, float linearTargetRPM, float turnTargetRPM);
     static MotorCommand release() { return {{MotorCommand::Kind::Current, 0.0f}, {MotorCommand::Kind::Current, 0.0f}}; }
+    bool holds() const;
     MotorCommand parked(const TickInput &input) const;
     float turnLimitRPM(const TickInput &input) const;
     void saveCalibration();

@@ -174,10 +174,20 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
     commands_ = {};
     sentLeftRPM_ = sentRightRPM_ = 0.0f;
     if (!stop_.active())
-        return parked(in);
+    {
+        // A chair that comes under hold while it is rolling fast (LEAN or
+        // REMOTE armed on a moving chair) is stopped the usual way, with the
+        // ramp and its soft start, not grabbed with full brake current.
+        const bool rolling = in.leftFresh && in.rightFresh &&
+                             std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) >= STOP_HANDOFF_RPM;
+        if (!(holds() && rolling))
+            return parked(in);
+        stop_.begin(in.leftRPM, in.rightRPM, in.now);
+    }
 
     const bool fresh = in.leftFresh && in.rightFresh;
-    const auto out = stop_.update(in.dt, in.now, {in.leftRPM, in.rightRPM, fresh});
+    const auto out = stop_.update(in.dt, in.now, {in.leftRPM, in.rightRPM, fresh,
+                                                  std::max(std::fabs(in.leftAmps), std::fabs(in.rightAmps))});
     if (stop_.rampIneffective() && !brakingHintGiven_)
     {
         brakingHintGiven_ = true;
@@ -222,12 +232,16 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
 //   - DISARM with the seat empty, after DISARM has been tapped to ask for
 //     free-wheel (to push the empty chair around).
 // Holding is damping, not a parking brake: on a slope the chair creeps.
-DriveController::MotorCommand DriveController::parked(const TickInput &in) const
+bool DriveController::holds() const
 {
     const common::mode mode = modeState_.current();
-    const bool hold = mode == LEAN || mode == REMOTE ||
-                      (mode == DISARM && (faultHold_ || (!lean_.isSeated() && !freewheel_)));
-    if (!hold)
+    return mode == LEAN || mode == REMOTE ||
+           (mode == DISARM && (faultHold_ || (!lean_.isSeated() && !freewheel_)));
+}
+
+DriveController::MotorCommand DriveController::parked(const TickInput &in) const
+{
+    if (!holds())
         return release();
     if (!(in.leftFresh && in.rightFresh))
     {

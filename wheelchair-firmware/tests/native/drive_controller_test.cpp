@@ -630,6 +630,30 @@ int main()
             assert(fastestYaw <= settings::maxTurnRate.get() + 5.0f && fastestYaw > 20.0f);
         }
     }
+    { // Selecting LEAN on a chair that is rolling (pushed by hand in DISARM): LEAN needs a
+      // calibration, so the chair is brought to rest, with the stop's soft start, not
+      // grabbed with full brake current.
+        Sim sim;
+        lean(0, 0);
+        sim.run(400);
+        sim.left = sim.right = 60.0f; // 1.9 m/s
+        sim.press(LEAN, /*release=*/false);
+        assert(sim.drive.mode() == LEAN && sim.drive.stopping());
+        assert(sim.last.left.kind == Kind::RPM && sim.last.left.value > 55.0f); // a ramp from the wheels' speed
+        for (const auto &sent : sim.trace)
+            assert(sent.left.kind != Kind::Brake);
+        const float seconds = sim.expectStop();
+        assert(seconds > 0.3f && seconds < 1.0f && std::fabs(sim.left) < STOP_DONE_RPM);
+        // The same for REMOTE before its stick has been centred.
+        Sim remoteSim;
+        lean(0, 0);
+        remoteSim.run(400);
+        remoteSim.left = remoteSim.right = 60.0f;
+        remoteSim.press(REMOTE, false);
+        assert(remoteSim.drive.mode() == REMOTE && remoteSim.drive.stopping());
+        for (const auto &sent : remoteSim.trace)
+            assert(sent.left.kind != Kind::Brake);
+    }
     { // Engaging on a rolling chair starts from the wheels' speed instead of braking to zero.
         Sim sim;
         sim.rideRemote();
@@ -1411,9 +1435,29 @@ int main()
                 turned += wheelYawDegS(sim) * TickS;
                 ++ticks;
             }
-            // 160 deg/s shed at 900 deg/s^2 is 14 degrees of command; the last part, on brake
-            // current, takes this simulated chair to about 30 degrees in half a second.
-            assert(ticks * TickS < 0.8f && turned < 40.0f); // it was 248 degrees over 4.5 s when the wheels coasted
+            // 160 deg/s shed at 1800 deg/s^2 is 7 degrees of command; the last part, on brake
+            // current, takes this simulated chair to about 25 degrees in half a second.
+            assert(ticks * TickS < 0.8f && turned < 30.0f); // it was 248 degrees over 4.5 s when the wheels coasted
+            // With the VESC minimum speed lowered, the speed loop carries the turn nearly
+            // to rest and the chair stops closer still.
+            Sim low;
+            low.vescMinRPM = 3.0f;
+            assert(settings::vescMinSpeed.set(3.0f));
+            low.drive.applySettings();
+            low.rideLean();
+            lean(0, 500);
+            low.run(2000);
+            lean(0, 0);
+            float lowTurned = 0;
+            for (int k = 0; k < 400; ++k)
+            {
+                low.tick();
+                lowTurned += wheelYawDegS(low) * TickS;
+            }
+            // About 15 degrees here: 7 of command, the rest is the lean filter and the wheels' lag.
+            assert(lowTurned < 18.0f && std::fabs(low.left) < 1.5f);
+            settings::vescMinSpeed.reset();
+            low.drive.applySettings();
             sim.run(1500);
             assert(std::fabs(sim.left) < STOP_DONE_RPM && std::fabs(sim.right) < STOP_DONE_RPM);
         }

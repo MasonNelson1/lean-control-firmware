@@ -342,6 +342,12 @@ static void stopTests()
             out = stop.update(dt, now, {wheel, wheel, true});
         }
         assert(out.drive == StopController::Drive::Release && wheel < STOP_DONE_RPM && now > STOP_BRAKE_MAX_MS);
+        // Wheels held up by a steep downhill while the motors brake hard: stay with the speed loop.
+        StopController downhill;
+        downhill.begin(155.0f, 155.0f, 0);
+        for (uint32_t t = 5; t <= 800; t += 5)
+            out = downhill.update(dt, t, {155.0f, 155.0f, true, 40.0f});
+        assert(out.drive == StopController::Drive::RPM && !downhill.rampIneffective());
         // A chair that follows the ramp is never treated that way.
         const auto normal = runStop(155.0f, 155.0f, true, 400.0f);
         assert(normal.sawRamp && normal.seconds < 1.6f);

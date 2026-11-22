@@ -18,6 +18,11 @@
 //   App, "Timeout": 200 ms, and "Timeout Brake Current": 15 A. These decide
 //     what the chair does if this firmware hangs (see watchdog.h).
 //   App, CAN status rate: 50 Hz. Under 20 Hz the chair faults as "VESC silent".
+//   Speed PID, "Ramp ERPMs per second" (s_pid_ramp_erpms_s): the VESC's own
+//     limit on how fast a speed command may change. Keep it at its default
+//     (25000) or higher, or it slows every stop.
+//   Bring-up check, wheels off: lean right, and the LEFT wheel must run faster.
+//     If it is the other way round the two VESC IDs are swapped.
 //   VESC firmware version: note it. Below the minimum ERPM, current versions
 //     brake with shorted phases and older ones release the motor.
 
@@ -87,6 +92,8 @@ constexpr uint32_t STOP_BRAKE_LIMIT_MS = 5000;
 // acting on the commands) and the stop goes to brake current at once.
 constexpr uint32_t STOP_RAMP_CHECK_MS = 200;
 constexpr float STOP_RAMP_LAG_RPM = 10.0f;
+// ...and only if the motors report less current than this, i.e. are not braking.
+constexpr float STOP_RAMP_IDLE_AMPS = 3.0f;
 // If the wheels are not following the ramp, keep commanding the handoff speed
 // for at most this long after the ramp ends before going to brake current.
 constexpr uint32_t STOP_RAMP_OVERRUN_MS = 1000;
@@ -121,12 +128,13 @@ constexpr uint32_t VESC_STALE_MS = 100;
 // second. Turning is smoothed on its own axis so it no longer waits behind the
 // forward acceleration limit. CDR Spec H asks for 200 deg/s within 0.5 s, i.e.
 // at least 400. Releasing a lean stops the rotation faster than it built up,
-// which is what lets the rider stop on an angle: from 100 deg/s the command
-// turns a further 100^2 / (2 * 900) = 5.6 degrees. The chair itself takes a
+// which is what lets the rider stop on an angle: from the full 160 deg/s the
+// command turns a further 160^2 / (2 * 1800) = 7 degrees. This is the constant
+// to tune wheels-off if stopping a turn feels too sharp or too loose. The chair itself takes a
 // little longer over the last part, where the wheels are slowed on brake
 // current (DEADZONE_BRAKE_* below).
 constexpr float TURN_ACCEL_DEG_S2 = 600.0f;
-constexpr float TURN_DECEL_DEG_S2 = 900.0f;
+constexpr float TURN_DECEL_DEG_S2 = 1800.0f;
 
 }
 

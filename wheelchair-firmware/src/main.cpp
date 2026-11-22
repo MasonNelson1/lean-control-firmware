@@ -300,6 +300,8 @@ static void updateDrive()
     input.dt = min(elapsed, 4 * period) / 1000.0f;
     input.leftRPM = vescWheelRpm(measuredMotors[0]);
     input.rightRPM = vescWheelRpm(measuredMotors[1]);
+    input.leftAmps = measuredMotors[0].current;
+    input.rightAmps = measuredMotors[1].current;
     input.leftFresh = vescFresh(measuredMotors[0], now, VESC_STALE_MS);
     input.rightFresh = vescFresh(measuredMotors[1], now, VESC_STALE_MS);
     input.speedLimitMS = userMaxSpeedMS;
@@ -329,7 +331,12 @@ static void replyToConfiguration()
     constexpr size_t MaxPacketBytes = config::MaxResponseSize + config::MaxResponseSize / 254 + 3;
     // Settings can change only in DISARM, and not while the chair is still
     // braking to a stop there: an EEPROM save would stall the stop.
-    const bool disarmed = drive.mode() == DISARM && !drive.stopping();
+    // Nor while the wheels are turning (a rider pushing by hand in DISARM): no
+    // commands go out during a save, and the VESCs would time out and brake.
+    const uint32_t now = millis();
+    const bool rolling = vescFresh(measuredMotors[0], now, VESC_STALE_MS) && vescFresh(measuredMotors[1], now, VESC_STALE_MS) &&
+                         max(fabsf(vescWheelRpm(measuredMotors[0])), fabsf(vescWheelRpm(measuredMotors[1]))) >= STOP_DONE_RPM;
+    const bool disarmed = drive.mode() == DISARM && !drive.stopping() && !rolling;
     settings::protocol.tick(millis(), disarmed);
     if (!settings::protocol.pending() || Serial1.availableForWrite() < static_cast<int>(MaxPacketBytes))
         return;

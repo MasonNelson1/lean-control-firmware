@@ -41,6 +41,7 @@ public:
     float leftRPM;
     float rightRPM;
     bool fresh; // both VESCs reported their speed recently
+    float motorAmps = 0.0f; // the larger motor current reported, as a magnitude
   };
 
   /**
@@ -117,7 +118,11 @@ public:
         else if (now - checkAt_ >= STOP_RAMP_CHECK_MS)
         {
           const float asked = STOP_DECEL * LINEAR_TO_RPM * (now - checkAt_) / 1000.0f;
-          if (measured > peak * scale_ + STOP_RAMP_LAG_RPM && checkSpeed_ - measured < 0.2f * asked)
+          // Not slowing, and the motors are not working at it either. (Wheels
+          // that are not slowing while the motors brake hard, as on a steep
+          // downhill, are left with the speed loop: it is doing all it can.)
+          if (measured > peak * scale_ + STOP_RAMP_LAG_RPM && checkSpeed_ - measured < 0.2f * asked &&
+              feedback.motorAmps < STOP_RAMP_IDLE_AMPS)
           {
             rampIneffective_ = true;
             enterBrake(now);

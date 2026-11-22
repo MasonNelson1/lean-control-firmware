@@ -22,16 +22,19 @@ first column, then the firmware's telemetry CSV, firmware text lines and
 outward along each arm: the first is ≈2.5" from centre, then 1" apart. Front and
 back have holes 1–6, left and right 1–5. A configuration is written as `F5 B2 L5 R5`.
 
-## Lean types (call these out loud; old names in brackets)
+## Lean types (call these out loud; Charles's names, 2026-11-21)
 | Name | What the rider does |
 |---|---|
-| `slouch` [passive-neutral] | Sits relaxed, all weight down, settled against the backrest |
-| `tall` [active-neutral] | Sits upright, holding posture |
+| `passive-neutral` | Sits relaxed (slouched), all weight down, settled against the backrest |
+| `active-neutral` | Sits upright, holding posture, the way you'd sit to drive |
 | `forward` | Leans the upper body forward and holds |
-| `back-touch` [back-min] | Leans back only until the backrest starts to push back (no pivoting) |
-| `back-push` [back-full] | Leans back into the backrest and pivots on it (hips tend to lift) |
+| `back-min` | A small back lean, well short of the backrest |
+| `back-touch` | Leans back until the backrest just touches and starts to push back |
+| `back-pivot` | Leans back into the backrest and pivots on it (hips tend to lift) |
 | `left` / `right` | Leans the upper body sideways and holds |
 | `reseat` | Stands up and sits back down |
+
+Older names in E2/E3 notes: slouch = passive-neutral, tall = active-neutral, back-push / back-full = back-pivot. In E2, "back-min" meant back-touch.
 
 Riders keep their hips passive (upper body only): the end user, Parker, is
 paralyzed from the waist down.
@@ -42,6 +45,8 @@ paralyzed from the waist down.
 | E1 | 2026-11-21 | Empty-seat baseline: plate preload, drift, plate off vs on | `data/2026-11-21-202251-tap.csv` |
 | E2 | 2026-11-21 | Mason, bolts as before: forward / back-push / back-touch / slouch / tall | `data/2026-11-21-E2-mason-bolts-as-before.csv` |
 | E3 | 2026-11-21 | Mason, bolts loosened: same moves as E2 | `data/2026-11-21-E3-mason-bolts-loose.csv` |
+
+Chart of E2 vs E3: `E2-E3-leans.html` (open in a browser).
 
 ---
 
@@ -87,7 +92,7 @@ paralyzed from the waist down.
 1. At `passive-neutral` with a rider, the front sensor carries ~zero load. It only senses forward lean, so the back-lean signal is the back sensor alone. This fits Charles's seesaw model: the plate pivots on the line through the side sensors, and the rider's centre of mass sits behind it.
 2. During a back lean the front stays at its floor (it can't go lower), so it gives no back-lean information. During a forward lean the back drops 60–90 counts.
 3. `back-min` loads the back sensor more than `back-full`. Mason: once he fights the backrest, his butt lifts.
-4. ~~After the back leans, the back sensor stayed ≈200 counts high (plate catching or creep).~~ **Corrected after E3:** that was mostly posture, not sticking. Between the back reps and in `tall`, Mason sat upright, and `tall` loads the back sensor ≈100–150 counts more than `slouch` in both runs. After returning to `slouch`, the back came back to within ≈+20–50 of its start.
+4. ~~After the back leans, the back sensor stayed ≈200 counts high (plate catching or creep).~~ **Corrected after E3:** that was mostly posture, not sticking. Between the back reps and in `active-neutral`, Mason sat upright, and `active-neutral` loads the back sensor ≈100–150 counts more than `passive-neutral` in both runs. After returning to `passive-neutral`, the back came back to within ≈+20–50 of its start.
 
 
 ## E3: Mason, bolts loosened (2026-11-21, 21:35–21:39:30)
@@ -96,13 +101,13 @@ paralyzed from the waist down.
 **Protocol (wall time = 19:38:10 + recording offset):**
 - Empty seat, loose bolts: 21:35:05–21:36:41.
 - Sat down: 21:36:45.
-- `slouch`: 21:37:33–21:37:43.
-- `tall`: 21:37:44–21:37:54.
-- `back-push` (one long hold): 21:37:59–21:38:11.
+- `passive-neutral`: 21:37:33–21:37:43.
+- `active-neutral`: 21:37:44–21:37:54.
+- `back-pivot` (one long hold): 21:37:59–21:38:11.
 - `back-touch`: 21:38:12–21:38:33.
 - `forward` (one hold): 21:38:35–21:38:48.
-- `slouch`: 21:38:49–21:39:00.
-- `tall`: 21:39:01–21:39:30.
+- `passive-neutral`: 21:38:49–21:39:00.
+- `active-neutral`: 21:39:01–21:39:30.
 
 **Results (raw counts, 4 s averages), compared with E2:**
 | Phase | Front E3 | Back E3 | Back E2 (bolts as before) |
@@ -118,6 +123,6 @@ paralyzed from the waist down.
 
 **Interpretation:**
 1. **Loosening the bolts changed little.** The empty-seat back preload dropped ≈25 counts (431 → ~405, then settled upward). The lean responses were the same within the variation between reps. Charles's hypothesis that the bolts block the plate from tilting back isn't supported at these bolt settings: the plate wasn't binding much.
-2. **Replicated:** the front sensor is ~zero at `slouch`, `tall` and all back leans, so it only senses `forward`. `back-touch` loads the back sensor more than `back-push` (≈950 vs ≈810).
-3. **New, and important for consistency:** `tall` vs `slouch` alone moves the back sensor ≈100–150 counts. That's half to two-thirds of a full back lean (`back-touch` ≈ +250 over `slouch`). Calibrating in one neutral posture and riding in the other shifts the lean reading by about half a back lean. "Neutral" has to be defined and coached, or the math has to be insensitive to it.
-4. Moving from back leans to `forward` and then `slouch` brings the back reading back to its start (+20–50). Mason's calibrate-while-leaning-forward trick effectively resets the posture to a low-back neutral.
+2. **Replicated:** the front sensor is ~zero at `passive-neutral`, `active-neutral` and all back leans, so it only senses `forward`. `back-touch` loads the back sensor more than `back-pivot` (≈950 vs ≈810).
+3. **New, and important for consistency:** `active-neutral` vs `passive-neutral` alone moves the back sensor ≈100–150 counts. That's half to two-thirds of a full back lean (`back-touch` ≈ +250 over `passive-neutral`). Calibrating in one neutral posture and riding in the other shifts the lean reading by about half a back lean. "Neutral" has to be defined and coached, or the math has to be insensitive to it.
+4. Moving from back leans to `forward` and then `passive-neutral` brings the back reading back to its start (+20–50). Mason's calibrate-while-leaning-forward trick effectively resets the posture to a low-back neutral.

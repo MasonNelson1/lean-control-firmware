@@ -28,9 +28,11 @@ bench programs were deleted from `src/`; recover them from git history if needed
 - Always build before suggesting an upload. Report compile errors verbatim.
 - Revert any changes made to `Arduino.h` for testing before finishing your work,
   including changes to `tests/native/config_stubs/Arduino.h`.
-- Upload uses the Teensy Loader GUI (`teensy-gui`). Its `[SUCCESS]` only means
-  the loader opened, not that the board was flashed — confirm via the serial
-  output. `teensy_loader_cli` is x86-only and won't run without Rosetta.
+- Upload uses `teensy_loader_cli` (`teensy-cli`). On Apple Silicon it is
+  x86-only and needs Rosetta; with the Teensy Loader GUI (`teensy-gui`) instead,
+  `[SUCCESS]` only means the loader opened — confirm via the serial output.
+- Under WSL, `wsl_upload.py` swaps in the Windows build of the Teensy tools
+  (WSL can't see USB; Windows can). No USB passthrough setup needed.
 
 ## Requirements the control system must meet
 - **B** — on any fault/e-stop: safe state within 0.10 s, wheel speed < 5% within 0.50 s

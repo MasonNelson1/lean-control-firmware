@@ -24,7 +24,7 @@ private:
     // comes back after a real outage must not start the chair.
     bool needsCentre = true;
     uint32_t lastPacketMillis = 0;
-    bool softStopLatched = false;
+    bool softStop_ = false;
     float requestedLeftPower = 0.0f;
     float requestedRightPower = 0.0f;
 
@@ -34,6 +34,8 @@ public:
     // has been silent for the timeout or its soft stop is latched.
     MotorTargets getTargets(uint32_t now);
     bool stopped() const { return stopped_; }
+    // The controller's stop button is on (it stays on until the controller clears it).
+    bool softStopLatched() const { return softStop_; }
 
     void reset();
 };

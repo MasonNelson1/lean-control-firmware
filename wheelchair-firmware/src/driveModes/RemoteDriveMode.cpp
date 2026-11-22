@@ -30,7 +30,7 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size, uint3
             needsCentre = false;
         lastPacketMillis = now;
         havePacket = true;
-        if (!softStopLatched && !needsCentre)
+        if (!softStop_ && !needsCentre)
         {
             requestedLeftPower = left;
             requestedRightPower = right;
@@ -42,7 +42,7 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size, uint3
         if (size != 1)
             return;
         telemetry::Telemetry::logf("Soft stopping because of soft stop packet\n");
-        softStopLatched = true;
+        softStop_ = true;
         needsCentre = true; // clearing the soft stop must not start the chair on a held stick
         requestedLeftPower = 0.0f;
         requestedRightPower = 0.0f;
@@ -54,7 +54,7 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size, uint3
         if (size != 1)
             return;
         telemetry::Telemetry::logf("Clearing soft stop\n");
-        softStopLatched = false;
+        softStop_ = false;
         lastPacketMillis = now; // needed so it doesn't think it disconnected
         havePacket = true;
         break;
@@ -67,7 +67,7 @@ MotorTargets RemoteDriveMode::getTargets(uint32_t now)
     const bool timedOut = !havePacket || silence >= settings::controllerTimeout.get();
     // Waiting for a centred stick counts as stopped: the chair brakes rather
     // than holding a zero speed command.
-    stopped_ = timedOut || softStopLatched || needsCentre;
+    stopped_ = timedOut || softStop_ || needsCentre;
     if (timedOut)
     {
         // A stale command must not come back to life with the next packet.

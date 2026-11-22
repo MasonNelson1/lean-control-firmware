@@ -23,6 +23,7 @@ const char *DriveController::faultName(Fault fault)
     case Fault::SensorRail: return "SENSOR_RAIL";
     case Fault::VescSilent: return "VESC_SILENT";
     case Fault::WatchdogReset: return "WATCHDOG_RESET";
+    case Fault::RemoteStop: return "REMOTE_STOP";
     default: return "NONE";
     }
 }
@@ -91,14 +92,17 @@ void DriveController::raiseFault(Fault fault)
     fault_ = fault;
     // In Assist the rider is propelling by hand: a fault only takes the boost
     // away. Everywhere else the chair is stopped and then held.
-    faultInAssist_ = modeState_.current() == ASSIST;
+    // (The remote's stop button is a person asking for a stop: that brakes.)
+    faultInAssist_ = modeState_.current() == ASSIST && fault != Fault::RemoteStop;
     faultHold_ = !faultInAssist_;
     // An unplugged sensor does not show up here: the sensors are two-wire,
     // so an open circuit reads the same as an unloaded sensor. (LeanDriveMode
     // makes sure that cannot create motion.)
     telemetry::Telemetry::logf(fault == Fault::SensorRail
                                    ? "Fault: a seat sensor is reading at an ADC rail (shorted wiring or a failed amplifier). Disarming.\n"
-                                   : "Fault: a motor controller stopped reporting its speed. Disarming.\n");
+                                   : fault == Fault::RemoteStop
+                                         ? "Stopped from the remote's stop button. Disarming; clear it on the remote before arming again.\n"
+                                         : "Fault: a motor controller stopped reporting its speed. Disarming.\n");
     modeState_.requestDisarm();
 }
 
@@ -295,6 +299,8 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
     {
         // Drive came back mid-stop (e.g. a short remote dropout): carry on
         // from where the stop had got to instead of from zero.
+        if (fresh) // see below: a chair above the speed-knob limit is not cut to it in one step
+            speedLimitMS_ = std::max(speedLimitMS_, std::min(MAX_SPEED, std::fabs(in.leftRPM + in.rightRPM) / 2.0f / LINEAR_TO_RPM));
         if (stop_.phase() == StopController::Phase::Ramp)
             motion_.seed(stop_.leftRPM(), stop_.rightRPM());
         else if (fresh)
@@ -307,11 +313,18 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
     else if (!driving_)
     {
         // Engaging while the chair rolls: start from the wheels' real speed,
-        // so the command does not restart at zero and brake hard.
+        // so the command does not restart at zero and brake hard. If that is
+        // above the speed-knob limit, the limit starts there too and comes
+        // down at the design rate, instead of cutting the command in one step.
         if (fresh)
+        {
+            speedLimitMS_ = std::max(speedLimitMS_, std::min(MAX_SPEED, std::fabs(in.leftRPM + in.rightRPM) / 2.0f / LINEAR_TO_RPM));
             motion_.seed(in.leftRPM, in.rightRPM);
+        }
         else
+        {
             motion_.reset();
+        }
         driving_ = true;
     }
 
@@ -433,7 +446,12 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
     const common::mode selected = modeState_.selected();
     if (selected != DISARM)
     {
-        if ((selected == LEAN || selected == ASSIST) && lean_.sensorAtRail())
+        if ((selected == LEAN || selected == ASSIST) && remote_.softStopLatched())
+            // The remote's stop button works in every mode: whoever holds the
+            // remote can stop a rider in LEAN or Assist. (In REMOTE it brakes
+            // the chair and waits there, as before.)
+            raiseFault(Fault::RemoteStop);
+        else if ((selected == LEAN || selected == ASSIST) && lean_.sensorAtRail())
             raiseFault(Fault::SensorRail); // the seat reading cannot be trusted either
         else if (!fresh)
             raiseFault(Fault::VescSilent); // every drive mode needs wheel-speed feedback

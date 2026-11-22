@@ -667,6 +667,75 @@ int main()
         for (const auto &sent : remoteSim.trace)
             assert(sent.left.kind != Kind::Brake);
     }
+    { // The remote's stop button stops the chair in LEAN and in Assist, not only in REMOTE:
+      // the spotter holding the remote can always stop the rider.
+        const uint8_t softStop = 0x02, clear = 0x03;
+        Sim sim;
+        sim.rideLean();
+        lean(600, 0);
+        sim.run(2500);
+        messages.clear();
+        sim.drive.onRemotePacket(&softStop, 1, sim.now);
+        sim.tick();
+        assert(sim.drive.mode() == DISARM && sim.drive.fault() == Fault::RemoteStop && sim.drive.stopping());
+        assert(logged("Stopped from the remote's stop button"));
+        assert(sim.expectStop() < 1.0f && std::fabs(sim.left) < STOP_DONE_RPM);
+        // Held, and no mode can be armed while the button is on (the remote repeats it).
+        for (mode button : {LEAN, REMOTE})
+        {
+            sim.drive.onRemotePacket(&softStop, 1, sim.now);
+            sim.press(button);
+            sim.run(100);
+            assert(sim.drive.mode() == (button == REMOTE ? REMOTE : DISARM));
+            assert(sim.last.left.kind != Kind::RPM || sim.last.left.value == 0);
+            sim.press(DISARM);
+        }
+        // Cleared on the remote: LEAN can be armed again.
+        sim.drive.onRemotePacket(&clear, 1, sim.now);
+        lean(0, 0);
+        sim.press(LEAN);
+        assert(sim.drive.mode() == LEAN && sim.drive.fault() == Fault::None);
+        // In Assist it brakes the chair too (a person asked for a stop).
+        Sim assist;
+        lean(0, 0);
+        assist.run(400);
+        assist.hold(DISARM);
+        assist.run(600);
+        assist.release(DISARM);
+        assert(assist.drive.mode() == ASSIST);
+        assist.left = assist.right = 40.0f;
+        assist.run(20);
+        assist.drive.onRemotePacket(&softStop, 1, assist.now);
+        assist.tick();
+        assert(assist.drive.mode() == DISARM && assist.drive.fault() == Fault::RemoteStop && assist.drive.stopping());
+        assist.expectStop();
+        assert(std::string(DriveController::faultName(Fault::RemoteStop)) == "REMOTE_STOP");
+    }
+    { // REMOTE selected on a chair rolling faster than the speed-knob limit, and the stick
+      // pushed forward: the command comes down to the limit at the design rate, not in one step.
+        Sim sim;
+        sim.knobMS = knobs::speedLimitMS(0); // limit 38.8 RPM
+        lean(0, 0);
+        sim.run(400);
+        sim.left = sim.right = 65.0f;
+        sim.press(REMOTE, /*release=*/false);
+        assert(sim.drive.mode() == REMOTE && sim.drive.stopping());
+        sim.runRemote(20, 0.0f, 0.0f); // stick centred
+        sim.remote(1.0f, 1.0f);
+        sim.tick();
+        assert(!sim.drive.stopping() && sim.last.left.kind == Kind::RPM);
+        assert(sim.last.left.value > 50.0f); // it was cut to 38.8 at once
+        float previous = sim.last.left.value;
+        for (int k = 0; k < 300; ++k)
+        {
+            if (k % 2 == 0)
+                sim.remote(1.0f, 1.0f);
+            sim.tick();
+            assert(previous - sim.last.left.value <= MAX_ACCEL * LINEAR_TO_RPM * TickS + 0.05f);
+            previous = sim.last.left.value;
+        }
+        assert(near(sim.last.left.value, sim.knobMS * LINEAR_TO_RPM, 0.5f));
+    }
     { // Engaging on a rolling chair starts from the wheels' speed instead of braking to zero.
         Sim sim;
         sim.rideRemote();

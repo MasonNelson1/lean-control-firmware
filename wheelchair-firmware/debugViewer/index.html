@@ -956,7 +956,7 @@
     function appendConsole(line) { const p = $('pre'); p.textContent = (p.textContent + line + '\n').split('\n').slice(-400).join('\n'); if ($('#scroll').checked) p.scrollTop = p.scrollHeight }
     function applyTelemetry(rows, stale, source) { latest = rows; lastRow = latest.at(-1) || null; showMode(lastRow, stale); $('#status').textContent = `${source} · ${stale ? 'Waiting for telemetry' : 'Receiving telemetry'}`; $('#status').classList.toggle('off', stale); if (!paused) { displayed = latest; graphs() } sensors(lastRow) }
     // HEALTH from the firmware: a header badge plus one detail line in the sensor panel.
-    const faultLabels = { SENSOR_RAIL: 'Sensor at rail', VESC_SILENT: 'VESC silent', WATCHDOG_RESET: 'Restarted by watchdog' };
+    const faultLabels = { SENSOR_RAIL: 'Sensor at rail', VESC_SILENT: 'VESC silent', WATCHDOG_RESET: 'Restarted by watchdog', REMOTE_STOP: 'Stopped from the remote' };
     function showHealth() {
       const badge = $('#health'), detail = $('#health-detail'), h = health;
       badge.hidden = detail.hidden = !h;

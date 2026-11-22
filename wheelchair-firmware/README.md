@@ -58,6 +58,8 @@ tick before motor commands.
 - A fast-blinking DISARM LED means a fault disarmed the chair (failed seat
   sensor, silent VESC, watchdog restart). The dashboard's health badge names
   it. It clears when a mode is armed again.
+- **The remote's stop button** stops the chair in LEAN and Assist as well as in
+  REMOTE. No mode can be armed until it is cleared on the remote.
 - **REMOTE** ignores the stick until it has been centred once after REMOTE is
   selected, after a soft stop, and after the controller has been out of
   contact for half a second.

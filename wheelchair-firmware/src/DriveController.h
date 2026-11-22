@@ -21,7 +21,7 @@
 class DriveController
 {
 public:
-    enum class Fault : uint8_t { None, SensorRail, VescSilent, WatchdogReset };
+    enum class Fault : uint8_t { None, SensorRail, VescSilent, WatchdogReset, RemoteStop };
     static const char *faultName(Fault fault);
 
     // What to send to the VESCs this tick. Each wheel has its own kind of

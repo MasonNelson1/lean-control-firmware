@@ -45,6 +45,8 @@ paralyzed from the waist down.
 | E1 | 2026-11-21 | Empty-seat baseline: plate preload, drift, plate off vs on | `data/2026-11-21-202251-tap.csv` |
 | E2 | 2026-11-21 | Mason, bolts as before: forward / back-push / back-touch / slouch / tall | `data/2026-11-21-E2-mason-bolts-as-before.csv` |
 | E3 | 2026-11-21 | Mason, bolts loosened: same moves as E2 | `data/2026-11-21-E3-mason-bolts-loose.csv` |
+| S1 | 2026-11-21 | Mason, sensitivity sweep at F5 B2 L5 R5 | `data/2026-11-21-S1-sweep.csv`, chart `S1-sweep-sensitivity.html` |
+| E5 | 2026-11-21 | Mason, back sensor moved to B5, sweep | `data/2026-11-21-E5-B5-sweep.csv`, chart `E5-vs-S1.html` |
 | E4 | 2026-11-21 | Mason, all four sensors raw (new firmware), no plate bolts, wheels on | `data/2026-11-21-E4-mason-four-sensors.csv`, chart `E4-four-sensors.html` |
 
 Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans.html` (time series).
@@ -231,3 +233,25 @@ Noise at rest: σx 0.005, σy 0.010.
 2. **Back is the weak axis:** smallest range, a mid-lean plateau, and only ~6 steps of resolution. It's the first thing a sensor-position change (B5, or the side line moved back) should improve.
 3. After the back lean, CoP y didn't return to neutral (−0.42 vs −0.33) until the next lean. Posture or hysteresis; watch for it in later sweeps.
 4. Mason leans a lot (his preference). Charles thinks ideal is about half that. With ~22 steps on left/right, a half lean still leaves ~11 steps; back would have only ~3.
+
+## E5: back sensor at B5, sweep (2026-11-21, 22:55:20–22:56:38)
+**Setup:** as S1 but config `F5 B5 L5 R5` (B5 is where the back sensor sat two days ago). Backrest strap height not standardized (it was moved on 11/20). Empty seat measured after the sweep: raw F/B/L/R = 375/417/377/377 (back preload +45 vs about +50–55 at B2).
+
+**Protocol (wall time from the signal):**
+- passive-neutral: 22:55:22–22:55:31.
+- active-neutral: 22:55:33–22:55:40 (also the noise window).
+- forward: 22:55:40.9–22:55:45.4.
+- right: 22:55:54.4–22:55:59.0.
+- left: 22:56:04.6–22:56:09.2.
+- back-touch ×2: 22:56:13.4–22:56:18.2 and 22:56:22.4–22:56:26.9.
+- Mason stood up at 22:56:38.
+
+**Results vs S1 (B2):**
+| Direction | S1 range | E5 range | S1 steps | E5 steps |
+|---|---|---|---|---|
+| forward | 0.19 | 0.28 | 9.7 | 18.0 |
+| back | 0.11 | 0.16 (both leans) | 5.7 | 10.2 / 10.1 |
+| left | 0.22 | 0.33 | 22.1 | 27.8 |
+| right | 0.22 | 0.29 | 22.2 | 24.5 |
+
+**Interpretation:** B5 beats B2. Back range is up ~40%, and the mid-lean plateau is gone in both back leans (repeatable). Caveat: one sweep per config, and Mason leaned somewhat faster and maybe deeper at B5, which inflates every range a little. The change in the back curve's shape is the most trustworthy part. **Next:** try B6 (Charles); if it improves again, keep going outward.

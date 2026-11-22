@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Back Sensor B2 vs B5</title>
+<style>
+:root{--a:var(--chart-1,#2a78d6);--b:var(--chart-2,#eb6834);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:18px 0 2px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.sw{width:16px;height:3px;border-radius:2px;display:inline-block}.sq{width:12px;height:12px;border-radius:3px;display:inline-block}
+.wrap{position:relative}svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--pop);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:nowrap;color:var(--ink)}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+</style></head><body>
+<h1>Back sensor at B2 vs B5: same rider, same sweep</h1>
+<p>Mason, 2026-11-21. S1 = back sensor at B2 (22:40). E5 = back sensor at B5 (22:55). Everything else is the same (F5 L5 R5, no plate bolts).</p>
+<div class="take"><b>What it shows</b><ul>
+<li><b>B5 is better for backward lean:</b> about 40% more range, and the flat middle section is gone in both back leans.</li>
+<li>Steps of control going back rose from ≈6 to ≈10. Forward rose from ≈10 to ≈18. Left/right rose a little.</li>
+<li>Caveat: one sweep each, and Mason leaned a bit faster at B5. Some of the gain may be lean depth, but the back curve's shape changing is the cleaner signal.</li></ul></div>
+<h2>Back lean: signal vs how far into the lean</h2>
+<div class="legend"><span class="key"><span class="sw" style="background:var(--a)"></span>S1, B2</span><span class="key"><span class="sw" style="background:var(--b)"></span>E5, B5 (two leans)</span></div>
+<div class="wrap" id="curve"></div>
+<h2>Distinguishable steps, neutral to full lean</h2>
+<div class="legend"><span class="key"><span class="sq" style="background:var(--a)"></span>S1, B2</span><span class="key"><span class="sq" style="background:var(--b)"></span>E5, B5</span></div>
+<div class="wrap" id="steps"></div>
+<script>
+const BACK={S1:[0.0,0.01,0.037,0.032,0.027,0.032,0.044,0.071,0.102,0.109,0.113],E5a:[0.0,0.011,0.028,0.085,0.122,0.13,0.15,0.149,0.155,0.157,0.158],E5b:[-0.001,0.016,0.049,0.06,0.073,0.086,0.133,0.136,0.151,0.158,0.156]};
+const STEPS={forward:[9.7,18.0],back:[5.7,10.2],left:[22.1,27.8],right:[22.2,24.5]};
+(function(){const W=700,H=280,M={l:46,r:70,t:12,b:34},max=0.2,x=i=>M.l+i/10*(W-M.l-M.r),y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Back lean signal, B2 vs B5">`;
+ for(let v=0;v<=max+1e-9;v+=0.05)s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v.toFixed(2)}</text>`;
+ for(let i=0;i<=10;i+=2)s+=`<text x="${x(i)}" y="${H-M.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${i*10}%</text>`;
+ const line=(v,c,dash)=>`<path d="${v.map((q,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(Math.max(q,0)).toFixed(1)).join(' ')}" fill="none" stroke="var(${c})" stroke-width="2" ${dash?'stroke-dasharray="5 4"':''} stroke-linejoin="round"/>`;
+ s+=line(BACK.S1,'--a')+line(BACK.E5a,'--b')+line(BACK.E5b,'--b',1);
+ s+=`<text x="${x(10)+6}" y="${y(BACK.S1[10])+4}" font-size="12" fill="var(--ink)">B2</text><text x="${x(10)+6}" y="${y(0.157)+4}" font-size="12" fill="var(--ink)">B5 ×2</text>`;
+ s+=`<line class="cx" y1="${M.t}" y2="${H-M.b}" stroke="var(--ink2)" visibility="hidden"/><rect class="hit" x="${M.l}" y="${M.t}" width="${W-M.l-M.r}" height="${H-M.t-M.b}" fill="transparent"/></svg><div class="tip"></div>`;
+ const el=document.getElementById('curve');el.innerHTML=s;const svg=el.querySelector('svg'),tip=el.querySelector('.tip'),cx=svg.querySelector('.cx');
+ svg.querySelector('.hit').addEventListener('pointermove',e=>{const r=svg.getBoundingClientRect(),sx=(e.clientX-r.left)*W/r.width,i=Math.max(0,Math.min(10,Math.round((sx-M.l)/(W-M.l-M.r)*10)));
+  cx.setAttribute('x1',x(i));cx.setAttribute('x2',x(i));cx.setAttribute('visibility','visible');tip.style.display='block';
+  tip.innerHTML=`<b>${i*10}% into the lean</b><br>B2: ${BACK.S1[i].toFixed(3)}<br>B5 lean 1: ${BACK.E5a[i].toFixed(3)}<br>B5 lean 2: ${BACK.E5b[i].toFixed(3)}`;tip.style.left=Math.min(x(i)*r.width/W+12,r.width-150)+'px';tip.style.top='20px'});
+ svg.querySelector('.hit').addEventListener('pointerleave',()=>{tip.style.display='none';cx.setAttribute('visibility','hidden')})})();
+(function(){const K=Object.keys(STEPS),W=700,H=220,M={l:40,r:6,t:16,b:30},max=30,gw=(W-M.l-M.r)/K.length,bw=34,y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distinguishable steps, B2 vs B5">`;
+ for(let v=0;v<=max;v+=10)s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v}</text>`;
+ K.forEach((k,i)=>{const cx=M.l+gw*i+gw/2;STEPS[k].forEach((v,j)=>{const x=cx+(j?1:-bw-1),top=y(v),r=4;
+  s+=`<path d="M${x} ${y(0)} V${top+r} Q${x} ${top} ${x+r} ${top} H${x+bw-r} Q${x+bw} ${top} ${x+bw} ${top+r} V${y(0)} Z" fill="var(${j?'--b':'--a'})"/><text x="${x+bw/2}" y="${top-4}" text-anchor="middle" font-size="11" fill="var(--ink2)">${v}</text>`});
+  s+=`<text x="${cx}" y="${H-M.b+18}" text-anchor="middle" font-size="12" fill="var(--ink)">${k}</text>`});
+ s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink2)"/></svg>`;document.getElementById('steps').innerHTML=s})();
+</script></body></html>

@@ -191,6 +191,13 @@ public:
   /** Return whether the constructor's tuning values are valid. */
   bool isValid() const { return valid_; }
 
+  // Read-only internals for telemetry (DBG M). rpm() is this smoother's own
+  // output before main.cpp clamps it to the measured RPM ± MAX_RPM_COMMAND_DIFF.
+  float rpm() const { return rpm_; }
+  float acceleration() const { return acceleration_; } // RPM/s
+  float integral() const { return integral_; }         // RPM·s
+  float filteredRate() const { return filteredRate_; } // RPM/s, the D term's input
+
 private:
   static float clip(float value, float low, float high)
   {

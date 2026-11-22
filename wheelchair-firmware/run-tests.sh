@@ -57,6 +57,10 @@ run_native() {
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
     native plus_golden         "${LEAN_INC[@]}" tests/native/plus_golden_test.cpp \
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
+    native vesc_decode         -I src tests/native/vesc_decode_test.cpp
+    # vesc_stubs supplies Arduino.h (millis, Serial1) and FlexCAN_T4.h (records frames).
+    native vesc_monitor        -I tests/native/vesc_stubs -I tests/native -I src tests/native/vesc_monitor_test.cpp \
+                               src/telemetry/Telemetry.cpp src/telemetry/TelemetryFrame.cpp
 }
 
 run_viewer() {

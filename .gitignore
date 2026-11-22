@@ -13,3 +13,4 @@ node_modules/
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
+wheelchair-firmware/logs/live/

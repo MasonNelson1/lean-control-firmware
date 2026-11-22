@@ -74,6 +74,10 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     // Shape speed and turn separately before wheel mixing and PID smoothing.
     speed = copysignf(powf(fabsf(speed), speedResponseExponent), speed);
     turn = copysignf(powf(fabsf(turn), turnResponseExponent), turn);
+    // Reversing: flip turn so leaning back-left still swings the chair left the way
+    // it feels natural. Threshold -0.3, not 0, was picked by feel on the chair; at 0
+    // turning near a standstill felt wrong. Below -0.9 (hard reverse) turning is off.
+    // Deliberate tuning: don't change without testing on the chair.
     if (speed < -0.3f)
     {
         turn *= -1;

@@ -116,6 +116,7 @@ namespace settings
     ConfigField<int> defaultFloor(registry(), 51,
                                   {calibration, "Default sensor floor", "ADC baseline used for sensor telemetry until a successful calibration. Calibration is still required to drive in LEAN.", "ADC counts"}, 400, 0, 1024);
 
+    // Left = 2, right = 26: the real IDs on the chair (confirmed by Mason 2026-11-21). Don't swap.
     ConfigField<uint8_t> leftVesc(registry(), 60,
                                   {motor, "Left VESC ID", "CAN address of the left motor controller. The two addresses must differ."}, 2, 0, 253);
     ConfigField<uint8_t> rightVesc(registry(), 61,

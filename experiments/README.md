@@ -299,3 +299,14 @@ Four versions of the lean math run on the same E6 sweeps (Mason, F5 B6 L5 R5), c
 1. With tonight's gains, lean turning is effectively OFF, forward is on/off (full command at a third of the lean), and back can't reach full reverse.
 2. **Resolution is about the same for every sensible version** (≈10 forward, ≈6 back, ≈27 left/right). Combining sensors didn't add resolution, because the "noise" is the rider's own sway, which is correlated across sensors. **The limit is how still a person can sit.**
 3. The math decides how that resolution is *used*. C and D give every direction a smooth 0 → full response across the whole lean. C also cancels posture and weight (E4). The council branch's approach is close to D, and this data doesn't argue against it.
+
+## Where the rider's weight actually sits, in inches (from E6, F5 B6 L5 R5)
+With four point supports, the centre of pressure in plate coordinates is exact by moment balance: x = Σ(force·x)/Σforce, y = Σ(force·y)/Σforce. This assumes counts ∝ force and equal sensor gains (not yet checked; see the known-weight test). Sensor positions: F (0, +6.5"), B (0, −7.5"), L (−6.5", 0), R (+6.5", 0).
+- Active-neutral: **x +0.44", y −2.19"** (passive: +0.68", −2.29"). Mason's weight sits ≈2.2" behind (0,0) and slightly right.
+- Envelope across every lean in E6 (2–98 %): **x −1.6"…+2.4", y −3.5"…−0.5"**.
+- **The centre of pressure never crosses y = 0**, the line through the side sensors. That's why the front sensor reads ~zero: the seesaw model is confirmed in physical units.
+
+**Square layout sizing (proposal):**
+- Centre the square on the rider's neutral, ≈(+0.3", −2.0"), not on (0,0).
+- Keep the whole lean envelope (≈4.4" wide × 3.2" deep) in the inner half of the square, so every corner stays loaded. That means corners ≈5" from the centre in x and y: x = ±5", y ≈ +3" (front pair) and ≈ −7" (back pair).
+- Check that it fits the plate and seat before drilling, and repeat with a heavier rider (Charles).

@@ -116,6 +116,7 @@ private:
     bool reverseLocked_ = false;
     float sentLeftRPM_ = 0.0f, sentRightRPM_ = 0.0f;
     float speedLimitMS_ = 0.0f;
+    bool brakingHintGiven_ = false;
     // Low-speed diagnostic (watchLowSpeed).
     bool lowSpeedIgnored_ = false, lowSpeedReported_ = false;
     uint32_t lowSpeedSince_ = 0;

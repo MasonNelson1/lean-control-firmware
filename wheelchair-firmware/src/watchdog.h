@@ -8,7 +8,12 @@
 // It does not stop the motors by itself: while the Teensy is hung or
 // restarting, each VESC keeps its last command until its own timeout (VESC
 // Tool, App Settings, General, "Timeout"; default 1000 ms) and then applies
-// "Timeout Brake Current". Those two settings decide what a hang does.
+// "Timeout Brake Current" (default 0 A: coast). Those two settings decide
+// what a hang does, so set them on both VESCs:
+//   Timeout                200 ms   (commands arrive every 5 ms)
+//   Timeout Brake Current  15 A     (the same as STOP_BRAKE_AMPS)
+// With the defaults a hang keeps the last speed for a second and then coasts.
+// After the restart the firmware brakes a rolling chair itself.
 //
 // Register sequence follows the WDT_T4 library (tonton81) for WDT1.
 namespace watchdog

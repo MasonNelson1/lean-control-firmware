@@ -307,6 +307,11 @@ The speed limit passed to the smoother rises at once when the speed knob is
 turned up and falls no faster than `MAX_ACCEL`, so turning the knob down while
 moving never triggers the smoother's immediate speed-limit clip.
 
+One rule was added to the smoother itself: when the command is moving away
+from the request (the rider asked for less while it was still speeding up),
+that motion ends on the next update instead of fading out under the jerk
+limit. The jerk limit still shapes how acceleration and braking build up.
+
 ### Engaging and stopping
 
 Engaging drive while the chair rolls seeds the smoother with the measured

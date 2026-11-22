@@ -55,6 +55,8 @@ public:
     elapsed_ = 0.0f;
     rampEndedAt_ = 0;
     rampEnded_ = false;
+    rampIneffective_ = false;
+    checking_ = false;
     if (fmaxf(fabsf(left0_), fabsf(right0_)) < DriveConstants::STOP_HANDOFF_RPM)
       enterBrake(now);
     else
@@ -66,6 +68,9 @@ public:
 
   void cancel() { phase_ = Phase::Idle; }
   bool active() const { return phase_ != Phase::Idle; }
+  // This stop went to brake current early because the wheels did not slow
+  // under the speed commands. Stays set until the next begin().
+  bool rampIneffective() const { return rampIneffective_; }
   Phase phase() const { return phase_; }
   // The ramp's current wheel-speed commands, for handing back to normal driving.
   float leftRPM() const { return phase_ == Phase::Ramp ? left0_ * scale_ : 0.0f; }
@@ -100,6 +105,27 @@ public:
         if (wheelsDown || now - rampEndedAt_ >= STOP_RAMP_OVERRUN_MS)
           enterBrake(now);
       }
+      // Are the wheels slowing at all? (See STOP_RAMP_CHECK_MS.)
+      if (phase_ == Phase::Ramp && feedback.fresh)
+      {
+        if (!checking_)
+        {
+          checking_ = true;
+          checkAt_ = now;
+          checkSpeed_ = measured;
+        }
+        else if (now - checkAt_ >= STOP_RAMP_CHECK_MS)
+        {
+          const float asked = STOP_DECEL * LINEAR_TO_RPM * (now - checkAt_) / 1000.0f;
+          if (measured > peak * scale_ + STOP_RAMP_LAG_RPM && checkSpeed_ - measured < 0.2f * asked)
+          {
+            rampIneffective_ = true;
+            enterBrake(now);
+          }
+          checkAt_ = now;
+          checkSpeed_ = measured;
+        }
+      }
       if (phase_ == Phase::Ramp)
         return {Drive::RPM, left0_ * scale_, right0_ * scale_};
     }
@@ -118,7 +144,9 @@ public:
         settling_ = false;
       }
       const bool settled = settling_ && now - settledSince_ >= STOP_SETTLE_MS;
-      if (settled || now - brakeStartedAt_ >= STOP_BRAKE_MAX_MS)
+      // With feedback, brake until the wheels have stopped; blind, for a fixed time.
+      const uint32_t limit = feedback.fresh ? STOP_BRAKE_LIMIT_MS : STOP_BRAKE_MAX_MS;
+      if (settled || now - brakeStartedAt_ >= limit)
         phase_ = Phase::Idle;
       else
         return {Drive::Brake, STOP_BRAKE_AMPS, STOP_BRAKE_AMPS};
@@ -137,6 +165,7 @@ private:
   Phase phase_ = Phase::Idle;
   float left0_ = 0.0f, right0_ = 0.0f;
   float scale_ = 0.0f, elapsed_ = 0.0f;
-  bool rampEnded_ = false, settling_ = false;
-  uint32_t rampEndedAt_ = 0, brakeStartedAt_ = 0, settledSince_ = 0;
+  bool rampEnded_ = false, settling_ = false, rampIneffective_ = false, checking_ = false;
+  uint32_t rampEndedAt_ = 0, brakeStartedAt_ = 0, settledSince_ = 0, checkAt_ = 0;
+  float checkSpeed_ = 0.0f;
 };

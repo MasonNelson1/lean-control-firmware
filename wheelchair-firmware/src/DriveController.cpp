@@ -40,7 +40,7 @@ void DriveController::begin(bool afterWatchdogReset)
     stop_.cancel();
     driving_ = false;
     freewheel_ = false;
-    faultHold_ = false;
+    faultHold_ = afterWatchdogReset; // nobody was expecting that stop either
     reverseLocked_ = false;
     fault_ = afterWatchdogReset ? Fault::WatchdogReset : Fault::None;
 }
@@ -178,6 +178,12 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
 
     const bool fresh = in.leftFresh && in.rightFresh;
     const auto out = stop_.update(in.dt, in.now, {in.leftRPM, in.rightRPM, fresh});
+    if (stop_.rampIneffective() && !brakingHintGiven_)
+    {
+        brakingHintGiven_ = true;
+        telemetry::Telemetry::logf("Hint: the wheels did not slow under the speed commands of this stop, so it went to brake "
+                                   "current. Check that \"Allow Braking\" is on in the VESCs' speed PID settings.\n");
+    }
     switch (out.drive)
     {
     case StopController::Drive::RPM:
@@ -405,8 +411,15 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
     bool calibrationBegan = false;
     if (calibrationRequested && modeState_.current() == LEAN && lean_.isSeated() && !lean_.calibrationActive())
     {
-        lean_.beginCalibration(in.now);
-        calibrationBegan = true;
+        // A button bumped at speed must not stop the chair. A chair that is
+        // only creeping (the reason to recalibrate) is stopped and calibrated.
+        if (fresh && std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) > CALIBRATE_MAX_RPM)
+            telemetry::Telemetry::logf("Calibration ignored: the chair is moving. Slow down first.\n");
+        else
+        {
+            lean_.beginCalibration(in.now);
+            calibrationBegan = true;
+        }
     }
     if (calPressed && modeState_.current() == DISARM && modeState_.selected() == DISARM &&
         !stop_.active() && !lean_.tareActive())
@@ -470,12 +483,20 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         // command when driving, else the wheels.
         const float maxRPM = speedLimitMS_ * LINEAR_TO_RPM;
         const float travelRPM = driving_ ? motion_.linearRPM() : (in.leftRPM + in.rightRPM) / 2.0f;
-        const auto command = lean_.command(maxRPM > 0.0f ? travelRPM / maxRPM : 0.0f);
+        // Leaning back is how the rider brakes, and a startled rider leans
+        // back and stays there. So a back lean that began while the chair was
+        // rolling forward only brakes it to a standstill. Reverse needs the
+        // rider to come back to neutral first, and is slower than forward.
+        if (travelRPM > STOP_DONE_RPM)
+            reverseLocked_ = true;
+        const auto command = lean_.command(maxRPM > 0.0f ? travelRPM / maxRPM : 0.0f, reverseLocked_);
         if (command.stopped)
         {
             restingS_ = 0.0f;
             return stopOrRelease(in);
         }
+        if (travelRPM <= STOP_DONE_RPM && command.speed == 0.0f)
+            reverseLocked_ = false;
 
         // Standing still at neutral for a while: let neutral follow the
         // rider's posture and the sensors' slow drift (LeanDriveMode::trimNeutral).
@@ -485,14 +506,6 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         if (restingS_ >= NEUTRAL_TRIM_AFTER_S)
             lean_.trimNeutral(in.dt);
 
-        // Leaning back is how the rider brakes, and a startled rider leans
-        // back and stays there. So a back lean that began while the chair was
-        // rolling forward only brakes it to a standstill. Reverse needs the
-        // rider to come back to neutral first, and is slower than forward.
-        if (travelRPM > STOP_DONE_RPM)
-            reverseLocked_ = true;
-        else if (command.speed == 0.0f)
-            reverseLocked_ = false;
         float speed = command.speed;
         if (speed < 0.0f)
             speed = reverseLocked_ ? 0.0f : speed * REVERSE_SPEED_FRACTION;

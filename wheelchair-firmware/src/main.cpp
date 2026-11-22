@@ -208,7 +208,6 @@ void setup()
 
     // motors
     vescBegin(can1);
-    delay(200);
     if (watchdogReset)
         telemetry::Telemetry::logf("Restarted by the watchdog: the firmware had stopped responding.\n");
     if (!settings::persistence.loadedSaved())

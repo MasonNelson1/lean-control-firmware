@@ -2,6 +2,25 @@
 
 #include <stdint.h>
 
+// ---- VESC Tool settings this firmware relies on -----------------------------
+// They live in the VESCs and cannot be read or set from here. Check them on
+// both VESCs on the bench, wheels off the ground:
+//
+//   Speed PID, "Allow Braking": ON. All normal slowing down and the first part
+//     of every stop are speed commands. With it off the VESC only coasts.
+//     (A stop notices wheels that do not slow and switches to brake current,
+//     and logs it; normal driving cannot.)
+//   Speed PID, "Minimum ERPM" (s_pid_min_erpm): default 900 = 15.5 wheel RPM.
+//     Below it the VESC does not drive, so a small lean does nothing and then
+//     the chair starts at 0.5 m/s. Lower it as far as the motor's sensors
+//     allow, check that a 5 RPM command is followed, then set "VESC minimum
+//     speed" on the dashboard to match.
+//   App, "Timeout": 200 ms, and "Timeout Brake Current": 15 A. These decide
+//     what the chair does if this firmware hangs (see watchdog.h).
+//   App, CAN status rate: 50 Hz. Under 20 Hz the chair faults as "VESC silent".
+//   VESC firmware version: note it. Below the minimum ERPM, current versions
+//     brake with shorted phases and older ones release the motor.
+
 namespace common {
 constexpr float WHEEL_CIRCUMFERENCE_M = 74.75f * 0.0254f;
 // Shared derived value, refreshed when the dashboard changes wheel circumference.
@@ -57,11 +76,25 @@ constexpr float DEADZONE_REST_RPM = 1.0f;
 // The wheels count as stopped below this speed, once held for STOP_SETTLE_MS.
 constexpr float STOP_DONE_RPM = 3.0f;
 constexpr uint32_t STOP_SETTLE_MS = 150;
-// Longest the brake phase lasts. With no VESC feedback it always runs this long.
+// How long the brake phase lasts with no VESC feedback to say the wheels have
+// stopped.
 constexpr uint32_t STOP_BRAKE_MAX_MS = 1500;
+// With feedback it lasts until the wheels have stopped, but no longer than this.
+constexpr uint32_t STOP_BRAKE_LIMIT_MS = 5000;
+// During the ramp the wheels are checked this often. If they are well above
+// the ramp and have slowed by less than a fifth of what STOP_DECEL asks, the
+// VESC's speed loop is not braking (its "Allow Braking" is off, or it is not
+// acting on the commands) and the stop goes to brake current at once.
+constexpr uint32_t STOP_RAMP_CHECK_MS = 200;
+constexpr float STOP_RAMP_LAG_RPM = 10.0f;
 // If the wheels are not following the ramp, keep commanding the handoff speed
 // for at most this long after the ramp ends before going to brake current.
 constexpr uint32_t STOP_RAMP_OVERRUN_MS = 1000;
+
+// ---- Calibration -----------------------------------------------------------
+// The calibration button is ignored while a wheel turns faster than this
+// (0.63 m/s). Below it the chair is stopped first, then calibrated.
+constexpr float CALIBRATE_MAX_RPM = 20.0f;
 
 // ---- Reverse ---------------------------------------------------------------
 // Full back lean (or full back stick) drives at this share of the speed-knob

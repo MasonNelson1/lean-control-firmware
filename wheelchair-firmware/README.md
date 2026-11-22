@@ -19,7 +19,9 @@ tick before motor commands.
 ### Calibration button
 
 - **In LEAN, short press**: capture neutral. Let go and sit still; the LED
-  blinks slowly for about a second and goes out when the chair is ready.
+  blinks slowly for about a second and goes out when the chair is ready. The
+  button is ignored while the chair moves faster than a slow walk; a chair
+  that is only creeping is stopped first.
 - **In LEAN, hold for one second** (LED starts blinking fast): range
   calibration. Let go, sit still, then lean as far as is comfortable forward,
   back, left and right, and press the button again. The four full-lean ranges

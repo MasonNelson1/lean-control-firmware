@@ -131,6 +131,14 @@ public:
     const float requestedAccel = error / tau + tuning_.ki * integral_ -
                                  tuning_.kd * filteredRate_;
     const float boundedAccel = clip(requestedAccel, lowerLimit, upperLimit);
+    // The jerk limit shapes how acceleration builds up. It must not keep the
+    // chair speeding up after the rider has asked for less: with it, sitting
+    // up in the middle of a full-lean start went on accelerating for a
+    // quarter of a second (about half a metre per second more). So when the
+    // command is moving away from the request, that motion ends at once;
+    // braking toward the request then builds up under the jerk limit as usual.
+    if (acceleration_ * error < 0.0f)
+      acceleration_ = 0.0f;
     const float jerkStep = tuning_.maxJerkRPMPerS2 * dt;
     acceleration_ += clip(boundedAccel - acceleration_, -jerkStep, jerkStep);
     // A lower user-selected acceleration cap applies on this update, even if

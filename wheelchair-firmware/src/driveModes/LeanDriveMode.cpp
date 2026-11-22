@@ -95,7 +95,7 @@ void LeanDriveMode::effectiveLean(float &forward, float &right) const
     right = gained[3] - gained[2];
 }
 
-LeanDriveMode::Command LeanDriveMode::command(float travel)
+LeanDriveMode::Command LeanDriveMode::command(float travel, bool reverseLocked)
 {
     if (!neutralValid || calibrationActive())
         return {0.0f, 0.0f, true};
@@ -123,9 +123,21 @@ LeanDriveMode::Command LeanDriveMode::command(float travel)
     //   while the chair travels forward faster than 15% of the speed limit;
     //   they fade in between 15% and 5% as it slows.
     const float forwardTravel = std::min(1.0f, std::max(0.0f, (travel - 0.05f) / 0.10f));
-    const float reverseBlend = std::max(clampUnit((speed + 0.3f) / 0.1f), 2.0f * forwardTravel - 1.0f);
-    const float hardReverseFade = std::max(std::min(1.0f, std::max(0.0f, (speed + 0.9f) / 0.1f)), forwardTravel);
-    turn *= reverseBlend * hardReverseFade;
+    if (reverseLocked && speed < 0.0f)
+    {
+        // A braking lean that will not go on into reverse: steer normally
+        // while the chair still rolls forward, and let the turn die away with
+        // the speed. Applying the reversing rules here flipped the turn of a
+        // chair that was about to stand still, and it spun on the spot, away
+        // from the lean, for as long as the lean was held.
+        turn *= forwardTravel;
+    }
+    else
+    {
+        const float reverseBlend = std::max(clampUnit((speed + 0.3f) / 0.1f), 2.0f * forwardTravel - 1.0f);
+        const float hardReverseFade = std::max(std::min(1.0f, std::max(0.0f, (speed + 0.9f) / 0.1f)), forwardTravel);
+        turn *= reverseBlend * hardReverseFade;
+    }
 
     telemetry.speed = speed;
     telemetry.turn = turn;

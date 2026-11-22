@@ -102,7 +102,9 @@ public:
     // The lean command from the last sample. travel is the chair's speed as
     // a share of the speed limit, forward positive: it decides whether a
     // back lean means "brake" (still rolling forward) or "reverse".
-    Command command(float travel = 0.0f);
+    // reverseLocked: this back lean began while rolling forward, so it will
+    // only brake the chair to a stop and never reverse it.
+    Command command(float travel = 0.0f, bool reverseLocked = false);
 
     // Call while the chair stands still with no lean command. Neutral moves
     // slowly toward the present loads, so sensor drift (the empty-seat log

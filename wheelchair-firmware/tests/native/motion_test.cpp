@@ -288,30 +288,28 @@ static void stopTests()
         assert(stop.update(dt, 205 + STOP_SETTLE_MS, {1.0f, 0.0f, true}).drive == StopController::Drive::Release);
         assert(!stop.active());
     }
-    { // Wheels that lag the ramp: hold the handoff speed, bounded, then brake.
+    { // Wheels that slow, but slower than the ramp: hold the handoff speed, bounded, then brake.
         StopController stop;
         uint32_t now = 0;
-        stop.begin(100.0f, 100.0f, now);
+        float wheel = 100.0f;
+        stop.begin(wheel, wheel, now);
         StopController::Output out{};
         uint32_t rampEnd = 0;
         while (true)
         {
             now += 5;
-            out = stop.update(dt, now, {90.0f, 90.0f, true}); // the chair is not slowing
-            assert(out.drive == StopController::Drive::RPM);
-            if (near(out.left, STOP_HANDOFF_RPM, 0.001f))
-            {
+            wheel = std::fmax(wheel - 0.3f * decelRPMS * dt, 70.0f); // slowing at 30% of what was asked, then stuck at 70
+            out = stop.update(dt, now, {wheel, wheel, true});
+            if (wheel > 70.0f || rampEnd == 0)
+                assert(out.drive == StopController::Drive::RPM); // the speed loop is braking: stay with it
+            if (rampEnd == 0 && near(out.left, STOP_HANDOFF_RPM, 0.001f))
                 rampEnd = now;
+            if (out.drive != StopController::Drive::RPM)
                 break;
-            }
-            assert(now < 2000);
+            assert(now < 4000);
         }
-        // Still an RPM command at the handoff speed just before the overrun limit...
-        out = stop.update(dt, rampEnd + STOP_RAMP_OVERRUN_MS - 5, {90.0f, 90.0f, true});
-        assert(out.drive == StopController::Drive::RPM && near(out.left, STOP_HANDOFF_RPM, 0.001f));
-        // ...and brake current from the limit on.
-        out = stop.update(dt, rampEnd + STOP_RAMP_OVERRUN_MS, {90.0f, 90.0f, true});
-        assert(out.drive == StopController::Drive::Brake);
+        assert(!stop.rampIneffective() || wheel == 70.0f);
+        assert(now <= rampEnd + STOP_RAMP_OVERRUN_MS && out.drive == StopController::Drive::Brake);
         // Wheels that did come down hand off at once.
         StopController quick;
         quick.begin(STOP_HANDOFF_RPM + 1.0f, STOP_HANDOFF_RPM + 1.0f, 0);
@@ -321,11 +319,53 @@ static void stopTests()
         while (out.drive == StopController::Drive::RPM && ticks < 100);
         assert(out.drive == StopController::Drive::Brake && ticks > 1 && ticks < 20); // the short ramp, then at once
     }
-    { // The brake phase never runs past its limit, even if the wheels never stop.
+    { // Wheels that do not slow at all under the speed commands (the VESC's "Allow
+      // Braking" is off): the stop notices within half a second and brakes by current.
+        StopController stop;
+        uint32_t now = 0;
+        float wheel = 155.0f;
+        stop.begin(wheel, wheel, now);
+        StopController::Output out{};
+        do
+        {
+            now += 5;
+            wheel -= 4.0f * dt; // coasting: friction only
+            out = stop.update(dt, now, {wheel, wheel, true});
+        } while (out.drive == StopController::Drive::RPM && now < 3000);
+        assert(out.drive == StopController::Drive::Brake && stop.rampIneffective());
+        assert(now <= 2 * STOP_RAMP_CHECK_MS + 5); // not the 2.2 s the ramp and its overrun would take
+        // ...and keeps braking until the wheels have stopped (well past the blind limit).
+        while (out.drive == StopController::Drive::Brake && now < 10000)
+        {
+            now += 5;
+            wheel = std::fmax(wheel - 60.0f * dt, 0.0f);
+            out = stop.update(dt, now, {wheel, wheel, true});
+        }
+        assert(out.drive == StopController::Drive::Release && wheel < STOP_DONE_RPM && now > STOP_BRAKE_MAX_MS);
+        // A chair that follows the ramp is never treated that way.
+        const auto normal = runStop(155.0f, 155.0f, true, 400.0f);
+        assert(normal.sawRamp && normal.seconds < 1.6f);
+        StopController follow;
+        follow.begin(155.0f, 155.0f, 0);
+        float speed = 155.0f;
+        for (uint32_t t = 5; t < 1000; t += 5)
+        {
+            const auto o = follow.update(dt, t, {speed, speed, true});
+            if (o.drive == StopController::Drive::RPM)
+                speed = o.left + 8.0f; // tracking with a steady 8 RPM lag
+        }
+        assert(!follow.rampIneffective());
+    }
+    { // The brake phase has a limit even if the wheels never stop: longer with feedback
+      // (it can see they are still turning) than without.
         StopController stop;
         stop.begin(5.0f, 5.0f, 0);
-        assert(stop.update(dt, STOP_BRAKE_MAX_MS - 5, {50.0f, 50.0f, true}).drive == StopController::Drive::Brake);
-        assert(stop.update(dt, STOP_BRAKE_MAX_MS, {50.0f, 50.0f, true}).drive == StopController::Drive::Release);
+        assert(stop.update(dt, STOP_BRAKE_LIMIT_MS - 5, {50.0f, 50.0f, true}).drive == StopController::Drive::Brake);
+        assert(stop.update(dt, STOP_BRAKE_LIMIT_MS, {50.0f, 50.0f, true}).drive == StopController::Drive::Release);
+        StopController blind;
+        blind.begin(5.0f, 5.0f, 0);
+        assert(blind.update(dt, STOP_BRAKE_MAX_MS - 5, {0, 0, false}).drive == StopController::Drive::Brake);
+        assert(blind.update(dt, STOP_BRAKE_MAX_MS, {0, 0, false}).drive == StopController::Drive::Release);
     }
     { // cancel() and non-finite speeds.
         StopController stop;

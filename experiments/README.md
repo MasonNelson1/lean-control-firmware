@@ -280,3 +280,22 @@ Noise at rest σx 0.005, σy 0.011.
 - **Idea: square formation** (sensors at the corners instead of a plus). Every lean then loads two sensors and the seesaw pivot lines change. Worth a test later.
 - Chart `E4-sensor-deltas.html`: change per sensor from active-neutral for each lean. Sides carry ~2/3 of the forward signal and as much of the back signal as the back sensor does.
 - **Next (Charles):** front-sensor position. Keep B6 (no different from B5) and move only the front (F5 → F2), so one variable changes. Prediction from the seesaw model: the front still reads ≈0 at neutral as long as the rider's centre of mass is behind the side line.
+
+## Math comparison on real sweeps (E6 data; `math-comparison.html`, `tools/compare_math.py`)
+Four versions of the lean math run on the same E6 sweeps (Mason, F5 B6 L5 R5), calibrated at active-neutral:
+- **A** current firmware with tonight's gains (F7 B3 L0.01 R0.01)
+- **B** current firmware with default gains (F2 B3 L1 R1)
+- **C** centre of pressure (raw − 372 over the live total), each direction scaled by its calibrated range
+- **D** all-sensor sums (fore-aft = ΔF + ΔL + ΔR − ΔB, turn = ΔR − ΔL), each direction scaled by its calibrated range (close to the council branch's "per-pair load gain over per-direction range")
+
+| Direction | Steps A | B | C | D | Max command A | B | C | D |
+|---|---|---|---|---|---|---|---|---|
+| forward | 6.3 | 9.4 | 9.6 | 10.1 | 1 (saturates at 36 % of the lean) | 1 (at 83 %) | 1 (90 %) | 1 (90 %) |
+| back | 4.9 | 5.3 | 6.1 | 5.8 | 0.75 | 0.56 | 0.99 | 0.99 |
+| left | 0 | 28.8 | 27.0 | 28.6 | 0.007 (dead) | 0.64 | 0.97 | 0.96 |
+| right | 0 | 27.7 | 25.1 | 28.2 | 0.006 (dead) | 0.63 | 0.98 | 0.98 |
+
+**Findings:**
+1. With tonight's gains, lean turning is effectively OFF, forward is on/off (full command at a third of the lean), and back can't reach full reverse.
+2. **Resolution is about the same for every sensible version** (≈10 forward, ≈6 back, ≈27 left/right). Combining sensors didn't add resolution, because the "noise" is the rider's own sway, which is correlated across sensors. **The limit is how still a person can sit.**
+3. The math decides how that resolution is *used*. C and D give every direction a smooth 0 → full response across the whole lean. C also cancels posture and weight (E4). The council branch's approach is close to D, and this data doesn't argue against it.

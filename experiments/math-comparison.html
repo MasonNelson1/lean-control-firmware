@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lean Math Comparison</title>
+<style>
+:root{--a:var(--chart-2,#eb6834);--b:var(--chart-4,#eda100);--c:var(--chart-1,#2a78d6);--d:var(--chart-3,#1baf7a);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:16px 0 2px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.sw{width:16px;height:3px;border-radius:2px;display:inline-block}.sq{width:12px;height:12px;border-radius:3px;display:inline-block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}.cell h3{font-size:13px;margin:0 0 2px;font-weight:600}
+svg{width:100%;height:auto;display:block;overflow:visible}.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--ink2);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+</style></head><body>
+<h1>Lean math: current firmware vs using all four sensors</h1>
+<p>Same real sweeps (E6, Mason, 23:06–23:07, config F5 B6 L5 R5), run through four versions of the math. Output 0 = no command, 1 = full command in that direction.</p>
+<div class="take"><b>What it shows</b><ul>
+<li><b>Tonight's settings (A):</b> lean <b>turning is effectively off</b> (side gains 0.01 give at most 0.007). Forward hits full command one-third of the way into the lean, so the rest of the lean does nothing (on/off feel). Back never gets past 75% of full reverse.</li>
+<li><b>Default gains (B):</b> turning works, but back tops out at 56% and left/right at ~63%.</li>
+<li><b>All four sensors (C, D):</b> every direction runs smoothly from 0 to full across the whole lean, with no early saturation and no cap.</li>
+<li><b>Resolution is about the same for every sensible version</b> (forward ≈10, back ≈6, left/right ≈27 steps). The limit is how still a person can sit, not the electronics or the math. The math decides how well that resolution is <i>used</i>.</li></ul></div>
+<div class="legend"><span class="key"><span class="sw" style="background:var(--a)"></span>A: current, tonight's gains (F7 B3 L.01 R.01)</span><span class="key"><span class="sw" style="background:var(--b)"></span>B: current, default gains (F2 B3 L1 R1)</span><span class="key"><span class="sw" style="background:var(--c)"></span>C: centre of pressure</span><span class="key"><span class="sw" style="background:var(--d)"></span>D: all-sensor sums</span></div>
+<h2>Command vs how far into the lean</h2>
+<div class="grid" id="g"></div>
+<h2>Resolution: distinguishable steps, neutral to full lean</h2>
+<table><thead><tr><th>Direction</th><th class="n">A</th><th class="n">B</th><th class="n">C</th><th class="n">D</th></tr></thead><tbody id="tb"></tbody></table>
+<p style="margin-top:8px">Steps = usable signal span ÷ (2 × the same signal's wobble while sitting still). Dead zone (lean before any command) is 0–5% for every version except A's turning, which never leaves its deadband.</p>
+<script>
+const D={"curves": {"A": {"forward": [0.183, 0.403, 0.629, 0.841, 0.99, 1, 1, 1, 1, 1, 1], "back": [0.097, 0.208, 0.32, 0.452, 0.583, 0.633, 0.677, 0.704, 0.738, 0.745, 0.753], "right": [0.001, 0.001, 0.001, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.006, 0.006], "left": [0.001, 0.002, 0.002, 0.003, 0.004, 0.005, 0.005, 0.005, 0.006, 0.006, 0.007]}, "B": {"forward": [0.116, 0.256, 0.382, 0.497, 0.623, 0.75, 0.84, 0.905, 0.956, 0.98, 0.996], "back": [0.093, 0.165, 0.243, 0.333, 0.426, 0.465, 0.502, 0.524, 0.549, 0.555, 0.561], "right": [0.044, 0.081, 0.076, 0.117, 0.23, 0.315, 0.381, 0.493, 0.556, 0.608, 0.63], "left": [0.051, 0.127, 0.195, 0.264, 0.361, 0.429, 0.51, 0.55, 0.614, 0.63, 0.641]}, "C": {"forward": [0.103, 0.233, 0.365, 0.487, 0.618, 0.739, 0.823, 0.883, 0.938, 0.973, 0.991], "back": [0.112, 0.216, 0.338, 0.505, 0.659, 0.741, 0.793, 0.843, 0.92, 0.958, 0.99], "right": [0.094, 0.161, 0.152, 0.233, 0.441, 0.579, 0.675, 0.83, 0.905, 0.96, 0.984], "left": [0.085, 0.213, 0.32, 0.425, 0.58, 0.684, 0.799, 0.85, 0.933, 0.954, 0.967]}, "D": {"forward": [0.076, 0.186, 0.306, 0.427, 0.562, 0.686, 0.778, 0.852, 0.923, 0.966, 0.984], "back": [0.124, 0.219, 0.336, 0.504, 0.65, 0.735, 0.784, 0.839, 0.924, 0.963, 0.993], "right": [0.07, 0.127, 0.118, 0.181, 0.357, 0.488, 0.592, 0.766, 0.863, 0.945, 0.978], "left": [0.077, 0.19, 0.291, 0.394, 0.54, 0.642, 0.762, 0.823, 0.918, 0.943, 0.96]}}, "steps": {"A": {"forward": 6.3, "back": 4.9, "right": 0.0, "left": 0.0}, "B": {"forward": 9.4, "back": 5.3, "right": 27.7, "left": 28.8}, "C": {"forward": 9.6, "back": 6.1, "right": 25.1, "left": 27.0}, "D": {"forward": 10.1, "back": 5.8, "right": 28.2, "left": 28.6}}};const K=['forward','back','left','right'],V=['A','B','C','D'],C={A:'--a',B:'--b',C:'--c',D:'--d'};
+const g=document.getElementById('g');
+K.forEach(k=>{const W=200,H=150,M={l:28,r:6,t:6,b:20},x=i=>M.l+i/10*(W-M.l-M.r),y=v=>M.t+(1-v)*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${k} command by lean progress">`;
+ [0,0.5,1].forEach(v=>s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-4}" y="${y(v)+3}" text-anchor="end" font-size="9" fill="var(--ink2)">${v}</text>`);
+ [0,5,10].forEach(i=>s+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--ink2)">${i*10}%</text>`);
+ V.forEach(v=>{const c=D.curves[v][k];s+=`<path d="${c.map((q,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(Math.max(0,Math.min(1,q))).toFixed(1)).join(' ')}" fill="none" stroke="var(${C[v]})" stroke-width="2" stroke-linejoin="round"/>`});
+ s+='</svg>';g.insertAdjacentHTML('beforeend',`<div class="cell"><h3>${k}</h3>${s}</div>`)});
+const tb=document.getElementById('tb');K.forEach(k=>tb.insertAdjacentHTML('beforeend',`<tr><td>${k}</td>${V.map(v=>`<td class="n">${D.steps[v][k]}</td>`).join('')}</tr>`));
+</script></body></html>

@@ -45,6 +45,7 @@ paralyzed from the waist down.
 | E1 | 2026-11-21 | Empty-seat baseline: plate preload, drift, plate off vs on | `data/2026-11-21-202251-tap.csv` |
 | E2 | 2026-11-21 | Mason, bolts as before: forward / back-push / back-touch / slouch / tall | `data/2026-11-21-E2-mason-bolts-as-before.csv` |
 | E3 | 2026-11-21 | Mason, bolts loosened: same moves as E2 | `data/2026-11-21-E3-mason-bolts-loose.csv` |
+| E4 | 2026-11-21 | Mason, all four sensors raw (new firmware), no plate bolts, wheels on | `data/2026-11-21-E4-mason-four-sensors.csv`, chart `E4-four-sensors.html` |
 
 Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans.html` (time series).
 
@@ -147,3 +148,44 @@ Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans
 `passive-neutral` 10 s → `active-neutral` 10 s → `forward` 5 s ×2 → `back-min` 5 s ×2 → `back-touch` 5 s ×2 → `back-pivot` 5 s ×1 → `left` 5 s ×2 → `right` 5 s ×2 → `passive-neutral` 10 s → `reseat` ×2.
 
 **Scored on:** back-lean swing over `active-neutral`; front swing on `forward`; the passive/active-neutral gap as a fraction of the back swing (smaller is better); left/right swing and symmetry; reseat repeatability.
+
+## E4: Mason, all four sensors (2026-11-21, 22:16–22:20)
+**Setup:** firmware `charles/dev-setup` (DBG lines; raw counts for all four sensors at 1 Hz in `DBG SENSORS`). Config `F5 B2 L5 R5`. Top-plate bolts removed, wheels on, backrest on, chair powered, DISARM, uncalibrated. Both VESCs now report status (ID 2 had shown 0 frames earlier only because the chair was unpowered).
+
+**Protocol (Mason narrated; wall = 19:38:10 + recording offset):**
+- Empty seat: 22:16:00–22:16:30.
+- `passive-neutral`: 22:17:52–22:18:05.
+- `active-neutral`: 22:18:06–22:18:11.
+- `back-touch`: 22:18:12–22:18:23.
+- `back-pivot`: 22:18:24–22:18:29.
+- `forward`: 22:18:31–22:18:38.
+- `right` (10 s): 22:18:39–22:18:50.
+- `left` (10 s): 22:18:57–22:19:08.
+- `active-neutral`: 22:19:09–22:19:20.
+- half-right: 22:19:21–22:19:26.
+- Extra unnarrated forward holds: 22:19:51–22:20:14.
+
+**Results (above zero force, raw − 372):**
+| Lean | Front | Back | Left | Right | Total | CoP x (R−L)/Σ | CoP y (F−B)/Σ |
+|---|---|---|---|---|---|---|---|
+| empty | 2 | 50 | 8 | 6 | 66 | | |
+| passive-neutral | 13 | 282 | 237 | 412 | 944 | 0.19 | −0.28 |
+| active-neutral | 15 | 302 | 306 | 504 | 1127 | 0.18 | −0.25 |
+| forward | 237 | 157 | 477 | 668 | 1539 | 0.12 | 0.05 |
+| back-touch | 0 | 440 | 224 | 342 | 1006 | 0.12 | −0.44 |
+| back-pivot | 0 | 383 | 206 | 313 | 902 | 0.12 | −0.42 |
+| left | 37 | 317 | 745 | 264 | 1363 | −0.35 | −0.21 |
+| right | 13 | 380 | 145 | 1003 | 1541 | 0.56 | −0.24 |
+| half-right | 23 | 357 | 224 | 783 | 1387 | 0.40 | −0.24 |
+
+**Interpretation:**
+1. The plate rests on the two side sensors plus the back; the front is ~0 at neutral (the seesaw model is confirmed with real side data).
+2. On `forward`, left and right rise ≈+240 each, as much as the front (+224). The side sensors are a forward signal (Charles's idea).
+3. Left/right leans swing the side sensors by +500 to +600, 4–5× the front/back swings. That's why side gains of 0.01 still turned well.
+4. **Centre of pressure fixes the posture problem in this data:**
+   - `passive-neutral` vs `active-neutral` differ by only 0.03 in CoP y, against a back-lean swing of 0.16 and a forward swing of 0.33. In raw back counts the gap had been about half a back lean.
+   - `back-pivot` lands with `back-touch` (−0.42 vs −0.44) instead of reading weaker.
+   - Total load varies a lot between leans (902 to 1541), which is exactly what dividing by the live total cancels.
+   - Strong support for issue #13 (centre-of-pressure lean math).
+5. Asymmetry: right carries ≈175 more than left at neutral, and the right lean peaks higher (+590 vs +510 over neutral). Rider posture or sensor/amp gain differences; worth one swap test (swap the L and R sensor cables).
+6. Forward is still the weakest axis: CoP y swing +0.33 forward vs −0.16 back from passive-neutral, but the forward reading needs a big lean.

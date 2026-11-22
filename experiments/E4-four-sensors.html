@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Four Sensor Baseline</title>
+<style>
+:root{--s1:var(--chart-1,#2a78d6);--s2:var(--chart-2,#eb6834);--s3:var(--chart-3,#1baf7a);--s4:var(--chart-4,#eda100);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:18px 0 2px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.wrap{position:relative}svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--pop);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:nowrap;color:var(--ink)}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--ink2);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+</style></head><body>
+<h1>E4: first look at all four sensors</h1>
+<p>Mason, config F5 B2 L5 R5, no plate bolts, wheels on, 2026-11-21 22:17–22:19. Load above zero force (raw − 372), hold averages.</p>
+<div class="take"><b>What it shows</b><ul>
+<li>The plate rests on the <b>two side sensors and the back</b>. The front carries almost nothing until you lean forward.</li>
+<li>The side sensors rise about as much as the front on a <i>forward</i> lean, so they can help detect forward (Charles's idea).</li>
+<li>Left/right leans swing the side sensors 4–5× more than forward/back leans move front/back. That's why side gains of 0.01 still turned well.</li>
+<li>In <b>centre-of-pressure</b> terms (bottom chart), <i>passive</i> and <i>active neutral</i> nearly overlap, and <i>back-pivot</i> lands with <i>back-touch</i>. The posture problem mostly disappears.</li>
+<li>Right carries more than left even at neutral (rider or sensor asymmetry).</li></ul></div>
+<h2>Each sensor, by lean</h2>
+<div class="legend"><span class="key"><span class="sw" style="background:var(--s1)"></span>Front</span><span class="key"><span class="sw" style="background:var(--s2)"></span>Back</span><span class="key"><span class="sw" style="background:var(--s3)"></span>Left</span><span class="key"><span class="sw" style="background:var(--s4)"></span>Right</span></div>
+<div class="wrap" id="bars"></div>
+<h2>Centre of pressure: where the weight sits, by lean</h2>
+<p>x = (Right − Left) / total, y = (Front − Back) / total. Dividing by the live total cancels rider weight and how hard they sit.</p>
+<div class="wrap" id="cop"></div>
+<table><thead><tr><th>Lean</th><th class="n">Front</th><th class="n">Back</th><th class="n">Left</th><th class="n">Right</th><th class="n">Total</th><th class="n">CoP x</th><th class="n">CoP y</th></tr></thead><tbody id="tb"></tbody></table>
+<script>
+const RAW={'empty':[374,422,380,378],'passive-neutral':[385,654,609,784],'active-neutral':[387,674,678,876],'forward':[609,529,849,1040],'back-touch':[372,812,596,714],'back-pivot':[372,755,578,685],'left':[409,689,1117,636],'right':[385,752,517,1375],'half-right':[395,729,596,1155]};
+const LEANS=['passive-neutral','active-neutral','forward','back-touch','back-pivot','left','right'];
+const S=['Front','Back','Left','Right'],C=['--s1','--s2','--s3','--s4'];
+const ab=k=>RAW[k].map(v=>Math.max(v-372,0));
+function tipify(el){const tip=el.querySelector('.tip');el.querySelectorAll('[data-t]').forEach(h=>{h.addEventListener('pointermove',e=>{const r=el.getBoundingClientRect();tip.style.display='block';tip.textContent=h.dataset.t;tip.style.left=Math.min(e.clientX-r.left+10,r.width-240)+'px';tip.style.top=(e.clientY-r.top-34)+'px'});h.addEventListener('pointerleave',()=>tip.style.display='none')})}
+(function(){const W=700,H=260,M={l:44,r:6,t:12,b:34},max=1100,gw=(W-M.l-M.r)/LEANS.length,bw=Math.min(16,(gw-14)/4),y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sensor load by lean">`;
+ for(let v=0;v<=max;v+=275){s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v}</text>`}
+ LEANS.forEach((k,i)=>{const a=ab(k),x0=M.l+gw*i+(gw-4*bw-6)/2;a.forEach((v,j)=>{const x=x0+j*(bw+2),top=y(v),h=Math.max(y(0)-top,1),r=Math.min(4,h,bw/2);
+  s+=`<path d="M${x} ${y(0)} V${top+r} Q${x} ${top} ${x+r} ${top} H${x+bw-r} Q${x+bw} ${top} ${x+bw} ${top+r} V${y(0)} Z" fill="var(${C[j]})"/><rect data-t="${k} · ${S[j]}: ${v} above zero (raw ${RAW[k][j]})" x="${x-1}" y="${M.t}" width="${bw+2}" height="${H-M.t-M.b}" fill="transparent"/>`});
+  s+=`<text x="${M.l+gw*i+gw/2}" y="${H-M.b+16}" text-anchor="middle" font-size="11" fill="var(--ink)">${k.replace('-neutral',' neutral')}</text>`});
+ s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink2)"/></svg><div class="tip"></div>`;
+ const el=document.getElementById('bars');el.innerHTML=s;tipify(el)})();
+(function(){const W=700,H=380,M={l:50,r:20,t:16,b:40},X=[-0.5,0.7],Y=[-0.55,0.15];
+ const x=v=>M.l+(v-X[0])/(X[1]-X[0])*(W-M.l-M.r),y=v=>M.t+(1-(v-Y[0])/(Y[1]-Y[0]))*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Centre of pressure by lean">`;
+ for(let v=-0.4;v<=0.61;v+=0.2){s+=`<line x1="${x(v)}" x2="${x(v)}" y1="${M.t}" y2="${H-M.b}" stroke="var(--line)"/><text x="${x(v)}" y="${H-M.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${v.toFixed(1)}</text>`}
+ for(let v=-0.5;v<=0.11;v+=0.1){s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v.toFixed(1)}</text>`}
+ s+=`<text x="${(M.l+W-M.r)/2}" y="${H-6}" text-anchor="middle" font-size="12" fill="var(--ink2)">← left · side-to-side · right →</text><text x="14" y="${(M.t+H-M.b)/2}" transform="rotate(-90 14 ${(M.t+H-M.b)/2})" text-anchor="middle" font-size="12" fill="var(--ink2)">← back · front →</text>`;
+ const cop=k=>{const a=ab(k),t=a.reduce((p,q)=>p+q,0);return [(a[3]-a[2])/t,(a[0]-a[1])/t,t]};
+ const pts=[...LEANS,'half-right'].map(k=>[k,...cop(k)]),n=cop('passive-neutral');
+ pts.forEach(p=>{if(p[0]==='passive-neutral')return;s+=`<line x1="${x(n[0])}" y1="${y(n[1])}" x2="${x(p[1])}" y2="${y(p[2])}" stroke="var(--ink2)" stroke-opacity=".35" stroke-dasharray="3 3"/>`});
+ const off={'passive-neutral':[-10,-8,'end'],'active-neutral':[10,18,'start'],'back-touch':[-10,0,'end'],'back-pivot':[10,12,'start'],'forward':[10,4,'start'],'left':[10,4,'start'],'right':[0,22,'middle'],'half-right':[0,-12,'middle']};
+ pts.forEach(p=>{const [dx,dy,an]=off[p[0]];s+=`<circle cx="${x(p[1])}" cy="${y(p[2])}" r="6" fill="var(--s1)" stroke="var(--pop)" stroke-width="2"/><text x="${x(p[1])+dx}" y="${y(p[2])+dy}" text-anchor="${an}" font-size="12" fill="var(--ink)">${p[0]}</text><circle data-t="${p[0]}: x ${p[1].toFixed(2)}, y ${p[2].toFixed(2)}, total ${p[3]}" cx="${x(p[1])}" cy="${y(p[2])}" r="14" fill="transparent"/>`});
+ s+=`</svg><div class="tip"></div>`;const el=document.getElementById('cop');el.innerHTML=s;tipify(el);
+ const tb=document.getElementById('tb');['empty',...LEANS,'half-right'].forEach(k=>{const a=ab(k),c=cop(k);tb.insertAdjacentHTML('beforeend',`<tr><td>${k}</td>${a.map(v=>`<td class="n">${v}</td>`).join('')}<td class="n">${c[2]}</td><td class="n">${k==='empty'?'–':c[0].toFixed(2)}</td><td class="n">${k==='empty'?'–':c[1].toFixed(2)}</td></tr>`)})})();
+</script></body></html>

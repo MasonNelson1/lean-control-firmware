@@ -129,28 +129,21 @@ Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans
 
 ---
 
-## Plan: sensor position study (from 2026-11-21, led by Claude)
-**Physics first (Charles's seesaw model):** with four point supports, the plate tips about the line through the two side sensors (y = 0). In every run so far the rider's centre of mass sits *behind* that line, so the plate tips back and the front sensor lifts to zero. **No front/back hole choice can change that, and moving the side sensors in or out along their arm can't either. Only moving the side line (or the whole plus) back puts the front sensor under load at neutral.** That needs new holes.
+## Plan: sensor position study (updated 2026-11-21 22:05, led by Claude)
+**Physics (Charles's seesaw model):** the plate tips about the line through the two side sensors. The rider's centre of mass sits behind that line, so the front sensor lifts to zero at neutral. No existing hole moves that line; only new side holes behind (0,0) do.
 
-**Tests with the existing holes:**
-- **E4: back-sensor lever.** `F5 B5 L5 R5` (back moved from B2 → B5, mirroring the front). Question: does a back lean give a bigger, cleaner swing, and does the passive/active-neutral gap grow with it (the ratio is what matters)?
-- **E5: front preload.** Back to the best of B2/B5. Tighten only the front bolt(s) so the front sensor reads ≈ +100 counts with the seat empty. Question: does a front sensor that starts loaded drop on `back-min`/`back-touch`, making it a second back-lean signal (what Mason's lean-forward calibration trick does by accident)?
-- **Later, after drilling: side line moved back** (≈2–3" behind (0,0)), the real seesaw test.
+**Changed conditions from here on:** wheels ON (chair off the casters), top-plate bolts REMOVED (the team found they make no difference, per E2 vs E3).
 
-**Every configuration change:** 30 s empty seat (preload check), then the rider protocol:
-`passive-neutral` 10 s → `active-neutral` 10 s → `forward` 5 s ×2 → `back-min` 5 s ×2 → `back-touch` 5 s ×2 → `back-pivot` 5 s ×1 → `left` 5 s ×2 → `right` 5 s ×2 → `passive-neutral` 10 s → `reseat` ×2 (10 s each).
+| Step | Config | What changes | Question |
+|---|---|---|---|
+| 0 | n/a | Upload `charles/dev-setup` firmware while the chair is e-stopped (DBG lines) | See all four sensors raw |
+| E4 | `F5 B2 L5 R5`, no bolts | Baseline incl. left/right | Full four-sensor picture of the current setup |
+| E5 | `F5 B5 L5 R5` | Back sensor moved out | Does a longer back lever widen back-lean vs active-neutral? |
+| E6 | best of E4/E5 + front shim | Washers under the front stopper so the front reads ≈ +100 empty | Does a pre-loaded front sensor drop on back leans (a second back signal)? |
+| E7 | best + `L1 R1` | Side sensors moved inward | Do the sides carry more of the weight split; does the left/right swing change? |
+| later | side holes ≈2–3" behind (0,0) | Drill | The real seesaw test |
 
-**Scored on:** back-lean swing over `active-neutral`, front swing on `forward`, the passive/active-neutral gap as a fraction of the back-lean swing (smaller is better), left/right symmetry, and reseat repeatability.
+**Every step:** 30 s empty seat (preload check) → rider protocol (Mason, hips passive):
+`passive-neutral` 10 s → `active-neutral` 10 s → `forward` 5 s ×2 → `back-min` 5 s ×2 → `back-touch` 5 s ×2 → `back-pivot` 5 s ×1 → `left` 5 s ×2 → `right` 5 s ×2 → `passive-neutral` 10 s → `reseat` ×2.
 
-**Limitation until the DBG firmware is uploaded:** left/right gains are 0.01, so the side sensors can't be seen. That is a big hole for a seesaw study.
-
-### E2/E3 by lean type (hold averages, above zero force)
-| Lean | Back E2 | Back E3 | Front E2 | Front E3 |
-|---|---|---|---|---|
-| passive-neutral | 289 | 327 | 9 | 3 |
-| active-neutral | 497 | 473 | 1 | 0 |
-| forward | 238 | 297 | 182 | 160 |
-| back-pivot | 444 | 427 | 1 | 0 |
-| back-touch | 595 | 584 | 0 | 0 |
-
-**Key implication:** measured from `active-neutral`, a `back-touch` adds only ≈100 counts on the back sensor, and `back-pivot` actually reads *lower* than `active-neutral`. Measured from `passive-neutral` it adds ≈270–300. If the chair is calibrated in `active-neutral`, the usable back-lean range is small, and leaning hard into the backrest reads as a slight *forward* lean. That could be the "lean back, nothing (or forward) happens" complaint, without the hip thrust.
+**Scored on:** back-lean swing over `active-neutral`; front swing on `forward`; the passive/active-neutral gap as a fraction of the back swing (smaller is better); left/right swing and symmetry; reseat repeatability.

@@ -29,12 +29,13 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - **What the firmware sends:**
   - The telemetry CSV row at 20 Hz (post-gain values; the dashboard parses it).
   - `DBG R <ms> F B L R`: raw ADC counts, 20 Hz.
-  - `DBG COP <ms> x y dx dy total`: centre of pressure in inches and its offset from the calibrated neutral, 20 Hz, corner layout only (`chair_sql.py` table `cop`).
+  - `DBG COP <ms> x y dx dy total`: centre of pressure in inches and its offset from the calibrated (upright) neutral, 20 Hz, corner layout only (`chair_sql.py` table `cop`).
   - Once a second:
-    - `DBG SENSORS`: raw, floors, W, seat load, seated/calibrated/railed flags, `layout=`; on the corner layout also the CoP, calibrated neutral and reach in use (inches; `*` = set by dynamic calibration).
+    - `DBG SENSORS`: raw, floors, W, seat load, seated/calibrated/railed flags, `layout=PLUS|CORNER`.
+    - `DBG CORNER` (corner layout): neutral, relaxed posture, the no-output box and full-lean box (left/right/back/front, inches), `reachCal`, the empty-plate baseline in use and `auto=1` when the empty-seat zero set it (`chair_sql.py` table `corner`).
     - `DBG VESC`: per controller id, status-frame age, frames, ERPM, current, duty, MOSFET temperature, voltage.
     - `DYNAMIC_GAINS`.
-  - The dashboard hides `DBG` lines.
+  - The dashboard hides `DBG` lines from its console. On the corner layout it moves the channel tiles to their corners and draws the plate: live CoP with a 2 s trail, neutral (+), relaxed posture (○), the no-output box and the full-lean box.
 
 ## Reading the data
 - **SQL:** `python3 tools/chair_sql.py "SELECT ..."` (also `--schema`, `--trend N`, `--file <csv>`).
@@ -44,7 +45,7 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
   - `auto_sweeps.py`: finds lean sweeps automatically and gives range and curve.
   - `cop_inches.py`: centre of pressure in plate inches.
   - `compare_math.py`: compares lean-math versions on the same sweeps.
-  - `replay_cop.py`: runs a log through the firmware's corner-layout math (constants read from the firmware source) and prints speed/turn per hold; `--trace` for the whole sweep.
+  - `replay_cop.py`: runs a log through the firmware's corner-layout math (constants read from the firmware source) and prints speed/turn per hold. `--hold NAME=HH:MM:SS-HH:MM:SS` for any log's holds (default E9), `--passive HOLD` for the relaxed posture, `--trace` for the whole sweep, `--jumps` for tick-to-tick CoP change and dead-channel jumps.
   - `sweep_analysis.py`
 - **Facts:**
   - Zero force ≈ **372** raw on every sensor (amplifier offset).
@@ -59,7 +60,14 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 ## Plate and sensors (as of 2026-11-22: rectangle)
 - **Rectangle layout** since 2026-11-22, one sensor per corner. Channels keep their pin names: **R = front-right, L = front-left, F = back-left, B = back-right**. Positions (inches from the old plus centre) live in `src/driveModes/lean_layout.h`.
 - **Firmware setting `Sensor layout`** (dashboard, Lean control): `CORNER` (default) steers from the centre of pressure; `PLUS` is the old math, kept intact. Changing it needs a recalibration.
-- **Corner calibration:** short press in **active neutral** sets the neutral CoP. Hold the button and lean forward, back, left and right to set this rider's full-lean reach (otherwise the configured reach applies). Empty-plate baselines and per-channel gains are under "Corner layout sensors".
+- **Corner calibration (every LEAN entry):**
+  1. Sit upright and engaged (**active neutral**), short press: sets neutral. The calibrate LED then blinks slowly for 10 s.
+  2. Optional, within those 10 s: relax (**passive**), short press again: records the relaxed posture, so slumping doesn't creep forward. Forward reach is then measured from the relaxed point.
+  3. Optional: **hold** either press and lean forward, back, left, right, then release: sets this rider's full-lean reach (each ≥ 1.2"). It ends in DISARM. The reach is kept until a reach setting changes, the seat is empty for 3 s (new rider), or the profile changes.
+  - A press with any corner carrying almost nothing (< 50 counts or < 5% of the load) is rejected: check that sensor. The LED stays on.
+- **Sensor faults disarm LEAN:** a raw reading ≤ 340 or ≥ 4000 on any channel (both layouts), or, on the corner layout, the CoP stepping more than 0.75" between control ticks (a sensor dropping out).
+- **Empty-plate baseline:** configured under "Corner layout sensors" (with per-channel gains, all 1.0). While DISARMED with the seat empty and steady for 3 s, the firmware re-zeroes it in RAM (logs "Empty plate re-zeroed"), if within 30 counts of the configured value. Reseating the plate moved it ≈10 counts (391/406/427/400 → 383/396/420/404).
+- **Accuracy (E11, plate on):** 28.2 lb at four known spots located within 0.4" (typically 0.25") with gains 1.0. See `../experiments/README.md`.
 
 ## Plate and sensors (as of 2026-11-21, plus layout)
 - **Sensors:** FlexiForce A502 force sensors in a plus, each through an MCP6004 transimpedance amp. Readings depend strongly on contact area.

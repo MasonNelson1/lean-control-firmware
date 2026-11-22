@@ -118,13 +118,23 @@ Individual sensor values are not saturation-capped. On the CORNER layout
 empty-plate baseline (IDs 100-103) times its gain (IDs 104-107), the centre of
 pressure is located in plate inches, and its offset from the neutral captured at
 calibration is mapped to speed and turn with the deadzone and per-direction
-full-lean reach (IDs 91-95). Sensor positions are compile-time constants in
-`lean_layout.h`. A layout change takes effect at the next calibration; until
-then LEAN stays stopped. The corner fields use 101 of each profile's 415 bytes,
-leaving about 15 bytes free (see the "every setting fits one saved profile"
-test). The former directional saturation fields
+full-lean reach (IDs 91-95). A second calibrate press within 10 s, made relaxed,
+records the rider's relaxed posture: speed then stays zero from upright to
+relaxed plus the relaxed-posture margin (ID 96), and forward reach is measured
+from the relaxed point. The relaxed posture, a hold-calibrated reach and the
+automatic empty-seat zero of the baselines live in RAM only. Sensor positions
+are compile-time constants in `lean_layout.h`. A layout change takes effect at
+the next calibration; until then LEAN stays stopped. The corner fields use 109
+of each profile's 415 bytes, leaving about 7 bytes free on the host build (15 on
+the Teensy), as the "every setting fits one saved profile" test checks. The
+next batch of settings needs a storage-format change. The former directional saturation fields
 (IDs 20-23) and their group (ID 4) are retired; those IDs must not be reused.
 Older saved records for these fields are ignored when loading configuration.
+
+Selecting a profile (the profile knob) first resets every field to its default,
+then applies the profile's records, the same as loading the active bank. A
+profile saved by older firmware therefore gets defaults for fields it lacks,
+not whatever the previously active profile held.
 
 The watchdog can only be shortened from its 100 ms default, the control
 period stays within 4–10 ms, and configurable jerk cannot exceed the original

@@ -132,6 +132,22 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events, [{"console": "Calibration complete"}])
         self.assertEqual(list(viewer.console), ["Calibration complete"])
 
+    async def test_debug_lines_feed_the_plate_view_not_the_console(self):
+        events = []
+        async def emit(event):
+            events.append(event)
+        lines = ['DBG SENSORS raw=1/2/3/4 floors=0/0/0/0 W=370 seatLoad=0 seated=0 calibrated=0 calActive=0 railed=0 layout=CORNER',
+                 'DBG CORNER neutral=nan/nan passive=nan/nan dead=nan/nan/nan/nan full=nan/nan/nan/nan reachCal=0 empty=391/406/427/400 auto=0',
+                 'DBG COP 1234 0.19 0.43 nan nan 2507',
+                 'DBG R 1234 927 756 1058 1390',
+                 'DBG VESC id=2 age=13 frames=1 erpm=0 current=0.0 duty=0.000 fetC=24.0 vin=0.0']
+        with patch.object(viewer, "emit", emit):
+            for line in lines:
+                await viewer.line_received(line)
+        self.assertEqual(events, [{'plate': line} for line in lines[:3]])
+        self.assertFalse(viewer.console)
+        self.assertFalse(viewer.history)
+
     async def test_stale_clock_updates_on_telemetry(self):
         with patch.object(viewer.time, "monotonic", return_value=123):
             await viewer.line_received(row())
@@ -165,6 +181,9 @@ class AssetTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pid_preview_asset(self):
         self.assertTrue(Path((await viewer.pid_preview_script()).path).is_file())
+
+    async def test_plate_view_asset(self):
+        self.assertTrue(Path((await viewer.plate_view_script()).path).is_file())
 
     async def test_main_page_has_configuration_navigation(self):
         self.assertIn(b"config-page", (await viewer.index()).body)

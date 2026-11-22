@@ -15,6 +15,13 @@ function setDynamicGains(gains) {
   sensors(lastRow);
 }
 
+// A connection change discards everything learned from the old source: gains
+// and the plate status (layout, neutral zone, centre-of-pressure trail).
+function resetConnectionStatus() {
+  resetPlate();
+  setDynamicGains(null);
+}
+
 function parseBluetoothLine(line) {
   const parts = line.trim().split(',').map(value => value.trim());
   if (![12, 14, 15, 19].includes(parts.length)) return null;
@@ -148,8 +155,10 @@ async function readBluetooth(port) {
         warnTelemetry(`${recovered.length ? `recovered ${recovered.length} complete rows from damaged CSV` : 'rejected CSV'} (${line.split(',').length} columns): ${line.slice(0, 256)}`);
         for (const candidate of recovered) receiver.onLine(candidate);
       }
-      // DBG lines are once-a-second debug status for log taps, not for the console.
-      else if (!line.startsWith('DBG ')) appendConsole(line);
+      // DBG lines are debug status for log taps, not for the console. The layout,
+      // neutral zone and centre of pressure among them feed the plate view.
+      else if (line.startsWith('DBG ')) { if (connectionMode === 'bluetooth') plateLine(line); }
+      else appendConsole(line);
     }
   }, frame => window.configLink?.receive(frame),
     frame => typeof ConfigWire === 'undefined' || ConfigWire.responseFrame(frame) !== null);
@@ -180,7 +189,7 @@ async function readBluetooth(port) {
     try { await port.close(); } catch (error) { appendConsole(`Bluetooth close: ${error.message}`); }
     bluetoothPort = null;
     bluetoothActive = false;
-    if (connectionMode === 'bluetooth') setDynamicGains(null);
+    if (connectionMode === 'bluetooth') resetConnectionStatus();
     updateConnectionButtons();
     if (connectionMode === 'bluetooth') showDisconnected('Bluetooth disconnected');
     appendConsole('Bluetooth disconnected. Choose a connection mode and click Connect to reconnect.');
@@ -204,7 +213,7 @@ async function connectBluetooth() {
     bluetoothActive = true;
     bluetoothRows = [];
     bluetoothLastRowAt = 0;
-    setDynamicGains(null);
+    resetConnectionStatus();
     // Do not overlay old USB data on the newly selected wireless source.
     displayed = [];
     graphs();
@@ -241,7 +250,7 @@ async function changeConnectionMode() {
     connectionMode = dashboardBackend ? $('#connection-mode').value : 'bluetooth';
     // A new source starts disconnected and never shows the old source's data.
     latest = []; displayed = []; lastRow = null;
-    setDynamicGains(null);
+    resetConnectionStatus();
     graphs(); sensors(null);
     $('pre').textContent = '';
     if (connectionMode === 'bluetooth' && bluetoothActive) renderBluetooth();
@@ -255,7 +264,7 @@ async function changeConnectionMode() {
 async function connectSelected() {
   if (!dashboardBackend || connectionMode === 'bluetooth') return connectBluetooth();
   usbConnected = true;
-  setDynamicGains(null);
+  resetConnectionStatus();
   syncUsbMonitoring();
   showDisconnected('USB / replay · waiting for telemetry');
   updateConnectionButtons();
@@ -268,7 +277,7 @@ async function disconnectSelected() {
     if (connectionMode === 'bluetooth') await disconnectBluetooth();
     else {
       usbConnected = false;
-      setDynamicGains(null);
+      resetConnectionStatus();
       syncUsbMonitoring();
       showDisconnected('USB / replay disconnected');
     }

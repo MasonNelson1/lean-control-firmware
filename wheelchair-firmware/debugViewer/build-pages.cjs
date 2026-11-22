@@ -9,7 +9,7 @@ const assets = [
   'index.html', 'pwa.js', 'manifest.webmanifest', 'icons/192.png', 'icons/512.png', 'icons/512-maskable.png',
   'assets/lean-full.svg', 'assets/lean-wheelchair.svg',
   'vendor/fflate-0.8.3.js', 'vendor/fflate-LICENSE.txt', 'profile-files.js',
-  'config-protocol.js', 'pid-preview.js', 'configuration.js', 'bluetooth.js'
+  'config-protocol.js', 'pid-preview.js', 'plate-view.js', 'configuration.js', 'bluetooth.js'
 ];
 function build(output = path.join(__dirname, 'dist')) {
   const destination = path.resolve(output);

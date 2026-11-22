@@ -24,7 +24,7 @@ static std::vector<std::string> columns(const char *row)
 
 int main()
 {
-    telemetry::Frame f;
+    telemetry::TelemetryFrame f;
     f.timeMs = 1000;
     f.mode = common::LEAN;
     f.lean = {100, 200, 300, 400, 0.25f, -0.1f, false};

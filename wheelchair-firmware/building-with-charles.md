@@ -30,16 +30,23 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
   - The telemetry CSV row at 20 Hz (post-gain values; the dashboard parses it).
   - `DBG R <ms> F B L R`: raw ADC counts, 20 Hz.
   - `DBG COP <ms> x y dx dy total`: centre of pressure in inches and its offset from the calibrated (upright) neutral, 20 Hz, corner layout only (`chair_sql.py` table `cop`).
-  - Once a second:
+  - `DBG M <ms> curL curR dutyL dutyR iinL iinR pidL pidR accL accR rateL rateR intL intR lim`, 20 Hz: VESC motor/input current and duty, plus the RPM smoother's internals (`pid` is its RPM before the clamp to measured ± `MAX_RPM_COMMAND_DIFF`; `lim` is the slewed speed cap). Table `motor`.
+  - `DBG VFAULT id= code= name= ...` the moment a VESC's fault code changes, including back to `NONE`. It carries the currents, erpm, duty and voltage from that poll. Table `vfault`.
+  - `DBG EVT <ms> <kind> ...` on every button press/release, mode or selection change (`why=seat-empty|selected`), rail or CoP-jump disarm, calibration press/end, profile and settings change. Table `evt`.
+  - Once a second (each on its own 20 Hz tick, so no burst overruns the HC-06):
     - `DBG SENSORS`: raw, floors, W, seat load, seated/calibrated/railed flags, `layout=PLUS|CORNER`.
     - `DBG CORNER` (corner layout): neutral, relaxed posture, the no-output box and full-lean box (left/right/back/front, inches), `reachCal`, the empty-plate baseline in use and `auto=1` when the empty-seat zero set it (`chair_sql.py` table `corner`).
-    - `DBG VESC`: per controller id, status-frame age, frames, ERPM, current, duty, MOSFET temperature, voltage.
+    - `DBG VESC`: per VESC (`side=L|R`), every CAN status frame (1–5): age, frames, ERPM, current, duty, MOSFET and motor temperature, voltage, input current, current peaks since the last line (`ipk`, `iinpk`), Ah/Wh used/charged, tachometer, and per-type age `ages=s1/../s5` (`-1` = never sent; STATUS_5 needs `can_status_msgs_r2`).
+    - `DBG VVAL`: per VESC, `COMM_GET_VALUES` (polled 10 Hz alternating, so each VESC every 200 ms; a VESC holds a fault for only 500 ms): fault code, averaged currents, temperatures, `n=asked/replies/lost`, `lat` (slowest reply ms).
+    - `DBG SYS`: loop time, control-tick spacing, CPU temperature, CAN rx/tx-fail/error counters, Bluetooth bytes and lines sent and dropped (`drop=`), least TX space.
+    - `DBG IO`: knobs (position/raw/state), buttons held, pending/active profile, selected/current mode, seated.
     - `DYNAMIC_GAINS`.
-  - The dashboard hides `DBG` lines from its console. On the corner layout it moves the channel tiles to their corners and draws the plate: live CoP with a 2 s trail, neutral (+), relaxed posture (○), the no-output box and the full-lean box.
+  - The dashboard hides `DBG` lines from its console. Its **Motor controllers** cards show each VESC's health (temps, voltage, currents, last fault, frame ages); the **VESC settings** page decodes the `DBG VCONF` dumps into every setting, side by side. Read-only: it never changes VESC settings. On the corner layout it moves the channel tiles to their corners and draws the plate: live CoP with a 2 s trail, neutral (+), relaxed posture (○), the no-output box and the full-lean box.
 
 ## Reading the data
 - **SQL:** `python3 tools/chair_sql.py "SELECT ..."` (also `--schema`, `--trend N`, `--file <csv>`).
-  - Tables: `t` (telemetry rows), `raw` (20 Hz raw), `sens`, `vesc`, `msg` (text lines; `kind` `TAP`/`CORRUPT`/...).
+  - Tables: `t` (telemetry rows), `raw` (20 Hz raw), `sens`, `corner`, `cop`, `vesc`, `vval`, `vfault`, `motor`, `sys`, `io`, `evt`, `msg` (text lines; `kind` `TAP`/`CORRUPT`/...). `--schema` lists the columns.
+  - VESC settings: `python3 tools/vesc_conf.py [log] [--all] [field ...]`.
 - **Quick look:** `python3 tools/chair_summary.py [secs]`.
 - **Experiment tools** in `../experiments/tools/`:
   - `auto_sweeps.py`: finds lean sweeps automatically and gives range and curve.

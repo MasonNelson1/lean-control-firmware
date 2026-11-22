@@ -10,7 +10,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 
 function harness({secure = true, openError = null, backend = true, configWire = false} = {}) {
   const elements = new Map();
-  const messages = [], frames = [], commands = [], plateLines = [];
+  const messages = [], frames = [], commands = [], plateLines = [], vescLines = [];
   let plateResets = 0;
   let controller, now = 0, closed = false, requestOptions;
   const port = {
@@ -33,6 +33,7 @@ function harness({secure = true, openError = null, backend = true, configWire = 
     },
     graphs() {}, showMode() {}, sensors() {},
     plateLine: line => plateLines.push(line), resetPlate: () => { plateResets++; },
+    vescLine: line => vescLines.push(line),
     appendConsole: line => messages.push(line),
     applyTelemetry: (rows, stale, source) => frames.push({rows: rows.slice(), stale, source}),
     setInterval() { return 1; }, clearInterval() {}, setTimeout, clearTimeout,
@@ -40,7 +41,7 @@ function harness({secure = true, openError = null, backend = true, configWire = 
   if (configWire) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'config-protocol.js'), 'utf8'), context);
   vm.runInContext(source, context);
   return {
-    context, elements, frames, messages, commands, plateLines,
+    context, elements, frames, messages, commands, plateLines, vescLines,
     get plateResets() { return plateResets; },
     run: code => vm.runInContext(code, context),
     send: value => controller.enqueue(typeof value === 'string' ? new TextEncoder().encode(value) : value),
@@ -163,9 +164,12 @@ test('DBG lines feed the plate view, stay out of the console, and the plate rese
   const resetsAtConnect = h.plateResets;
   assert.ok(resetsAtConnect >= 1);
   h.send('DBG SENSORS raw=1/2/3/4 floors=0/0/0/0 W=370 seatLoad=0 seated=0 calibrated=0 calActive=0 railed=0 layout=CORNER\n' +
-         'DBG COP 1234 0.19 0.43 nan nan 2507\nDBG R 1 2 3 4 5\nCalibration complete\n');
+         'DBG COP 1234 0.19 0.43 nan nan 2507\nDBG R 1 2 3 4 5\nCalibration complete\n' +
+         'DBG VFAULT id=2 code=4 name=ABS_OVER_CURRENT ms=1 imot=-48.70 iin=-3.21 erpm=-8123 duty=-0.456 vin=52.3 fetC=25.4 n=1 side=L\n');
   await settle();
-  assert.deepEqual(h.plateLines.map(line => line.split(' ')[1]), ['SENSORS', 'COP', 'R']);
+  assert.deepEqual(h.plateLines.map(line => line.split(' ')[1]), ['SENSORS', 'COP', 'R', 'VFAULT']);
+  // Every DBG line also reaches the read-only VESC panel, which keeps the ones it knows.
+  assert.equal(h.vescLines.at(-1).split(' ')[1], 'VFAULT');
   assert.deepEqual(h.messages.filter(m => m.startsWith('DBG')), []);
   assert.ok(h.messages.includes('Calibration complete'));
   await h.context.disconnectBluetooth();

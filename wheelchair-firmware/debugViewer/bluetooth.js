@@ -15,10 +15,11 @@ function setDynamicGains(gains) {
   sensors(lastRow);
 }
 
-// A connection change discards everything learned from the old source: gains
-// and the plate status (layout, neutral zone, centre-of-pressure trail).
+// A connection change discards everything learned from the old source: gains,
+// the plate status (layout, neutral zone, centre-of-pressure trail) and the VESC panel.
 function resetConnectionStatus() {
   resetPlate();
+  if (typeof resetVesc === 'function') resetVesc();
   setDynamicGains(null);
 }
 
@@ -157,7 +158,8 @@ async function readBluetooth(port) {
       }
       // DBG lines are debug status for log taps, not for the console. The layout,
       // neutral zone and centre of pressure among them feed the plate view.
-      else if (line.startsWith('DBG ')) { if (connectionMode === 'bluetooth') plateLine(line); }
+      // The VESC lines feed the read-only VESC panel.
+      else if (line.startsWith('DBG ')) { if (connectionMode === 'bluetooth') { plateLine(line); if (typeof vescLine === 'function') vescLine(line); } }
       else appendConsole(line);
     }
   }, frame => window.configLink?.receive(frame),

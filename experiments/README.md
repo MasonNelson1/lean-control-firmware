@@ -345,4 +345,20 @@ With four point supports, the centre of pressure in plate coordinates is exact b
 
 The first left attempt (23:52:29–51) was unstable because the jug wasn't sitting steadily. Readings take ~5–8 s to settle after placement (creep). One trial each, so ±≈10 %.
 
-**Interpretation:** the sensors aren't wildly different, but **left reads ≈20 % higher** than the others for the same weight. That would make riders look *left*-biased, yet both riders measured *right*-biased. So **the right bias is real, not a sensor artefact** (posture, maybe handedness as Mason suggested, or the seat sits off-centre), and the gain-corrected bias is slightly larger. Use these correction factors in the centre-of-pressure math and when placing the square. The gain-corrected square centre shifts ≈0.1–0.2" further right.
+**Interpretation (superseded by E8b):** the sensors aren't wildly different, but **left reads ≈20 % higher** than the others for the same weight. That would make riders look *left*-biased, yet both riders measured *right*-biased. So **the right bias is real, not a sensor artefact** (posture, maybe handedness as Mason suggested, or the seat sits off-centre), and the gain-corrected bias is slightly larger. Use these correction factors in the centre-of-pressure math and when placing the square. The gain-corrected square centre shifts ≈0.1–0.2" further right.
+
+## E8b: known-weight redo with steadier contact (2026-11-21, 23:58:46–23:59:46)
+**Setup:** Charles reworked the rig for more consistent contact area (jug plus a water bottle, ≈9 lb on his scale). Order: front, left, right, back. Data: `data/2026-11-21-E8b-known-weight-redo.csv`.
+| Sensor | Window | Zero | Loaded | Δ counts (E8b, ≈9 lb) | Δ counts (E8, 7.2 lb) |
+|---|---|---|---|---|---|
+| front | 58:48–58:56 | 371.6 | ≈570 | ≈198 | 71 |
+| left | 59:00–59:09 | 374.7 | ≈527 | ≈152 | 93 |
+| right | 59:16–59:24 | 372.1 | ≈522 | ≈150 | 78 |
+| back | 59:38–59:46 | 372.4 | ≈479 | ≈107 | 76 |
+
+**Interpretation:**
+- The two runs disagree a lot. Front/back went from equal (E8) to ≈2:1 (E8b), and every reading roughly doubled for 25 % more weight.
+- **The force sensors' reading depends strongly on contact area and shape, not just weight** (Charles flagged this). So a hand-placed jug test can't pin sensor gains better than ≈±30 %.
+- **Left vs right agree** in the careful run (152 vs 150), and left was never low. **The riders' right bias is real.**
+- **Front vs back gains are unknown** (equal in one run, 2:1 in the other). That matters for fore-aft centre of pressure and the square's front/back placement.
+- **Better test (tomorrow):** with the plate and its rubber stoppers on, the real contact, put a known weight at marked spots directly over each sensor and at (0,0). That measures the system as it's actually used, and gives each sensor's gain plus a centre-of-pressure accuracy check in one go.

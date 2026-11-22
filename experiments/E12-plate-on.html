@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plate-On Weight Check</title>
+<style>
+:root{--s1:var(--chart-1,#2a78d6);--s2:var(--chart-2,#eb6834);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}
+svg{width:100%;height:auto;display:block;overflow:visible}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+table{border-collapse:collapse;font-size:13px;margin:8px 0}td,th{padding:3px 10px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}
+</style></head><body>
+<h1>Plate-on check: does the math put the weight where it is?</h1>
+<p>E12, 2026-11-22. 28.2 lb set on the plate over the old plus's first hole in each direction, with gains at 1.0.</p>
+<div class="take"><ul>
+<li><b>Yes, to within 0.4"</b> (typically 0.25"). The math works on the real chair, plate and stoppers included.</li>
+<li>Every spot reads about 0.2" forward, and the right/front spots are pulled ≈0.3" toward front-right. Front-right probably reads ~10% high, but rider calibration cancels a constant offset like that.</li>
+<li>Scale error: the left-to-right spacing reads 7% wide, front-to-back 3% short. Per-rider reach calibration absorbs both, so the gains stay at 1.0.</li></ul></div>
+<div class="legend"><span class="key"><svg width="14" height="14" style="width:14px"><circle cx="7" cy="7" r="5" fill="none" stroke="var(--ink2)" stroke-width="2"/></svg>Where the weight sat</span><span class="key"><svg width="14" height="14" style="width:14px"><circle cx="7" cy="7" r="5" fill="var(--s1)"/></svg>Where the math put it</span></div>
+<div id="map"></div>
+<table><tr><th>Spot</th><th>True (x, y)</th><th>Measured</th><th>Error</th></tr>
+<tr><td>back</td><td>(0, −2.19)</td><td>(−0.15, −1.95)</td><td>0.28"</td></tr>
+<tr><td>left</td><td>(−2.38, 0)</td><td>(−2.43, +0.19)</td><td>0.20"</td></tr>
+<tr><td>front</td><td>(0, +2.25)</td><td>(+0.40, +2.37)</td><td>0.42"</td></tr>
+<tr><td>right</td><td>(+2.13, 0)</td><td>(+2.38, +0.31)</td><td>0.40"</td></tr></table>
+<script>
+const SENS=[['front-left',-5.75,3.0],['front-right',5.375,2.9375],['back-left',-5.75,-4.1875],['back-right',5.3125,-4.25]];
+const PTS=[['back',0,-2.1875,-0.15,-1.95],['left',-2.375,0,-2.43,0.19],['front',0,2.25,0.40,2.37],['right',2.125,0,2.38,0.31]];
+const W=700,H=500,s=46,cx=W/2,cy=240,X=v=>cx+v*s,Y=v=>cy-v*s;
+let o=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="True vs measured weight positions">`;
+for(let v=-6;v<=6;v+=1)o+=`<line x1="${X(v)}" x2="${X(v)}" y1="${Y(4.3)}" y2="${Y(-4.5)}" stroke="var(--line)"/>`;
+for(let v=-4;v<=4;v+=1)o+=`<line x1="${X(-6.3)}" x2="${X(6.3)}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${X(-6.3)-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v}"</text>`;
+for(let v=-6;v<=6;v+=2)o+=`<text x="${X(v)}" y="${Y(-5.3)}" text-anchor="middle" font-size="11" fill="var(--ink2)">${v}"</text>`;
+o+=`<path d="M${X(-5.75)} ${Y(3)} L${X(5.375)} ${Y(2.9375)} L${X(5.3125)} ${Y(-4.25)} L${X(-5.75)} ${Y(-4.1875)} Z" fill="none" stroke="var(--ink2)" stroke-dasharray="4 4"/>`;
+SENS.forEach(([n,x,y])=>o+=`<rect x="${X(x)-10}" y="${Y(y)-10}" width="20" height="20" rx="3" fill="var(--ink2)"/><text x="${X(x)}" y="${Y(y)+(y>0?-16:26)}" text-anchor="middle" font-size="12" fill="var(--ink)">${n}</text>`);
+PTS.forEach(([n,tx,ty,mx,my])=>{o+=`<line x1="${X(tx)}" y1="${Y(ty)}" x2="${X(mx)}" y2="${Y(my)}" stroke="var(--s1)" stroke-width="1.5"/><circle cx="${X(tx)}" cy="${Y(ty)}" r="7" fill="none" stroke="var(--ink2)" stroke-width="2"/><circle cx="${X(mx)}" cy="${Y(my)}" r="5" fill="var(--s1)"/>`;
+ const dx=n==='left'?-14:n==='right'?14:0,dy=n==='front'?-14:n==='back'?24:4;o+=`<text x="${X(tx)+dx}" y="${Y(ty)+dy}" text-anchor="${n==='left'?'end':n==='right'?'start':'middle'}" font-size="12" font-weight="600" fill="var(--ink)">${n}</text>`});
+document.getElementById('map').innerHTML=o+'</svg>';
+</script></body></html>

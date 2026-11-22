@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Court Test Plan</title>
+<style>
+:root{--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--warn:var(--warning,#d97706);--ok:var(--success,#1baf7a)}
+body{margin:0;font-size:14px;line-height:1.5;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 6px}p{margin:0 0 8px;color:var(--ink2)}
+.box{background:var(--box);border-radius:var(--radius,8px);padding:14px 16px;margin:10px 0}.box li{margin:3px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:6px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{color:var(--ink2);font-weight:600}
+td:first-child{white-space:nowrap;font-weight:600}.stop{box-shadow:inset 3px 0 0 var(--warn)}
+</style></head><body>
+<h1>Court test plan, 2026-11-22 (≈90 min)</h1>
+<p>Pickleball court, rec center. On the chair: corner-layout lean math (never ridden), new VESC settings (min speed 300 ERPM, 250 ms timeout + 5 A brake, matched current limits, battery voltage on). The laptop follows the chair with the tap running, since the HC-06 reaches about 10 m.</p>
+
+<div class="box"><b>Every test:</b> say "<i>T3 start, Mason, speed knob 1</i>" out loud before it, and "<i>stop</i>" after. Calling it out is what lets me label the data later. A spotter walks beside the chair with a hand near the e-stop. Start on the lowest speed knob, and Mason rides first (closest to Parker's size).</div>
+
+<h2>Before you leave (10 min, wheels off the ground)</h2>
+<table><tr><th>#</th><th>Do</th><th>Pass if</th></tr>
+<tr><td>B1</td><td>Calibrate: press while upright, then press again within 10 s while relaxed. Lean forward, back, left, right.</td><td>The right wheels turn the right way. Relaxed = no motion. The dashboard plate dot follows you.</td></tr>
+<tr><td>B2</td><td>Stand up mid-lean.</td><td>Wheels stop within a fraction of a second.</td></tr>
+<tr><td>B3</td><td>Unplug each seat sensor for 10 s, one at a time, chair in DISARM. Call out which one.</td><td>Answers the review's open question: what a pulled wire reads. Under 340 = caught.</td></tr>
+<tr><td>B4</td><td>E-stop while the wheels spin.</td><td>Everything stops. The tap reconnects by itself.</td></tr></table>
+
+<h2>On the court</h2>
+<table><tr><th>#</th><th>Test</th><th>What it answers</th></tr>
+<tr><td>T1</td><td><b>Sit still 30 s</b>, upright then relaxed (calibrate first).</td><td>Is neutral really neutral outdoors, with no creep?</td></tr>
+<tr><td>T2</td><td><b>Creep:</b> lean as little as possible and hold the slowest steady roll for 10 s. Repeat 3×.</td><td>Did min speed 900 → 300 fix the dead-then-lurch start? Smallest smooth speed.</td></tr>
+<tr><td>T3</td><td><b>Straight line</b> down the long side (44 ft): gentle, medium, full lean, 2 runs each.</td><td>Does it still pull to one side now the current limits match? Commanded vs actual wheel speed.</td></tr>
+<tr><td>T4</td><td><b>Stop:</b> from medium, lean back to stop at a court line. Measure the distance with the court lines. 3×, then 2× from full.</td><td>Stopping distance. From full: does the left motor still "give out"? (The over-current theory.)</td></tr>
+<tr><td>T5</td><td><b>Turns:</b> spin in place left and right, then figure-8s around the kitchen.</td><td>Turn rate, steadiness, and whether the 0.25" side deadzone feels right.</td></tr>
+<tr><td>T6</td><td><b>Reverse:</b> slow back-up, then reverse while turning.</td><td>Back-lean range on the rectangle, and the tuned reverse-turn flip.</td></tr>
+<tr><td>T7</td><td><b>Basketball drills:</b> start, sprint, stop, quick direction changes, 2 min.</td><td>Real feel. Watch motor/MOSFET temperatures and battery sag.</td></tr>
+<tr><td>T8</td><td><b>"Controller dies" test</b> (walking pace only, spotter ready): press the Teensy reset while rolling slowly.</td><td>Commands stop → after 250 ms the VESCs brake at 5 A. Charles wanted to feel this one. Is 5 A enough?</td></tr>
+<tr><td>T9</td><td><b>Charles rides</b> T1–T5 (recalibrate first).</td><td>Second, heavier rider. Per-rider reach.</td></tr></table>
+
+<h2 class="stop">Stop and call me if</h2>
+<ul>
+<li>Any motion you didn't ask for, or a wheel turning the wrong way.</li>
+<li>LEAN disarms by itself more than once (CoP jump, sensor rail, empty seat).</li>
+<li>A motor cuts out (that's what we want to catch: keep the laptop close so the VESC lines are recorded).</li>
+<li>MOSFET temperature over 70 °C (in `DBG VESC fetC`), or battery under 48 V.</li></ul>
+
+<h2>Write down</h2>
+<p>Footrest and backrest-strap heights, speed knob position for each test, stopping distances, and anything that feels wrong, in your words. Feel is data.</p>
+
+<h2>After</h2>
+<p>For each test I'll chart commanded vs actual wheel speed, lean (CoP) traces, stopping distances, per-motor current, battery voltage, and any VESC faults. Then we decide what to change: deadzone and curve, whether the 50-RPM band-aid can go, and how much of the controls to redo.</p>
+</body></html>

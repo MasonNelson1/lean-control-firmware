@@ -50,6 +50,8 @@ run_native() {
                                src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
     native dynamic_calibration "${LEAN_INC[@]}" tests/native/dynamic_calibration_test.cpp \
                                src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
+    native plus_golden         "${LEAN_INC[@]}" tests/native/plus_golden_test.cpp \
+                               src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
 }
 
 run_viewer() {

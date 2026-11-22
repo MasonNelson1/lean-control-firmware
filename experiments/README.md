@@ -332,3 +332,17 @@ With four point supports, the centre of pressure in plate coordinates is exact b
 2. Charles's back lean moves the centre of pressure only ≈0.3–0.5", against ≈1.3–1.5" forward. Back is the weakest axis for a bigger rider too. He noted his legs tense up when leaning back; with legs relaxed (closer to Parker) he pivots on the backrest.
 3. **Both riders lean further right than left** (Charles +1.9" vs −0.6"; Mason was right-heavy too). Two different riders sharing a bias points to a sensor/amplifier gain difference or seat geometry, not posture. The known-weight test will tell which.
 4. Square sizing across both riders and both foot positions: centre-of-pressure envelope x −1.6"…+2.4", y −3.5"…+1.1". Centre ≈(+0.4", −1.2"); corners ≈5" out → x ≈ −4.6"/+5.4", y ≈ +3.8" (front pair) / −6.2" (back pair). Re-check after the gain test.
+
+## E8: known-weight sensor check (2026-11-21, 23:51:55–23:55:44)
+**Setup:** plate and seat off. A 7.2 lb water jug (Charles's scale) sitting on the ring end of a 7/16" wrench, the ring centred on each sensor in turn. Data: `data/2026-11-21-E8-known-weight.csv`.
+**Results (settled reading over each sensor's own zero):**
+| Sensor | Window | Zero | Loaded | Δ counts | Relative gain | Correction |
+|---|---|---|---|---|---|---|
+| front | 23:52:07–13 | 372 | 443 | 71 | 0.89 | ×1.12 |
+| back | 23:52:20–25 | 372 | 448 | 76 | 0.96 | ×1.05 |
+| left (redo) | 23:55:24–44 | 375 | 468 | 93 | 1.17 | ×0.85 |
+| right | 23:53:06–14 | 372 | 450 | 78 | 0.98 | ×1.02 |
+
+The first left attempt (23:52:29–51) was unstable because the jug wasn't sitting steadily. Readings take ~5–8 s to settle after placement (creep). One trial each, so ±≈10 %.
+
+**Interpretation:** the sensors aren't wildly different, but **left reads ≈20 % higher** than the others for the same weight. That would make riders look *left*-biased, yet both riders measured *right*-biased. So **the right bias is real, not a sensor artefact** (posture, maybe handedness as Mason suggested, or the seat sits off-centre), and the gain-corrected bias is slightly larger. Use these correction factors in the centre-of-pressure math and when placing the square. The gain-corrected square centre shifts ≈0.1–0.2" further right.

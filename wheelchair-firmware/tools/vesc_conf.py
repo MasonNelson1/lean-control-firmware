@@ -56,8 +56,9 @@ def dumps(path):
         m = re.search(r'DBG VCONF id=(\d+) cmd=(\d+) len=(\d+) off=(\d+) ([0-9a-f]+)', line)
         if not m: continue
         vid, cmd, n, off, hx = int(m[1]), int(m[2]), int(m[3]), int(m[4]), m[5]
+        if len(hx) != 2 * min(24, n - off): continue  # line garbled over Bluetooth; a later cycle resends it
         key = (vid, cmd)
-        if off == 0 or key not in bufs or bufs[key][0] != n: bufs[key] = [n, bytearray(n), set()]
+        if key not in bufs or bufs[key][0] != n: bufs[key] = [n, bytearray(n), set()]
         b = bufs[key]; chunk = bytes.fromhex(hx); b[1][off:off+len(chunk)] = chunk; b[2].update(range(off, off+len(chunk)))
     return bufs
 

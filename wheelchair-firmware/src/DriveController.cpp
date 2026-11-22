@@ -22,25 +22,29 @@ const char *DriveController::faultName(Fault fault)
     {
     case Fault::SensorRail: return "SENSOR_RAIL";
     case Fault::VescSilent: return "VESC_SILENT";
+    case Fault::WatchdogReset: return "WATCHDOG_RESET";
     default: return "NONE";
     }
 }
 
-void DriveController::begin(common::mode initial)
+void DriveController::begin(common::mode initial, bool afterWatchdogReset)
 {
-    modeState_.begin(initial);
+    modeState_.begin(afterWatchdogReset ? DISARM : initial);
+    recoverFromReset_ = afterWatchdogReset;
+    recoverTimed_ = false;
     lean_.reset();
     remote_.reset();
     assist_.reset();
     motion_.reset();
     stop_.cancel();
     driving_ = false;
-    fault_ = Fault::None;
+    fault_ = afterWatchdogReset ? Fault::WatchdogReset : Fault::None;
 }
 
 void DriveController::applySettings()
 {
     lean_.updateResponseCurve();
+    STOP_HANDOFF_RPM = settings::vescMinSpeed.get() + STOP_HANDOFF_MARGIN_RPM;
     // setTuning() preserves the existing motion and error history.
     motion_.setTuning(settings::normalPid.tuning());
 }
@@ -70,8 +74,11 @@ ModeStateMachine::Actions DriveController::updateButtons(ModeStateMachine::Input
 void DriveController::raiseFault(Fault fault)
 {
     fault_ = fault;
+    // An unplugged sensor does not show up here: the sensors are two-wire,
+    // so an open circuit reads the same as an unloaded sensor. (LeanDriveMode
+    // makes sure that cannot create motion.)
     telemetry::Telemetry::logf(fault == Fault::SensorRail
-                                   ? "Fault: a seat sensor is reading at an ADC rail (shorted or unplugged). Disarming.\n"
+                                   ? "Fault: a seat sensor is reading at an ADC rail (shorted wiring or a failed amplifier). Disarming.\n"
                                    : "Fault: a motor controller stopped reporting its speed. Disarming.\n");
     modeState_.requestDisarm();
 }
@@ -240,6 +247,8 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         };
         left = keepBraking(left, in.leftRPM);
         right = keepBraking(right, in.rightRPM);
+        // The command itself may not run further ahead than what is sent.
+        motion_.limitLead(measuredLinear, measuredTurn, MAX_RPM_COMMAND_DIFF);
     }
     commands_ = {linearTargetRPM + turnTargetRPM, linearTargetRPM - turnTargetRPM, left, right};
     sentLeftRPM_ = left;
@@ -317,7 +326,40 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
     }
     if (calPressed && modeState_.current() == DISARM && modeState_.selected() == DISARM &&
         !stop_.active() && !lean_.tareActive())
-        lean_.beginTare(in.now);
+    {
+        // A tare with someone (or something) on the seat would hide that load
+        // from then on: the rider would read as not seated, or the seat would
+        // read empty in the middle of a ride.
+        if (lean_.isSeated())
+            telemetry::Telemetry::logf("Tare refused: the seat reads as occupied (load %d, threshold %d). Empty the seat. "
+                                       "If it is empty, set the sensor zeros from the dashboard.\n",
+                                       lean_.totalLoad(), settings::seatThreshold.get());
+        else
+            lean_.beginTare(in.now);
+    }
+
+    // After a watchdog restart the chair may be rolling with nobody in
+    // control. Brake from the measured speed as soon as the VESCs report, or
+    // blind if they stay silent for half a second.
+    if (recoverFromReset_)
+    {
+        if (!recoverTimed_)
+        {
+            recoverTimed_ = true;
+            recoverStartedAt_ = in.now;
+        }
+        if (fresh)
+        {
+            if (std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) >= STOP_DONE_RPM)
+                stop_.begin(in.leftRPM, in.rightRPM, in.now);
+            recoverFromReset_ = false;
+        }
+        else if (in.now - recoverStartedAt_ >= 500)
+        {
+            stop_.beginBlind(in.now);
+            recoverFromReset_ = false;
+        }
+    }
 
     applySeat(in);
 
@@ -339,7 +381,11 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
                 return stopOrRelease(in);
             }
         }
-        const auto command = lean_.command();
+        // Which way the chair is going, as a share of the speed limit: the
+        // command when driving, else the wheels.
+        const float maxRPM = speedLimitMS_ * LINEAR_TO_RPM;
+        const float travelRPM = driving_ ? motion_.linearRPM() : (in.leftRPM + in.rightRPM) / 2.0f;
+        const auto command = lean_.command(maxRPM > 0.0f ? travelRPM / maxRPM : 0.0f);
         if (command.stopped)
             return stopOrRelease(in);
 
@@ -383,8 +429,16 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
 
     default: // DISARM
     {
-        if (lean_.tareActive() && lean_.updateTare(in.now, in.calButtonHeld) == LeanDriveMode::Event::TareDone)
-            saveCalibration();
+        if (lean_.tareActive())
+        {
+            if (lean_.isSeated())
+            {
+                lean_.cancelCalibration();
+                telemetry::Telemetry::logf("Tare cancelled: the seat became occupied.\n");
+            }
+            else if (lean_.updateTare(in.now, in.calButtonHeld) == LeanDriveMode::Event::TareDone)
+                saveCalibration();
+        }
         return stopOrRelease(in);
     }
     }

@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <initializer_list>
 
 using namespace common;
 using SM = ModeStateMachine;
@@ -89,8 +90,39 @@ int main()
         sm.begin(REMOTE);
         assert(!sm.requiresSeat() && !sm.applySeat(false, 100).changed);
     }
+    { // A DISARM press that stops a drive mode never becomes Assist, however long it is held.
+        for (mode driving : {LEAN, REMOTE})
+        {
+            SM sm;
+            sm.begin(driving);
+            sm.applySeat(true, 0);
+            sm.update(press(DISARM), 100);
+            assert(sm.selected() == DISARM);
+            sm.applySeat(true, 105);
+            for (uint32_t t = 110; t < 5000; t += 5)
+                assert(!sm.update(seated(), t).resetAssist);
+            assert(sm.selected() == DISARM && sm.current() == DISARM);
+            // Let go and press again, now from DISARM: this hold does reach Assist.
+            auto in = seated();
+            in.disarm.released = true;
+            sm.update(in, 5000);
+            sm.update(press(DISARM), 5100);
+            assert(!sm.update(seated(), 5599).resetAssist);
+            assert(sm.update(seated(), 5600).resetAssist && sm.selected() == ASSIST);
+        }
+        // Selected DISARM but the control tick has not applied it yet: still not an Assist press.
+        SM early;
+        early.begin(REMOTE);
+        early.update(press(DISARM), 10);
+        auto in = seated();
+        in.disarm.released = true;
+        early.update(in, 20);
+        early.update(press(DISARM), 30); // current mode is still REMOTE
+        assert(!early.update(seated(), 1000).resetAssist && early.selected() == DISARM);
+    }
     { // DISARM wins simultaneous presses; Assist requires the full 500 ms.
         SM sm;
+        sm.begin(DISARM);
         auto in = press(DISARM);
         in.lean = in.remote = in.disarm;
         sm.update(in, 100);
@@ -108,6 +140,7 @@ int main()
     }
     { // Releasing DISARM or losing the seat cancels Assist hold.
         SM sm;
+        sm.begin(DISARM);
         sm.update(press(DISARM), 100);
         auto in = seated();
         in.disarm.released = true;
@@ -173,6 +206,7 @@ int main()
     }
     { // Assist and profile hold arithmetic survives millis() rollover.
         SM sm;
+        sm.begin(DISARM);
         const uint32_t start = UINT32_MAX - 100;
         sm.update(press(DISARM), start);
         assert(!sm.update(seated(), start + 499).resetAssist);
@@ -253,6 +287,7 @@ int main()
     }
     { // A programmatic disarm clears an earlier Assist hold.
         SM sm;
+        sm.begin(DISARM);
         sm.update(press(DISARM), 10);
         sm.requestDisarm();
         assert(!sm.update(seated(), 1000).resetAssist);

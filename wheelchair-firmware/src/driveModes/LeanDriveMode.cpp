@@ -83,12 +83,25 @@ void LeanDriveMode::reset()
     cancelCalibration();
 }
 
-LeanDriveMode::Command LeanDriveMode::command()
+// Lean beyond neutral on each axis, in counts: forward and right positive.
+// Each sensor contributes only the load it has gained since neutral (see the
+// header for why lost load is ignored).
+void LeanDriveMode::effectiveLean(float &forward, float &right) const
+{
+    float gained[4];
+    for (size_t i = 0; i < 4; ++i)
+        gained[i] = std::max(load[i] - neutralLoad[i], 0.0f);
+    forward = gained[0] - gained[1];
+    right = gained[3] - gained[2];
+}
+
+LeanDriveMode::Command LeanDriveMode::command(float travel)
 {
     if (!neutralValid || calibrationActive())
         return {0.0f, 0.0f, true};
 
-    const float y = leanY - neutralY, x = leanX - neutralX;
+    float y, x;
+    effectiveLean(y, x);
     const float rangeY = static_cast<float>(y >= 0.0f ? settings::rangeForward.get() : settings::rangeBack.get());
     const float rangeX = static_cast<float>(x >= 0.0f ? settings::rangeRight.get() : settings::rangeLeft.get());
     const float deadband = settings::deadband.get();
@@ -100,12 +113,18 @@ LeanDriveMode::Command LeanDriveMode::command()
     // it feels natural. Threshold -0.3, not 0, was picked by feel on the chair; at 0
     // turning near a standstill felt wrong. Below -0.9 (hard reverse) turning is off.
     //
-    // The flip used to be a step: with the speed hovering at -0.3 the steering
-    // jumped between full left and full right. It now fades through zero
-    // between -0.2 and -0.4, still centred on the team's -0.3, and the cut-off
-    // at -0.9 fades in from -0.8. Outside those bands nothing changed.
-    const float reverseBlend = clampUnit((speed + 0.3f) / 0.1f);
-    const float hardReverseFade = std::min(1.0f, std::max(0.0f, (speed + 0.9f) / 0.1f));
+    // Two things changed around the team's numbers, which are still the centre:
+    // - The flip used to be a step: with the speed hovering at -0.3 the steering
+    //   jumped between full left and full right. It now fades through zero
+    //   between -0.2 and -0.4, and the cut-off at -0.9 fades in from -0.8.
+    // - A back lean while the chair is still rolling forward is braking, not
+    //   reversing. Flipping the turn there steered the chair the wrong way
+    //   (lean back and right at speed, turn left). So neither rule applies
+    //   while the chair travels forward faster than 15% of the speed limit;
+    //   they fade in between 15% and 5% as it slows.
+    const float forwardTravel = std::min(1.0f, std::max(0.0f, (travel - 0.05f) / 0.10f));
+    const float reverseBlend = std::max(clampUnit((speed + 0.3f) / 0.1f), 2.0f * forwardTravel - 1.0f);
+    const float hardReverseFade = std::max(std::min(1.0f, std::max(0.0f, (speed + 0.9f) / 0.1f)), forwardTravel);
     turn *= reverseBlend * hardReverseFade;
 
     telemetry.speed = speed;
@@ -120,7 +139,7 @@ void LeanDriveMode::startWindow(uint32_t now)
 {
     windowSince = now;
     windowSamples = 0;
-    sumY = sumX = sumTotal = 0.0f;
+    sumLoad.fill(0.0f);
     minY = maxY = leanY;
     minX = maxX = leanX;
     rawSum.fill(0);
@@ -170,9 +189,8 @@ LeanDriveMode::Event LeanDriveMode::updateCalibration(uint32_t now, bool buttonH
 
     case State::Neutral:
     {
-        sumY += leanY;
-        sumX += leanX;
-        sumTotal += total;
+        for (size_t i = 0; i < load.size(); ++i)
+            sumLoad[i] += load[i];
         ++windowSamples;
         minY = std::min(minY, leanY);
         maxY = std::max(maxY, leanY);
@@ -196,11 +214,11 @@ LeanDriveMode::Event LeanDriveMode::updateCalibration(uint32_t now, bool buttonH
         if (now - windowSince < StillWindowMs)
             break;
 
-        neutralY = sumY / windowSamples;
-        neutralX = sumX / windowSamples;
-        neutralTotal = sumTotal / windowSamples;
-        telemetry::Telemetry::logf("** Calibrated: neutral F-B %.0f, R-L %.0f, seated load %.0f **\n",
-                                   neutralY, neutralX, neutralTotal);
+        for (size_t i = 0; i < load.size(); ++i)
+            neutralLoad[i] = sumLoad[i] / windowSamples;
+        neutralTotal = neutralLoad[0] + neutralLoad[1] + neutralLoad[2] + neutralLoad[3];
+        telemetry::Telemetry::logf("** Calibrated: neutral loads F=%.0f B=%.0f L=%.0f R=%.0f, total %.0f **\n",
+                                   neutralLoad[0], neutralLoad[1], neutralLoad[2], neutralLoad[3], neutralTotal);
         if (!rangeRequested)
         {
             neutralValid = true;
@@ -209,20 +227,25 @@ LeanDriveMode::Event LeanDriveMode::updateCalibration(uint32_t now, bool buttonH
         }
         state = State::Range;
         stateSince = now;
-        minY = maxY = neutralY;
-        minX = maxX = neutralX;
+        // From here the extremes are of the lean beyond neutral, measured the
+        // same way command() measures it.
+        minY = maxY = minX = maxX = 0.0f;
         telemetry::Telemetry::logf("Range calibration started: lean fully forward, back, left and right, then press the button.\n");
         break;
     }
 
     case State::Range:
-        minY = std::min(minY, leanY);
-        maxY = std::max(maxY, leanY);
-        minX = std::min(minX, leanX);
-        maxX = std::max(maxX, leanX);
+    {
+        float y, x;
+        effectiveLean(y, x);
+        minY = std::min(minY, y);
+        maxY = std::max(maxY, y);
+        minX = std::min(minX, x);
+        maxX = std::max(maxX, x);
         if (buttonPressed || now - stateSince >= RangeTimeoutMs)
             return finishRange();
         break;
+    }
 
     default:
         break;
@@ -238,16 +261,16 @@ LeanDriveMode::Event LeanDriveMode::finishRange()
 
     config::ConfigField<int> *fields[] = {&settings::rangeForward, &settings::rangeBack,
                                           &settings::rangeLeft, &settings::rangeRight};
-    const float reach[] = {maxY - neutralY, neutralY - minY, neutralX - minX, maxX - neutralX};
+    const float reach[] = {maxY, -minY, -minX, maxX};
     const char *names[] = {"forward", "back", "left", "right"};
     int accepted = 0;
     for (size_t i = 0; i < 4; ++i)
     {
         const int range = static_cast<int>(lroundf(reach[i] * RangeFullFraction));
-        if (range < settings::LeanRangeMin)
+        if (reach[i] < RangeMinReach)
         {
-            telemetry::Telemetry::logf("Range calibration: %s lean only reached %.0f counts; keeping %d.\n",
-                                       names[i], reach[i], fields[i]->get());
+            telemetry::Telemetry::logf("Range calibration: %s lean only reached %.0f counts (%.0f needed); keeping %d.\n",
+                                       names[i], reach[i], RangeMinReach, fields[i]->get());
             continue;
         }
         fields[i]->set(std::min(range, settings::LeanRangeMax));

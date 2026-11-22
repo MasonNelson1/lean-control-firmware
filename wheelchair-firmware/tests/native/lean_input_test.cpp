@@ -175,24 +175,81 @@ int main()
     command = rig.settle();
     assert(near(command.turn, forwardTurn));
 
-    // A reading at either ADC rail on any one sensor is a fault after 4 samples in a row.
-    for (uint8_t pin : {common::PIN_F, common::PIN_B, common::PIN_L, common::PIN_R})
-        for (int stuck : {4095, 0})
+    // A back lean while the chair still rolls forward is braking, not
+    // reversing: the turn keeps its normal sense until the chair has slowed.
+    struct { float lean, travel, factor; } braking[] = {
+        {0.60f, 1.00f, 1.0f},  // leaning back hard at full forward speed: steer normally
+        {0.95f, 0.50f, 1.0f},  // even a full back lean leaves steering on while rolling forward
+        {0.60f, 0.15f, 1.0f},  // down to 15% of the speed limit
+        {0.60f, 0.10f, 0.0f},  // fading through zero...
+        {0.60f, 0.05f, -1.0f}, // ...to the reversing sense as the chair comes to rest
+        {0.60f, 0.00f, -1.0f},
+        {0.60f, -0.50f, -1.0f}, // and while it reverses
+        {0.95f, -0.90f, 0.0f},  // hard reverse: steering off, as before
+        {0.10f, 0.50f, 1.0f},   // light back lean: normal sense either way
+        {0.10f, -0.50f, 1.0f},
+    };
+    for (const auto &point : braking)
+    {
+        lean(-countsFor(point.lean, deadband, speedKnee, back), sideCounts);
+        rig.sample(300);
+        command = rig.mode.command(point.travel);
+        assert(near(command.speed, -point.lean, 0.01f));
+        assert(near(command.turn, forwardTurn * point.factor, forwardTurn * 0.12f));
+    }
+    // Slowing down through the fade never jumps the turn command.
+    lean(-countsFor(0.6f, deadband, speedKnee, back), sideCounts);
+    rig.sample(300);
+    previousTurn = rig.mode.command(1.0f).turn;
+    for (float travel = 1.0f; travel >= -1.0f; travel -= 0.005f)
+    {
+        const float turn = rig.mode.command(travel).turn;
+        assert(std::fabs(turn - previousTurn) < 0.05f);
+        previousTurn = turn;
+    }
+
+    // A sensor that loses its reading (a broken wire reads like an unloaded
+    // sensor) can never create motion or add to it, in any posture.
+    for (int forwardLean : {0, 300, -200})
+        for (int rightLean : {0, 250, -250})
         {
-            lean(0, 0);
-            rig.sample();
-            assert(!rig.mode.sensorAtRail());
-            sensorInputs[pin] = stuck;
-            rig.sample(15);
-            assert(!rig.mode.sensorAtRail()); // 3 samples: a glitch
-            rig.sample();
-            assert(rig.mode.sensorAtRail());
-            rig.sample(100);
-            assert(rig.mode.sensorAtRail());
+            lean(forwardLean, rightLean);
+            const auto before = rig.settle();
+            const int healthy[4] = {sensorInputs[common::PIN_F], sensorInputs[common::PIN_B],
+                                    sensorInputs[common::PIN_L], sensorInputs[common::PIN_R]};
+            const uint8_t pins[4] = {common::PIN_F, common::PIN_B, common::PIN_L, common::PIN_R};
+            const int zeros[4] = {settings::zeroFront.get(), settings::zeroBack.get(),
+                                  settings::zeroLeft.get(), settings::zeroRight.get()};
+            for (int broken = 0; broken < 4; ++broken)
+            {
+                sensorInputs[pins[broken]] = zeros[broken]; // open circuit: reads its unloaded value
+                const auto after = rig.settle();
+                // Each axis either keeps the command it had or loses it. It never grows
+                // and never changes sign.
+                assert(std::fabs(after.speed) <= std::fabs(before.speed) + 0.001f && after.speed * before.speed >= 0);
+                // (In a back lean the reversing rule rescales the rider's own turn as the
+                // speed command changes, so the turn is compared in the other postures.)
+                if (forwardLean >= 0)
+                    assert(std::fabs(after.turn) <= std::fabs(before.turn) + 0.001f && after.turn * before.turn >= 0);
+                // Even a reading below the zero (a drifted or wrongly tared sensor) adds nothing.
+                sensorInputs[pins[broken]] = zeros[broken] - 60;
+                const auto below = rig.settle();
+                assert(std::fabs(below.speed) <= std::fabs(before.speed) + 0.001f && below.speed * before.speed >= 0);
+                sensorInputs[pins[broken]] = healthy[broken];
+            }
         }
+    // The worst single case by plain differences: the front sensor (133 counts
+    // at neutral) goes open while the rider sits neutral. That is -133 of a
+    // 400-count back range, a third of full reverse. Here it is nothing.
     lean(0, 0);
-    rig.sample();
-    assert(!rig.mode.sensorAtRail()); // not latched here: the disarm is what sticks
+    rig.settle();
+    sensorInputs[common::PIN_F] = settings::zeroFront.get();
+    command = rig.settle();
+    assert(command.speed == 0 && command.turn == 0);
+    // A lean in which the far sensor also unloads counts by the gain alone.
+    loads(NeutralF + 300, 0, NeutralL, NeutralR);
+    command = rig.settle();
+    assert(near(command.speed, shaped(300.0f / fwd, deadband, speedKnee)));
 
     // Outside LEAN nothing asks for a command: telemetry shows zero, not the
     // last command from when LEAN was driving.

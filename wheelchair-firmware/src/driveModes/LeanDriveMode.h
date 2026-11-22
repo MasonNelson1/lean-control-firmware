@@ -11,8 +11,8 @@
 // turn command, each from -1 to 1.
 //
 //   load   = reading - that sensor's zero (its reading with the seat empty)
-//   lean   = (front - back) and (right - left), minus the same differences
-//            captured while the rider sat neutral
+//   gain   = load - that sensor's load with the rider neutral, never below 0
+//   lean   = (front gain - back gain) and (right gain - left gain)
 //   input  = lean / the full-lean range for that direction (settings, set by
 //            the range calibration), limited to -1..1
 //   output = deadband, then the response curve
@@ -24,6 +24,15 @@
 // and would tie the feel near neutral to a small, unrepeatable number.
 // A difference of an opposite pair cancels anything that loads both sensors
 // together, and the range is measured per rider and kept.
+//
+// Only load a sensor has gained counts; load it has lost counts as nothing.
+// The sensors are two-wire: a broken wire reads the same as an unloaded
+// sensor, which as a plain difference would look like a lean away from it
+// (a front sensor carrying 133 counts at neutral would read as a third of
+// full reverse). This way a sensor that loses its reading takes a direction
+// away but can never create or add to motion. It costs little: in the logged
+// rides the leaned-toward sensor gains hundreds of counts, while the other
+// can lose no more than its small neutral load.
 //
 // The same samples decide whether a rider is seated and whether a sensor has
 // failed. Sensor order in arrays is front, back, left, right.
@@ -63,6 +72,12 @@ public:
     // A measured full lean maps slightly past full command, so the rider does
     // not have to strain to the very end of their reach for top speed.
     static constexpr float RangeFullFraction = 0.9f;
+    // The range calibration only accepts a direction that was leaned at least
+    // this far. A smaller reach is a rider who did not lean that way, and
+    // taking it as "full lean" would make that direction a hair trigger.
+    // (A range down to settings::LeanRangeMin can still be typed in from the
+    // dashboard for a rider whose leans really are that small.)
+    static constexpr float RangeMinReach = 120.0f;
     // The deadband is never narrower than this, whatever the range: ADC noise.
     static constexpr float DeadbandMinCounts = 6.0f;
     // Seat: empty again below this share of the threshold, held this long.
@@ -84,8 +99,10 @@ public:
     // Forget neutral. LEAN will not drive until the rider calibrates again.
     void reset();
     bool calibrated() const { return neutralValid; }
-    // The lean command from the last sample.
-    Command command();
+    // The lean command from the last sample. travel is the chair's speed as
+    // a share of the speed limit, forward positive: it decides whether a
+    // back lean means "brake" (still rolling forward) or "reverse".
+    Command command(float travel = 0.0f);
 
     // Calibration button, in LEAN. A short press captures neutral once the
     // rider has let go and sat still. Holding for RangeHoldMs also measures
@@ -112,6 +129,7 @@ public:
 private:
     enum class State : uint8_t { Idle, Held, Settle, Neutral, Range, TareHeld, TareCapture };
 
+    void effectiveLean(float &forward, float &right) const;
     void startWindow(uint32_t now);
     bool windowStill(float toleranceY, float toleranceX) const;
     Event finishRange();
@@ -128,7 +146,8 @@ private:
     uint8_t railCount = 0;
 
     bool neutralValid = false;
-    float neutralY = 0.0f, neutralX = 0.0f, neutralTotal = 0.0f;
+    std::array<float, 4> neutralLoad{}; // each sensor's load with the rider neutral
+    float neutralTotal = 0.0f;
 
     float speedResponseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
     float turnResponseExponent = 2.0f;
@@ -138,7 +157,7 @@ private:
     uint32_t pressedAt = 0, stateSince = 0, captureSince = 0, windowSince = 0;
     // One still-window: sums for the average, extremes for the stillness test.
     uint32_t windowSamples = 0;
-    float sumY = 0.0f, sumX = 0.0f, sumTotal = 0.0f;
+    std::array<float, 4> sumLoad{};
     float minY = 0.0f, maxY = 0.0f, minX = 0.0f, maxX = 0.0f;
     std::array<long, 4> rawSum{};
     std::array<int, 4> rawMin{}, rawMax{};

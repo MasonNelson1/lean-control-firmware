@@ -23,10 +23,23 @@ tick before motor commands.
 - **In LEAN, hold for one second** (LED starts blinking fast): range
   calibration. Let go, sit still, then lean as far as is comfortable forward,
   back, left and right, and press the button again. The four full-lean ranges
-  are saved. The chair ends in DISARM.
+  are saved. A direction leaned less than 120 counts keeps its old range. The
+  chair ends in DISARM.
 - **In DISARM with the seat empty, hold for two seconds**: tare. Each sensor's
   zero is measured and saved. Do this once, and again after the cushion or
-  sensors are moved.
+  sensors are moved. It is refused while the seat reads as occupied.
+
+### Other panel behaviour
+
+- **DISARM** always stops the chair, however long it is held. Assist needs a
+  second press that starts with the chair already disarmed, held for half a
+  second.
+- A fast-blinking DISARM LED means a fault disarmed the chair (failed seat
+  sensor, silent VESC, watchdog restart). The dashboard's health badge names
+  it. It clears when a mode is armed again.
+- **REMOTE** ignores the stick until it has been centred once after REMOTE is
+  selected, after a soft stop, and after the controller has been out of
+  contact for half a second.
 
 `src/telemetry/TelemetryTypes.h` defines all shared telemetry structs, including
 Lean and Remote samples. Drive modes produce these samples. `TelemetryFrame`

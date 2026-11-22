@@ -1,6 +1,7 @@
 #include "DriveSettings.h"
 
 #include <EEPROM.h>
+#include <math.h>
 
 namespace settings
 {
@@ -93,10 +94,10 @@ namespace settings
     // The knee is one atomic value, so input/output constraints can be checked
     // together. LeanDriveMode derives its exponent from the accepted coordinates.
     ProfileField<2> leanForewardBackResponse(registry(), 30,
-                                             {response, "Lean foreward response", "Signed power curve for normalized speed after the deadband. Lower knee output softens small inputs."},
+                                             {response, "Lean foreward response", "Signed power curve for normalized speed after the deadband. Lower knee output softens small inputs. The knee must stay on or below the straight line (a curve that is steepest at neutral is refused)."},
                                              Editor::SignedPower, DefaultForewardBackKnee, KneeBounds);
     ProfileField<2> leanSideToSideResponse(registry(), 31,
-                                           {response, "Lean turning response", "Signed power curve for normalized turn after the deadband. Lower knee output softens small inputs."},
+                                           {response, "Lean turning response", "Signed power curve for normalized turn after the deadband. Lower knee output softens small inputs. The knee must stay on or below the straight line (a curve that is steepest at neutral is refused)."},
                                            Editor::SignedPower, DefaultLeftRightKnee, KneeBounds);
     ProfileField<2> assistResponse(registry(), 32,
                                    {response, "Assist response", "Signed power curve for normalized assist power "},
@@ -122,10 +123,14 @@ namespace settings
                                    {response, "Full-lean turn rate", "How fast the chair rotates at full sideways lean. The same on every speed-knob position.", "deg/s"},
                                    160.0f, 20.0f, 360.0f);
     // Turn rate at speed is capped so that speed x turn rate stays under this.
-    // 4 m/s^2 is about 0.4 g: at 2.5 m/s the tightest turn is a 1.5 m radius.
+    // A chair with a 0.6 m track and the rider's centre of mass about 0.55 m
+    // up starts to tip near 9.81 * 0.3 / 0.55 = 5.3 m/s^2. The default is
+    // under half of that: at 2.5 m/s the tightest turn is a 2.5 m radius. The
+    // upper bound stays just above the tipping estimate (camber and anti-tip
+    // wheels give a real sports chair more), so it cannot be set far past it.
     ConfigField<float> maxLateralAccel(registry(), 38,
                                        {response, "Sideways acceleration limit", "Limits turn rate at speed so the chair cannot be thrown into a turn it would tip or slide in. Lower is gentler.", "m/s²"},
-                                       4.0f, 1.0f, 15.0f);
+                                       2.5f, 1.0f, 6.0f);
 
     // CDR Spec B wants a safe state within 0.1 s of a fault. The timeout default
     // meets it; the upper bounds stop a setting from drifting far past it.
@@ -164,12 +169,14 @@ namespace settings
                                    200, 40, 2000);
 
     // Left = 2, right = 26: the real IDs on the chair (confirmed by Mason 2026-11-21). Don't swap.
+    // The motor fields belong to the chair, so a profile cannot change them:
+    // a profile saved with the IDs the other way round would mirror the steering.
     ConfigField<uint8_t> leftVesc(registry(), 60,
-                                  {motor, "Left VESC ID", "CAN address of the left motor controller. The two addresses must differ."}, 2, 0, 253);
+                                  {motor, "Left VESC ID", "CAN address of the left motor controller. The two addresses must differ.", "", false, true}, 2, 0, 253);
     ConfigField<uint8_t> rightVesc(registry(), 61,
-                                   {motor, "Right VESC ID", "CAN address of the right motor controller. The two addresses must differ."}, 26, 0, 253);
+                                   {motor, "Right VESC ID", "CAN address of the right motor controller. The two addresses must differ.", "", false, true}, 26, 0, 253);
     ConfigField<float> wheelCircumference(registry(), 62,
-                                          {motor, "Wheel circumference", "Measured rolling circumference. Updates LINEAR_TO_RPM for wheel speed and acceleration conversion.", "m"},
+                                          {motor, "Wheel circumference", "Measured rolling circumference. Updates LINEAR_TO_RPM for wheel speed and acceleration conversion.", "m", false, true},
                                           common::WHEEL_CIRCUMFERENCE_M, 1.80f, 2.00f);
     // Distance between the two drive wheels where they touch the floor. It
     // converts a turn rate into a wheel-speed difference. 0.60 m is an
@@ -177,6 +184,15 @@ namespace settings
     ConfigField<float> trackWidth(registry(), 63,
                                   {motor, "Track width", "Distance between the drive wheels' contact patches. Converts turn rate (deg/s) to wheel speeds: too small a value makes the chair turn slower than the setting.", "m", false, true},
                                   0.60f, 0.30f, 1.20f);
+
+    // The VESCs' own setting, repeated here so the firmware knows where their
+    // speed mode stops working. It is the main cause of "nothing, then
+    // everything": with the default, a wheel command under 15.5 RPM (0.49 m/s)
+    // is ignored. Lower s_pid_min_erpm in VESC Tool on both VESCs, check on the
+    // bench that a 5 RPM command is followed, then set this to match.
+    ConfigField<float> vescMinSpeed(registry(), 64,
+                                    {motor, "VESC minimum speed", "Wheel speed below which the VESCs ignore a speed command: their s_pid_min_erpm setting divided by 58.2. Keep it equal to what VESC Tool says. Stops switch to brake current just above it.", "RPM", false, true},
+                                    15.5f, 1.0f, 30.0f);
 
     PidProfile::PidProfile(Group &group, uint16_t firstId)
         : lowTau(registry(), firstId,
@@ -209,17 +225,35 @@ namespace settings
     PidProfile normalPid(normal, 70);
     PidProfile transitionPid(transition, 80);
 
-    static bool validDriveSettings() { return leftVesc.get() != rightVesc.get(); }
+    // A lean response curve is |input|^exponent, with the exponent set by the
+    // knee. Below 1 the curve is steepest at neutral, and far below 1 any lean
+    // past the deadband is nearly full speed. Above 4 almost nothing happens
+    // until the very end of the lean. Both are kept out.
+    static bool validLeanCurve(const float (&knee)[2])
+    {
+        const float exponent = logf(knee[1]) / logf(knee[0]);
+        return exponent >= LeanCurveExponentMin && exponent <= LeanCurveExponentMax;
+    }
+
+    static bool validDriveSettings()
+    {
+        return leftVesc.get() != rightVesc.get() &&
+               validLeanCurve(leanForewardBackResponse.get()) && validLeanCurve(leanSideToSideResponse.get());
+    }
 
     static void repairDriveSettings()
     {
         // Each saved CAN ID may be individually valid but conflict with the other.
         // Repair this pair after load so unrelated migrated settings are preserved.
-        if (!validDriveSettings())
+        if (leftVesc.get() == rightVesc.get())
         {
             leftVesc.reset();
             rightVesc.reset();
         }
+        if (!validLeanCurve(leanForewardBackResponse.get()))
+            leanForewardBackResponse.reset();
+        if (!validLeanCurve(leanSideToSideResponse.get()))
+            leanSideToSideResponse.reset();
     }
 
     // Persistence repairs migrated values on load. Protocol uses the same invariant

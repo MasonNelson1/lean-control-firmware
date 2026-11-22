@@ -83,8 +83,11 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
 
     if (disarmPressed)
     {
-        // Exiting Assist requires a fresh press before it can be entered again.
-        assistHoldPending_ = selectedMode_ != ASSIST;
+        // Only a press that starts with the chair already disarmed can go on
+        // to Assist. A press that stops LEAN or REMOTE stays a stop however
+        // long it is held (people hold a stop button down), and leaving
+        // Assist needs a fresh press before it can be entered again.
+        assistHoldPending_ = selectedMode_ == DISARM && currentMode_ == DISARM;
         selectedMode_ = DISARM;
     }
     else if (leanPressed && !profilePress && selectedMode_ != LEAN)

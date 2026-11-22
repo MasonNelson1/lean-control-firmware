@@ -63,6 +63,7 @@ int main() {
             &settings::controllerTimeout, &settings::buttonDebounce, &settings::controlPeriod,
             &settings::zeroFront, &settings::zeroBack, &settings::zeroLeft, &settings::zeroRight, &settings::seatThreshold,
             &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference, &settings::trackWidth,
+            &settings::vescMinSpeed,
             &settings::normalPid.lowTau, &settings::normalPid.highTau, &settings::normalPid.ki,
             &settings::normalPid.kd, &settings::normalPid.filter, &settings::normalPid.maxJerk,
             &settings::transitionPid.lowTau, &settings::transitionPid.highTau, &settings::transitionPid.ki,
@@ -98,19 +99,19 @@ int main() {
         CHECK(speed.id != turn.id);
         const float originalTurnInput = turn.get()[0], originalTurnOutput = turn.get()[1];
         uint8_t speedRaw[9]; Writer speedOut(speedRaw, sizeof(speedRaw));
-        speedOut.put(uint8_t{1}); speedOut.put(.25f); speedOut.put(.75f);
+        speedOut.put(uint8_t{1}); speedOut.put(.25f); speedOut.put(.15f);
         CHECK(request(Command::Set, speed.id, speedRaw, sizeof(speedRaw)) == Status::Ok);
-        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .15f);
         CHECK(turn.get()[0] == originalTurnInput && turn.get()[1] == originalTurnOutput);
         uint8_t turnRaw[9]; Writer turnOut(turnRaw, sizeof(turnRaw));
         turnOut.put(uint8_t{1}); turnOut.put(.4f); turnOut.put(.2f);
         CHECK(request(Command::Set, turn.id, turnRaw, sizeof(turnRaw)) == Status::Ok);
-        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .15f);
         CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
         CHECK(settings::persistence.save());
         speed.reset(); turn.reset();
         settings::persistence.load();
-        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .15f);
         CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
         CHECK(!settings::persistence.dirty());
     });
@@ -138,7 +139,8 @@ int main() {
         const std::set<const Field *> expected = {
             &settings::rangeForward, &settings::rangeBack, &settings::rangeLeft, &settings::rangeRight,
             &settings::zeroFront, &settings::zeroBack, &settings::zeroLeft, &settings::zeroRight,
-            &settings::seatThreshold, &settings::trackWidth};
+            &settings::seatThreshold, &settings::trackWidth,
+            &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference, &settings::vescMinSpeed};
         for (auto *f = settings::registry().fields(); f; f = f->next())
             CHECK(f->info.calibration == (expected.count(f) == 1));
     });
@@ -213,6 +215,54 @@ int main() {
         CHECK(settings::seatThreshold.get() == 200 && settings::trackWidth.get() == 0.60f);
         settings::registry().defaults();
     });
+    test("a profile cannot swap the VESC IDs or change the wheel size", [] {
+        settings::registry().defaults();
+        // A profile saved while the IDs were the other way round.
+        const uint8_t temporary = 99, left = 26, right = 2;
+        const float circumference = 1.85f;
+        CHECK(settings::leftVesc.set(temporary) && settings::rightVesc.set(right) && settings::leftVesc.set(left));
+        CHECK(settings::wheelCircumference.set(circumference));
+        uint8_t payload[Persistence::ProfileCapacity], name[Persistence::ProfileNameSize] = "swapped";
+        const size_t length = snapshot(settings::registry(), payload, sizeof(payload));
+        CHECK(length && settings::persistence.writeProfile(3, name, payload, length));
+        settings::registry().defaults();
+        CHECK(settings::protocol.selectProfile(3));
+        CHECK(settings::leftVesc.get() == 2 && settings::rightVesc.get() == 26); // steering not mirrored
+        CHECK(settings::wheelCircumference.get() == common::WHEEL_CIRCUMFERENCE_M);
+    });
+    test("lean response curves stay between a straight line and a strong curve", [] {
+        settings::registry().defaults();
+        const auto set = [](config::ProfileField<2> &field, float input, float output) {
+            uint8_t raw[9]; Writer out(raw, sizeof(raw));
+            out.put(uint8_t{1}); out.put(input); out.put(output);
+            return request(Command::Set, field.id, raw, sizeof(raw));
+        };
+        for (auto *field : {&settings::leanForewardBackResponse, &settings::leanSideToSideResponse}) {
+            const float input = field->get()[0], output = field->get()[1];
+            // Knee above the straight line: steepest at neutral. Far above it, any lean is full speed.
+            CHECK(set(*field, .5f, .999f) == Status::Invalid);
+            CHECK(set(*field, .5f, .51f) == Status::Invalid);
+            // So flat that nothing happens until the very end of the lean.
+            CHECK(set(*field, .9f, .001f) == Status::Invalid);
+            CHECK(field->get()[0] == input && field->get()[1] == output); // rolled back
+            CHECK(set(*field, .5f, .5f) == Status::Ok);    // a straight line
+            CHECK(set(*field, .5f, .0625f) == Status::Ok); // exponent 4
+        }
+        // The assist curve is a different thing and keeps its own freedom.
+        CHECK(set(settings::assistResponse, .44f, .61f) == Status::Ok);
+        // A saved curve from before this rule is put back to the default on load.
+        const float steep[] = {.5f, .9f};
+        uint8_t raw[9]; Writer out(raw, sizeof(raw));
+        out.put(uint8_t{1}); out.bytes(steep, sizeof(steep));
+        CHECK(settings::leanSideToSideResponse.update(raw, sizeof(raw)));
+        settings::persistence.refreshDirty();
+        CHECK(settings::persistence.save());
+        settings::persistence.load();
+        CHECK(settings::leanSideToSideResponse.get()[0] == .35f && settings::leanSideToSideResponse.get()[1] == .20f);
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+        CHECK(settings::persistence.save());
+    });
     test("every EEPROM byte written reports activity for the watchdog", [] {
         static int calls;
         calls = 0;
@@ -229,6 +279,9 @@ int main() {
         const unsigned long slow = 201, debounce = 101;
         CHECK(request(Command::Set, settings::controllerTimeout.id, reinterpret_cast<const uint8_t *>(&slow), sizeof(slow)) == Status::Invalid);
         CHECK(request(Command::Set, settings::buttonDebounce.id, reinterpret_cast<const uint8_t *>(&debounce), sizeof(debounce)) == Status::Invalid);
+        const float tipping = 6.5f;
+        CHECK(request(Command::Set, settings::maxLateralAccel.id, reinterpret_cast<const uint8_t *>(&tipping), sizeof(tipping)) == Status::Invalid);
+        CHECK(settings::maxLateralAccel.get() == 2.5f);
     });
     std::cout << "TOTAL " << passed + failed << " / PASS " << passed << " / FAIL " << failed << '\n';
     return failed ? 1 : 0;

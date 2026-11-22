@@ -53,7 +53,6 @@ public:
       reset();
       return {0.0f, 0.0f};
     }
-    const float linear = linear_.smoothRPM(linearTargetRPM, dt, maxSpeedMS, DriveConstants::MAX_ACCEL);
     const float maxRPM = fminf(maxSpeedMS, DriveConstants::MAX_SPEED) * DriveConstants::LINEAR_TO_RPM;
     if (!(maxRPM > 0.0f))
     {
@@ -67,18 +66,35 @@ public:
     const float step = (towardZero ? turnDecelRPMS : turnAccelRPMS) * dt;
     turn_ += clip(delta, -step, step);
 
-    // When the faster wheel would pass the speed limit, slow the whole chair
-    // rather than clipping that one wheel: clipping one wheel changes the
-    // turn the rider asked for.
-    float left = linear + turn_, right = linear - turn_;
-    const float fastest = fabsf(left) > fabsf(right) ? left : right;
-    if (fabsf(fastest) > maxRPM)
-    {
-      const float shift = fastest - copysignf(maxRPM, fastest);
-      left -= shift;
-      right -= shift;
-    }
-    return {clip(left, -maxRPM, maxRPM), clip(right, -maxRPM, maxRPM)};
+    // The faster wheel is forward speed plus turn, and it may not pass the
+    // speed limit. So a turn takes its share of the limit out of the forward
+    // target, before smoothing: the chair then slows down and speeds back up
+    // through the smoother, inside its acceleration and jerk limits.
+    const float room = maxRPM - fabsf(turn_);
+    const float linear = linear_.smoothRPM(clip(linearTargetRPM, -room, room), dt, maxSpeedMS, DriveConstants::MAX_ACCEL);
+    // While the forward speed is still coming down to make that room, the
+    // turn waits for it. Nothing here moves forward speed outside the smoother.
+    const float turn = clip(turn_, -(maxRPM - fabsf(linear)), maxRPM - fabsf(linear));
+    return {linear + turn, linear - turn};
+  }
+
+  /**
+   * Call after update() when wheel feedback is fresh: keep the command on
+   * each axis within maxLeadRPM of the wheels.
+   *
+   * Without this a held wheel (a curb, a mat edge, a helper's hands) lets
+   * the command climb to the full target while the wheel stands still; when
+   * the wheel comes free the command is far ahead and the VESC drives flat
+   * out to catch up. Forward acceleration restarts from rest when this acts.
+   */
+  void limitLead(float measuredLinearRPM, float measuredTurnRPM, float maxLeadRPM)
+  {
+    if (!isfinite(measuredLinearRPM) || !isfinite(measuredTurnRPM) || !(maxLeadRPM >= 0.0f))
+      return;
+    const float linear = clip(linear_.rpm(), measuredLinearRPM - maxLeadRPM, measuredLinearRPM + maxLeadRPM);
+    if (linear != linear_.rpm())
+      linear_.seed(linear);
+    turn_ = clip(turn_, measuredTurnRPM - maxLeadRPM, measuredTurnRPM + maxLeadRPM);
   }
 
   /**

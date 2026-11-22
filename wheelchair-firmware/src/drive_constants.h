@@ -17,18 +17,28 @@ constexpr float MAX_RPM_COMMAND_DIFF = 50;//the furthest that the rpm setpoint c
 //
 // It equals MAX_ACCEL on purpose: that is the hardest braking the chair already
 // does in normal driving, so it is known not to trip VESC over-current faults
-// or pitch the rider. Stop times from each speed-knob position: 0.33 s, 0.66 s,
-// 1.0 s, 1.33 s (CDR Spec P allows 3.0 s).
-// CDR Spec B (command below 5% of max speed within 0.5 s) would need
-// 0.95 * MAX_SPEED / 0.5 = 9.3 m/s^2 from top speed, more than the motors can
-// deliver (CDR estimate ~4 m/s^2). Raising this is a team decision.
+// or pitch the rider. The ramp ends at STOP_HANDOFF_RPM, where brake current
+// takes over and no speed is commanded any more.
+//
+// CDR Spec B asks for the speed command to be under 5% of maximum within 0.5 s
+// of a fault. Time from the start of a stop until the speed command ends, by
+// speed-knob position: 0.23 s, 0.56 s, 0.89 s, 1.22 s. So Spec B is met on
+// position 1, just missed on position 2 and missed on 3 and 4. Meeting it from
+// top speed needs about 2.3 times this rate (8.7 m/s^2), more than the motors
+// can deliver (CDR estimate ~4 m/s^2). Raising this is a team decision.
+// CDR Spec P (stopped within 3.0 s) is met with margin on every position.
 constexpr float STOP_DECEL = MAX_ACCEL; // m/s^2
+// The deceleration builds up over this long instead of arriving in one step
+// (0.38 g at once pitches the rider forward). It adds half this to a stop.
+constexpr float STOP_ONSET_S = 0.1f;
 
 // A VESC in speed mode lets go of the motor below s_pid_min_erpm (VESC Tool
 // default 900 ERPM = 15.5 wheel RPM), so the last part of a stop would coast.
 // Below this wheel speed the stop switches from an RPM command to brake
-// current. 18 RPM is 1047 ERPM, a margin above the VESC default of 900.
-constexpr float STOP_HANDOFF_RPM = 18.0f;
+// current. It is the "VESC minimum speed" setting plus this margin, refreshed
+// when settings change: 18 RPM (1047 ERPM) with the VESC default.
+constexpr float STOP_HANDOFF_MARGIN_RPM = 2.5f;
+inline float STOP_HANDOFF_RPM = 15.5f + STOP_HANDOFF_MARGIN_RPM;
 // Brake current per motor for that last part. The assist boost already runs up
 // to 30 A per motor, so 15 A is well inside what the VESCs are set up for.
 constexpr float STOP_BRAKE_AMPS = 15.0f;

@@ -185,7 +185,7 @@ void setup()
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
 
     settings::persistence.load();
-    drive.begin(settings::defaultMode.get());
+    drive.begin(settings::defaultMode.get(), watchdogReset);
     applyRuntimeSettings();
 
     // user input
@@ -263,9 +263,12 @@ static void updateModeLEDs()
     const mode current = drive.mode();
     digitalWrite(common::PIN_LEAN_LED, current == LEAN ? HIGH : LOW);
     digitalWrite(common::PIN_REMOTE_LED, current == REMOTE ? HIGH : LOW);
-    // DISARM: solid. Assist: blinking.
-    digitalWrite(common::PIN_DISARM_LED,
-                 current == DISARM || (current == ASSIST && drive.modeState().assistLEDOn(now)) ? HIGH : LOW);
+    // DISARM: solid, or a fast blink when a fault put the chair there (it
+    // stays until a mode is armed again). Assist: slow blink.
+    const bool faulted = drive.fault() != DriveController::Fault::None;
+    const bool disarmLED = current == DISARM ? (!faulted || (now / 100) % 2 == 0)
+                                             : current == ASSIST && drive.modeState().assistLEDOn(now);
+    digitalWrite(common::PIN_DISARM_LED, disarmLED ? HIGH : LOW);
     // Calibration LED: lean calibration in LEAN, the sensor tare in DISARM.
     const bool calLED = current == LEAN || (current == DISARM && drive.lean().tareActive());
     digitalWrite(common::PIN_CAL_LED, calLED && drive.lean().calibrationLEDOn(now) ? HIGH : LOW);

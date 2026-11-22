@@ -11,8 +11,9 @@
 //
 // Two phases:
 //   Ramp   Both wheel-speed commands fall to zero together at STOP_DECEL, so
-//          the chair stops along the curve it was on. No smoothing lag: the
-//          command starts falling on the first tick.
+//          the chair stops along the curve it was on. The command starts
+//          falling on the first tick and is at the full rate after
+//          STOP_ONSET_S.
 //   Brake  Below STOP_HANDOFF_RPM the VESC's speed mode lets go of the motor
 //          (its minimum-ERPM setting), so the rest of the stop uses brake
 //          current, which works down to a standstill and cannot reverse.
@@ -50,6 +51,7 @@ public:
     left0_ = isfinite(leftRPM) ? leftRPM : 0.0f;
     right0_ = isfinite(rightRPM) ? rightRPM : 0.0f;
     scale_ = 1.0f;
+    elapsed_ = 0.0f;
     rampEndedAt_ = 0;
     rampEnded_ = false;
     if (fmaxf(fabsf(left0_), fabsf(right0_)) < DriveConstants::STOP_HANDOFF_RPM)
@@ -77,7 +79,10 @@ public:
     {
       const float peak = fmaxf(fabsf(left0_), fabsf(right0_));
       // The faster wheel slows at STOP_DECEL and the other in proportion.
-      scale_ -= STOP_DECEL * LINEAR_TO_RPM * dt / peak;
+      // The rate builds up over STOP_ONSET_S rather than arriving as a step.
+      elapsed_ += dt;
+      const float onset = fminf(elapsed_ / STOP_ONSET_S, 1.0f);
+      scale_ -= STOP_DECEL * onset * LINEAR_TO_RPM * dt / peak;
       // Never command below the handoff speed: the VESC would release the motor.
       const float floor = STOP_HANDOFF_RPM / peak;
       if (scale_ <= floor)
@@ -130,7 +135,7 @@ private:
 
   Phase phase_ = Phase::Idle;
   float left0_ = 0.0f, right0_ = 0.0f;
-  float scale_ = 0.0f;
+  float scale_ = 0.0f, elapsed_ = 0.0f;
   bool rampEnded_ = false, settling_ = false;
   uint32_t rampEndedAt_ = 0, brakeStartedAt_ = 0, settledSince_ = 0;
 };

@@ -143,12 +143,12 @@ int main()
         startRange(rig);
         lean(300, 0);
         rig.calibrate(600);
-        lean(0, 30); // right: only 30 counts, below the 40-count minimum range
+        lean(0, 110); // right: a half-hearted 110 counts, under the 120 a real lean must reach
         rig.calibrate(600);
         lean(0, 0);
         assert(rig.calibrate(50, false, true) == Event::RangeDone);
         assert(rangesAre(270, 400, 500, 500));
-        assert(logged("right lean only reached 30 counts; keeping 500"));
+        assert(logged("right lean only reached 110 counts (120 needed); keeping 500"));
         assert(logged("1 of 4 directions updated"));
     }
     { // Nothing leaned: rejected, ranges untouched. A huge reading is capped.

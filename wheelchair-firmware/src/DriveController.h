@@ -21,7 +21,7 @@
 class DriveController
 {
 public:
-    enum class Fault : uint8_t { None, SensorRail, VescSilent };
+    enum class Fault : uint8_t { None, SensorRail, VescSilent, WatchdogReset };
     static const char *faultName(Fault fault);
 
     // What to send to both VESCs this tick.
@@ -43,7 +43,10 @@ public:
         bool calButtonHeld = false; // raw level of the calibration button
     };
 
-    void begin(common::mode initial);
+    // afterWatchdogReset: the firmware hung and was restarted. The chair may
+    // still be rolling, so it starts disarmed and brakes as soon as the VESCs
+    // report (or blind, if they do not).
+    void begin(common::mode initial, bool afterWatchdogReset = false);
     // Derived settings changed (dashboard edit, profile load, startup).
     void applySettings();
     // A profile was loaded: start again from rest and require a new calibration.
@@ -86,6 +89,10 @@ private:
     // True while wheel-speed commands from the smoother are being sent, so a
     // loss of drive knows there is motion to stop.
     bool driving_ = false;
+    // Set after a watchdog restart until the recovery stop has been decided.
+    bool recoverFromReset_ = false;
+    uint32_t recoverStartedAt_ = 0;
+    bool recoverTimed_ = false;
     float sentLeftRPM_ = 0.0f, sentRightRPM_ = 0.0f;
     float speedLimitMS_ = 0.0f;
     // Low-speed diagnostic (watchLowSpeed).

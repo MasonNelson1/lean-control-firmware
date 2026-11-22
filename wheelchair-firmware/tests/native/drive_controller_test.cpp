@@ -23,14 +23,17 @@ struct Sim
     // The simulated VESC speed loop: wheel acceleration is followGain x the
     // speed error, up to followRPMS (the motor's torque limit).
     float followRPMS = 300.0f, followGain = 60.0f;
+    // Below this the simulated VESC lets go of the motor (s_pid_min_erpm:
+    // VESC Tool default 900 ERPM = 15.5 wheel RPM).
+    float vescMinRPM = 15.5f;
     bool calHeld = false;
     ModeStateMachine::Inputs pending;
     DriveController::MotorCommand last{Kind::Current, 0, 0};
     std::vector<DriveController::MotorCommand> trace;
 
-    Sim()
+    explicit Sim(mode startup = DISARM, bool afterWatchdogReset = false)
     {
-        drive.begin(DISARM);
+        drive.begin(startup, afterWatchdogReset);
         drive.applySettings();
     }
 
@@ -41,7 +44,7 @@ struct Sim
     {
         const float dt = TickS;
         const auto slow = [&](float rate) { rpm -= std::copysign(std::fmin(rate * dt, std::fabs(rpm)), rpm); };
-        if (kind == Kind::RPM && std::fabs(value) >= 15.5f)
+        if (kind == Kind::RPM && std::fabs(value) >= vescMinRPM)
             rpm += std::fmin(followRPMS, std::fmax(-followRPMS, followGain * (value - rpm))) * dt;
         else if (kind == Kind::Brake)
             slow(100.0f);
@@ -116,6 +119,16 @@ struct Sim
         memcpy(packet + 1, &li, 2);
         memcpy(packet + 3, &ri, 2);
         drive.onRemotePacket(packet, sizeof(packet), now);
+    }
+    // Select REMOTE with a rider seated and the stick centred, ready to drive.
+    void rideRemote()
+    {
+        lean(0, 0);
+        run(400);
+        press(REMOTE);
+        assert(drive.mode() == REMOTE);
+        runRemote(50, 0, 0);
+        assert(!drive.remoteStopped());
     }
     // Remote driving: a packet every 10 ms, as the controller sends them.
     void runRemote(uint32_t ms, float l, float r)
@@ -350,8 +363,8 @@ int main()
         assert(sim.expectStop() < 1.0f);
         assert(sim.drive.fault() == Fault::None);
 
-        // Holding DISARM at speed reaches Assist after half a second, while
-        // the chair is still braking: the stop finishes before any boost.
+        // Holding the DISARM button down (people do, with a stop button) stays a
+        // stop: it never turns into Assist, and a nudge afterwards gets no boost.
         Sim held;
         held.knobMS = knobs::speedLimitMS(3);
         held.rideLean();
@@ -359,10 +372,26 @@ int main()
         held.run(3500);
         held.hold(DISARM);
         held.run(600);
-        assert(held.drive.mode() == ASSIST && held.drive.stopping());
-        assert(held.last.kind == Kind::RPM && held.left > 30.0f);
+        assert(held.drive.mode() == DISARM && held.drive.stopping());
         held.expectStop();
-        assert(held.drive.mode() == ASSIST && std::fabs(held.left) < STOP_DONE_RPM);
+        held.run(2500);
+        assert(held.drive.mode() == DISARM);
+        held.left = held.right = 5.0f; // rolled by a slope or a bump
+        held.run(200);
+        assert(held.drive.mode() == DISARM && held.last.kind == Kind::Current && held.last.left == 0);
+        // Assist needs its own press, starting from DISARM. If that comes while
+        // the chair is still braking, the stop finishes before any boost.
+        Sim again;
+        again.knobMS = knobs::speedLimitMS(3);
+        again.rideLean();
+        lean(600, 0);
+        again.run(3500);
+        again.press(DISARM);
+        again.hold(DISARM);
+        again.run(520);
+        assert(again.drive.mode() == ASSIST && again.drive.stopping() && again.left > 20.0f);
+        again.expectStop();
+        assert(again.drive.mode() == ASSIST && std::fabs(again.left) < STOP_DONE_RPM);
 
         Sim still;
         still.rideLean();
@@ -426,7 +455,8 @@ int main()
         sim.press(LEAN);
         assert(sim.drive.mode() == LEAN && !sim.drive.lean().calibrated());
         settings::registry().defaults();
-        assert(settings::persistence.save() || true);
+        settings::persistence.refreshDirty();
+        assert(settings::persistence.save());
     }
     { // Tare from the panel: DISARM, empty seat, hold calibrate for two seconds.
         Sim sim;
@@ -443,6 +473,28 @@ int main()
         settings::persistence.load();
         assert(settings::zeroBack.get() == 437); // saved
         assert(sim.drive.mode() == DISARM && sim.last.kind == Kind::Current && sim.last.left == 0);
+
+        // With someone on the seat a tare is refused: it would hide that rider.
+        messages.clear();
+        rawSensors(505, 430, 401, 481); // a seated rider's logged readings
+        sim.run(400);
+        assert(sim.drive.lean().isSeated());
+        sim.pressCal(3500);
+        assert(logged("Tare refused: the seat reads as occupied") && !sim.drive.lean().tareActive());
+        assert(settings::zeroFront.get() == 372 && settings::zeroBack.get() == 437);
+        // Sitting down while a tare is under way cancels it.
+        rawSensors(372, 437, 380, 365);
+        sim.run(300);
+        sim.pending.calibrate.pressed = true;
+        sim.calHeld = true;
+        sim.run(1000);
+        assert(sim.drive.lean().tareActive());
+        rawSensors(505, 430, 401, 481);
+        sim.run(500);
+        assert(!sim.drive.lean().tareActive() && logged("Tare cancelled"));
+        sim.run(3000);
+        sim.calHeld = false;
+        assert(settings::zeroFront.get() == 372 && settings::zeroLeft.get() == 380);
         // A tare never starts in LEAN (the same button calibrates the lean there).
         settings::registry().defaults();
         settings::persistence.refreshDirty();
@@ -463,6 +515,12 @@ int main()
         assert(sim.drive.mode() == REMOTE);
         sim.run(300);
         assert(sim.last.kind == Kind::Current && sim.drive.remoteStopped());
+        // A stick that is already held over when REMOTE is selected does nothing...
+        sim.runRemote(1000, 1.0f, 1.0f);
+        assert(sim.drive.remoteStopped() && sim.last.kind == Kind::Current && sim.left == 0);
+        // ...until it has been centred once.
+        sim.runRemote(30, 0.0f, 0.0f);
+        assert(!sim.drive.remoteStopped());
         sim.runRemote(2500, 1.0f, 1.0f);
         const float top = sim.knobMS * LINEAR_TO_RPM;
         assert(near(sim.last.left, top, 0.5f) && !sim.drive.remoteStopped());
@@ -475,6 +533,7 @@ int main()
         assert(seconds < 1.0f && std::fabs(sim.left) < STOP_DONE_RPM);
 
         // A short dropout: packets return mid-ramp and the command carries on from there.
+        sim.runRemote(30, 0.0f, 0.0f); // (that stop outlasted half a second: centre the stick first)
         sim.runRemote(2500, 1.0f, 1.0f);
         sim.run(250);
         assert(sim.drive.stopping() && sim.last.kind == Kind::RPM);
@@ -484,6 +543,16 @@ int main()
         sim.tick();
         assert(!sim.drive.stopping() && sim.last.kind == Kind::RPM);
         assert(near(sim.last.left, during, 2.0f)); // no jump back to zero or up to full
+        sim.runRemote(2000, 1.0f, 1.0f);
+        assert(near(sim.last.left, top, 0.5f));
+
+        // A real outage (3 s) with the stick held forward: the chair has stopped,
+        // and the link coming back does not start it again.
+        sim.run(3000);
+        assert(std::fabs(sim.left) < STOP_DONE_RPM);
+        sim.runRemote(1500, 1.0f, 1.0f);
+        assert(sim.drive.remoteStopped() && sim.last.kind == Kind::Current && sim.left == 0);
+        sim.runRemote(30, 0.0f, 0.0f); // stick centred
         sim.runRemote(2000, 1.0f, 1.0f);
         assert(near(sim.last.left, top, 0.5f));
 
@@ -499,13 +568,20 @@ int main()
         sim.tick();
         assert(sim.drive.stopping());
         sim.expectStop();
+        // Clearing the soft stop with the stick still over does not start the chair either.
+        const uint8_t clear = 0x03;
+        sim.drive.onRemotePacket(&clear, 1, sim.now);
+        sim.runRemote(1000, 1.0f, 0.4f);
+        assert(sim.drive.remoteStopped() && sim.left == 0);
+        sim.runRemote(30, 0.0f, 0.0f);
+        sim.runRemote(1000, 1.0f, 1.0f);
+        assert(!sim.drive.remoteStopped() && sim.left > 20.0f);
     }
     { // Engaging on a rolling chair starts from the wheels' speed instead of braking to zero.
         Sim sim;
-        lean(0, 0);
-        sim.run(400);
-        sim.left = sim.right = 60.0f; // being pushed along
-        sim.press(REMOTE);
+        sim.rideRemote();
+        sim.left = sim.right = 60.0f; // rolling
+        sim.tick(); // stick centred, chair moving: stop under way
         sim.remote(1.0f, 1.0f);
         sim.tick();
         assert(sim.last.kind == Kind::RPM && near(sim.last.left, 60.0f, 3.0f));
@@ -514,9 +590,7 @@ int main()
     }
     { // The speed command never strays more than 50 RPM from the wheel.
         Sim sim;
-        lean(0, 0);
-        sim.run(400);
-        sim.press(REMOTE);
+        sim.rideRemote();
         for (int k = 0; k < 600; ++k)
         {
             if (k % 2 == 0)
@@ -732,6 +806,172 @@ int main()
             // for the half second the command needed to climb back up.
             assert(low > atLean - 5.0f);
         }
+    }
+    { // Partial lean. With the VESC's minimum ERPM lowered on the bench (here to
+      // 3 wheel RPM) the chair's speed follows the lean all the way down.
+        const float knee[2] = {settings::leanForewardBackResponse.get()[0], settings::leanForewardBackResponse.get()[1]};
+        const float exponent = std::log(knee[1]) / std::log(knee[0]);
+        const float deadband = settings::deadband.get();
+        Sim sim;
+        sim.vescMinRPM = 3.0f;
+        assert(settings::vescMinSpeed.set(3.0f)); // the setting is kept equal to the VESCs'
+        sim.drive.applySettings();
+        assert(STOP_HANDOFF_RPM == 5.5f);
+        sim.rideLean();
+        messages.clear();
+        const float top = sim.knobMS * LINEAR_TO_RPM;
+        float previous = 0;
+        for (int counts : {120, 180, 300, 450, 600}) // 4.5, 10, 25, 49, 78 RPM
+        {
+            lean(counts, 0);
+            sim.run(2500);
+            const float expected = std::pow((counts / 600.0f - deadband) / (1 - deadband), exponent) * top;
+            assert(near(sim.left, expected, 0.5f) && near(sim.right, expected, 0.5f));
+            assert(sim.left > previous + 2.0f); // every step of lean is a step of speed
+            previous = sim.left;
+        }
+        assert(!logged("Hint:"));
+        // The same on the spot: half a sideways lean is a proportionate turn rate.
+        lean(0, 0);
+        sim.run(2500);
+        lean(0, 250);
+        sim.run(1500);
+        const float half = sim.left - sim.right;
+        lean(0, 500);
+        sim.run(1500);
+        assert(half > 5.0f && sim.left - sim.right > 2.0f * half);
+        // A stop now ramps the speed command nearly to rest before brake current takes over.
+        lean(0, 0);
+        sim.run(1500);
+        lean(600, 0);
+        sim.run(2500);
+        sim.press(DISARM);
+        float lowest = top;
+        while (sim.last.kind == Kind::RPM)
+        {
+            lowest = std::fmin(lowest, sim.last.left);
+            sim.tick();
+        }
+        assert(sim.last.kind == Kind::Brake && near(lowest, 5.5f, 1.0f));
+        settings::vescMinSpeed.reset();
+        sim.drive.applySettings();
+        assert(STOP_HANDOFF_RPM == 18.0f);
+        // With the VESC default (15.5 RPM) the same small leans do nothing, which
+        // is the "nothing, nothing, then everything": the firmware cannot change
+        // that setting, so it says so (next block).
+        Sim stock;
+        stock.rideLean();
+        lean(120, 0);
+        stock.run(2500);
+        assert(stock.left == 0 && stock.last.kind == Kind::RPM && stock.last.left > 4.0f);
+    }
+    { // Braking with a back lean while steering: the chair turns the way the rider leans.
+        Sim sim;
+        sim.rideLean();
+        lean(600, 0);
+        sim.run(2500);
+        lean(-240, 250); // lean back (60% reverse command) and right, at full forward speed
+        bool wentLeft = false;
+        float mostRight = 0;
+        while (speedMS(sim) > 0.2f * sim.knobMS)
+        {
+            sim.tick();
+            wentLeft = wentLeft || yawDegS(sim) < -1.0f;
+            mostRight = std::fmax(mostRight, yawDegS(sim));
+        }
+        assert(!wentLeft && mostRight > 15.0f); // the old rule turned it left here, at up to 69 deg/s
+        // Once it is reversing, the team's rule applies: back and right swings the other way.
+        sim.run(3000);
+        assert(speedMS(sim) < -0.3f * sim.knobMS && yawDegS(sim) < -5.0f);
+    }
+    { // Turning at the speed limit never moves forward speed faster than MAX_ACCEL.
+        for (int position : {0, 3})
+        {
+            Sim sim;
+            sim.knobMS = knobs::speedLimitMS(position);
+            sim.rideLean();
+            lean(600, 0);
+            sim.run(4000);
+            const float top = sim.knobMS * LINEAR_TO_RPM;
+            assert(near(sim.last.left, top, 0.5f));
+            float mean = (sim.last.left + sim.last.right) / 2;
+            bool skip = false;
+            for (int phase = 0; phase < 2; ++phase)
+            {
+                lean(600, phase == 0 ? 500 : 0); // full turn, then straight again
+                for (int k = 0; k < 600; ++k)
+                {
+                    sim.tick();
+                    const float next = (sim.last.left + sim.last.right) / 2;
+                    // (Not while a wheel's command is at or inside the VESC's minimum-speed
+                    // zone: on the slowest knob position the inner wheel goes through zero,
+                    // and its command is held at the edge of that zone until the wheel is slow.)
+                    const bool nearZero = std::fmin(std::fabs(sim.last.left), std::fabs(sim.last.right)) <= STOP_HANDOFF_RPM;
+                    if (!nearZero && !skip)
+                        assert(std::fabs(next - mean) <= MAX_ACCEL * LINEAR_TO_RPM * TickS + 0.01f);
+                    skip = nearZero;
+                    assert(std::fabs(sim.last.left) <= top + 0.01f && std::fabs(sim.last.right) <= top + 0.01f);
+                    mean = next;
+                }
+            }
+            assert(near(mean, top, 0.5f));
+        }
+    }
+    { // Wheels held under a full lean (a curb, a helper's hands), then let go:
+      // the command has not run away, so the chair picks up at the design rate.
+        Sim sim;
+        sim.knobMS = knobs::speedLimitMS(3);
+        sim.rideLean();
+        lean(600, 0);
+        for (int k = 0; k < 600; ++k)
+        {
+            sim.left = sim.right = 0;
+            sim.tick();
+            assert(sim.last.left <= MAX_RPM_COMMAND_DIFF + 0.01f);
+        }
+        float lead = 0, previous = 0;
+        for (int k = 0; k < 400; ++k)
+        {
+            sim.tick();
+            if (k > 60) // after the first 0.3 s, in which the wheel closes the 50 RPM it was held back by
+            {
+                lead = std::fmax(lead, sim.last.left - sim.left);
+                assert(sim.left - previous <= MAX_ACCEL * LINEAR_TO_RPM * TickS * 1.2f);
+            }
+            previous = sim.left;
+        }
+        assert(lead < 20.0f); // it used to stay about 48 RPM ahead all the way up
+    }
+    { // After a watchdog restart: disarmed whatever the startup mode, and a rolling chair is braked.
+        Sim sim(REMOTE, /*afterWatchdogReset=*/true);
+        assert(sim.drive.mode() == DISARM && sim.drive.fault() == Fault::WatchdogReset);
+        sim.left = sim.right = 70.0f;
+        sim.tick();
+        assert(sim.drive.stopping() && sim.last.kind == Kind::RPM && sim.last.left <= 70.0f);
+        assert(sim.expectStop() < 1.0f && std::fabs(sim.left) < STOP_DONE_RPM);
+        assert(sim.drive.fault() == Fault::WatchdogReset); // shown until a mode is armed again
+        lean(0, 0);
+        sim.run(400);
+        sim.press(LEAN);
+        assert(sim.drive.mode() == LEAN && sim.drive.fault() == Fault::None);
+        // Standing still: nothing to do.
+        Sim still(DISARM, true);
+        still.run(1000);
+        assert(!still.drive.stopping() && still.last.kind == Kind::Current && still.last.left == 0);
+        // VESCs not reporting after the restart: brake blind after half a second.
+        Sim silent(DISARM, true);
+        silent.leftAlive = silent.rightAlive = false;
+        silent.left = silent.right = 70.0f;
+        silent.run(495);
+        assert(!silent.drive.stopping());
+        silent.run(10);
+        assert(silent.drive.stopping() && silent.last.kind == Kind::Brake);
+        silent.run(STOP_BRAKE_MAX_MS + 20);
+        assert(!silent.drive.stopping() && silent.last.kind == Kind::Current);
+        // A normal power-on honours the startup mode and brakes nothing.
+        Sim normal(REMOTE, false);
+        assert(normal.drive.mode() == REMOTE && normal.drive.fault() == Fault::None);
+        assert(std::string(DriveController::faultName(Fault::WatchdogReset)) == "WATCHDOG_RESET");
     }
     { // A wheel that ignores a low speed command (VESC minimum ERPM) is pointed out, once.
         Sim sim;

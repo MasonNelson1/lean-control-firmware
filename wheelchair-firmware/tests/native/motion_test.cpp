@@ -52,6 +52,27 @@ static void smootherTests()
         assert(near(wheels.left, maxRPM, 0.01f));
         assert(near(wheels.left - wheels.right, 20.0f, 0.01f));
         assert(std::fabs(wheels.left) <= maxRPM + 0.001f && std::fabs(wheels.right) <= maxRPM + 0.001f);
+        // Adding and removing a turn at the limit changes forward speed only
+        // through the smoother: never faster than MAX_ACCEL, and no wheel
+        // passes the limit on the way.
+        MotionSmoother cruise(RPMSetpointPID::defaultTuning());
+        for (int k = 0; k < 2000; ++k)
+            wheels = cruise.update(maxRPM, 0.0f, dt, limitMS, turnAccel, turnDecel);
+        assert(near(wheels.left, maxRPM, 0.01f) && near(wheels.right, maxRPM, 0.01f));
+        const float accelLimit = MAX_ACCEL * LINEAR_TO_RPM * dt + 0.001f;
+        float mean = (wheels.left + wheels.right) / 2;
+        for (int phase = 0; phase < 2; ++phase)
+            for (int k = 0; k < 600; ++k)
+            { // full turn for three seconds, then straight again
+                wheels = cruise.update(maxRPM, phase == 0 ? 25.0f : 0.0f, dt, limitMS, turnAccel, turnDecel);
+                const float next = (wheels.left + wheels.right) / 2;
+                assert(std::fabs(next - mean) <= accelLimit);
+                assert(std::fabs(wheels.left) <= maxRPM + 0.001f && std::fabs(wheels.right) <= maxRPM + 0.001f);
+                mean = next;
+                if (phase == 0 && k == 599)
+                    assert(near(wheels.left, maxRPM, 0.05f) && near(wheels.left - wheels.right, 50.0f, 0.05f));
+            }
+        assert(near(mean, maxRPM, 0.05f));
         // A turn request beyond the limit is cut to the limit, never past it.
         for (int k = 0; k < 2000; ++k)
             wheels = motion.update(0.0f, 10.0f * maxRPM, dt, limitMS, turnAccel, turnDecel);
@@ -103,6 +124,26 @@ static void smootherTests()
         assert(near(motion.linearRPM(), 100.0f));
         motion.unwind(NAN, 0.0f, 0.0f, 0.0f);
         assert(near(motion.linearRPM(), 100.0f));
+    }
+    { // limitLead(): the command cannot sit further from the wheels than what is sent.
+        MotionSmoother motion(RPMSetpointPID::defaultTuning());
+        for (int k = 0; k < 400; ++k)
+        { // wheels held still under a full forward and turn request
+            motion.update(150.0f, 80.0f, dt, MAX_SPEED, turnAccel, turnDecel);
+            motion.limitLead(0.0f, 0.0f, 50.0f);
+            assert(motion.linearRPM() <= 50.0f + 0.001f && motion.turnRPM() <= 50.0f + 0.001f);
+        }
+        assert(near(motion.linearRPM(), 50.0f, 0.5f));
+        // Inside the allowance it changes nothing.
+        MotionSmoother free(RPMSetpointPID::defaultTuning());
+        free.seed(70.0f, 50.0f);
+        free.limitLead(40.0f, -5.0f, 50.0f);
+        assert(near(free.linearRPM(), 60.0f) && near(free.turnRPM(), 10.0f));
+        free.limitLead(NAN, 0.0f, 50.0f);
+        assert(near(free.linearRPM(), 60.0f));
+        // Below the wheels too (braking against something that keeps the wheels turning).
+        free.limitLead(130.0f, 70.0f, 50.0f);
+        assert(near(free.linearRPM(), 80.0f) && near(free.turnRPM(), 20.0f));
     }
     { // Bad numbers stop the chair instead of reaching the wheels.
         MotionSmoother motion(RPMSetpointPID::defaultTuning());
@@ -178,26 +219,41 @@ static void stopTests()
     const float decelRPMS = STOP_DECEL * LINEAR_TO_RPM;
     { // From each speed-knob position: ramp, brake, release, inside the documented time.
         const float fractions[] = {0.25f, 0.5f, 0.75f, 1.0f};
-        const float documented[] = {0.33f, 0.66f, 1.0f, 1.33f}; // drive_constants.h
+        const float documented[] = {0.23f, 0.56f, 0.89f, 1.22f}; // drive_constants.h: until the speed command ends
         for (int i = 0; i < 4; ++i)
         {
             const float rpm = fractions[i] * MAX_SPEED * LINEAR_TO_RPM;
             const auto run = runStop(rpm, rpm, true, 400.0f);
             assert(run.sawRamp && run.sawBrake && run.monotonic);
-            const float rampSeconds = (rpm - STOP_HANDOFF_RPM) / decelRPMS;
-            assert(rampSeconds <= documented[i]);
+            // The onset adds half of STOP_ONSET_S to the ramp.
+            const float rampSeconds = (rpm - STOP_HANDOFF_RPM) / decelRPMS + STOP_ONSET_S / 2;
+            assert(std::fabs(rampSeconds - documented[i]) < 0.01f);
             // Ramp, then the short brake phase from the handoff speed, then settle.
             assert(run.seconds >= rampSeconds && run.seconds <= rampSeconds + 0.5f);
             assert(std::fabs(run.lastLeft) < STOP_DONE_RPM && std::fabs(run.lastRight) < STOP_DONE_RPM);
         }
     }
-    { // The command starts falling on the first tick, at exactly STOP_DECEL.
+    { // The command starts falling on the first tick; the rate builds up to
+      // STOP_DECEL over STOP_ONSET_S and never exceeds it.
         StopController stop;
         stop.begin(100.0f, 100.0f, 0);
         const auto first = stop.update(dt, 5, {100.0f, 100.0f, true});
         assert(first.drive == StopController::Drive::RPM);
-        assert(near(first.left, 100.0f - decelRPMS * dt, 0.001f));
+        assert(first.left < 100.0f && first.left > 100.0f - decelRPMS * dt);
         assert(near(stop.leftRPM(), first.left, 0.0001f)); // what a resumed drive would start from
+        float previous = first.left, previousRate = 0.0f;
+        uint32_t now = 5;
+        for (int k = 1; k < 60; ++k)
+        {
+            now += 5;
+            const auto out = stop.update(dt, now, {previous, previous, true});
+            const float rate = (previous - out.left) / dt;
+            assert(rate >= previousRate - 0.01f && rate <= decelRPMS + 0.01f);
+            if ((k + 1) * dt >= STOP_ONSET_S)
+                assert(near(rate, decelRPMS, 0.01f));
+            previous = out.left;
+            previousRate = rate;
+        }
     }
     { // A turning chair stops along its curve: both wheels reach zero together.
         const auto run = runStop(120.0f, 40.0f, true, 400.0f);
@@ -259,10 +315,11 @@ static void stopTests()
         // Wheels that did come down hand off at once.
         StopController quick;
         quick.begin(STOP_HANDOFF_RPM + 1.0f, STOP_HANDOFF_RPM + 1.0f, 0);
-        out = quick.update(dt, 5, {20.0f, 20.0f, true});
-        assert(out.drive == StopController::Drive::RPM); // one tick of ramp left
-        out = quick.update(dt, 10, {20.0f, 20.0f, true});
-        assert(out.drive == StopController::Drive::Brake);
+        int ticks = 0;
+        do
+            out = quick.update(dt, 5 * ++ticks, {20.0f, 20.0f, true});
+        while (out.drive == StopController::Drive::RPM && ticks < 100);
+        assert(out.drive == StopController::Drive::Brake && ticks > 1 && ticks < 20); // the short ramp, then at once
     }
     { // The brake phase never runs past its limit, even if the wheels never stop.
         StopController stop;

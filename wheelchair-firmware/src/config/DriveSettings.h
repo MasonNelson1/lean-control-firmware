@@ -26,9 +26,11 @@ namespace settings
     // Bounds shared with the calibration code that writes these fields.
     constexpr int LeanRangeMin = 40, LeanRangeMax = 3000;
     constexpr int SensorZeroMin = 100, SensorZeroMax = 1500;
+    // Allowed exponents of the two lean response curves: 1 is a straight line.
+    constexpr float LeanCurveExponentMin = 1.0f, LeanCurveExponentMax = 4.0f;
     extern config::ConfigField<int> rangeForward, rangeBack, rangeLeft, rangeRight;
     extern config::ConfigField<int> zeroFront, zeroBack, zeroLeft, zeroRight, seatThreshold;
-    extern config::ConfigField<float> maxTurnRate, maxLateralAccel, trackWidth;
+    extern config::ConfigField<float> maxTurnRate, maxLateralAccel, trackWidth, vescMinSpeed;
     extern config::ProfileField<2> leanForewardBackResponse;
     extern config::ProfileField<2> leanSideToSideResponse;
     extern config::ProfileField<2> assistResponse;

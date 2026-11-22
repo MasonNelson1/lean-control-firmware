@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Runs every host-side test: native firmware tests (g++), dashboard JS tests
-# (node) and dashboard Python tests. No hardware needed.
+# Runs every host-side test: native firmware tests (g++), laptop tools tests
+# (python3), dashboard JS tests (node) and dashboard Python tests. No hardware needed.
 #
 #   ./run-tests.sh            # everything
 #   ./run-tests.sh native     # just the C++ tests
+#   ./run-tests.sh tools      # just the laptop tools (tools/tests)
 #   ./run-tests.sh viewer     # just the dashboard tests
 #
 # Python: set VIEWER_PYTHON to a venv's python with debugViewer/requirements.txt
@@ -88,11 +89,21 @@ run_viewer() {
     fi
 }
 
+run_tools() {
+    echo "== Laptop tools tests (chair_sql, chair_summary)"
+    if python3 -B -m unittest discover -s tools/tests >"$OUT/tools-py.log" 2>&1; then
+        echo "ok  $(grep -E '^Ran ' "$OUT/tools-py.log")"
+    else
+        echo "FAILED"; tail -30 "$OUT/tools-py.log"; failures+=(tools-python)
+    fi
+}
+
 case "${1:-all}" in
     native) run_native ;;
     viewer) run_viewer ;;
-    all)    run_native; run_viewer ;;
-    *)      echo "usage: $0 [native|viewer|all]"; exit 2 ;;
+    tools)  run_tools ;;
+    all)    run_native; run_tools; run_viewer ;;
+    *)      echo "usage: $0 [native|tools|viewer|all]"; exit 2 ;;
 esac
 
 echo

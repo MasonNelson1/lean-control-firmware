@@ -46,9 +46,11 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
     if ((leanPending_ || remotePending_ || disarmPending_ || assistHoldPending_ ||
          confirmingProfile_ != NoProfile) && !in.seated)
     {
-        leanPending_ = remotePending_ = disarmPending_ = assistHoldPending_ = false;
+        leanPending_ = remotePending_ = assistHoldPending_ = false;
         confirmingProfile_ = NoProfile;
-        return actions;
+        // DISARM must work with an empty seat; every other press is discarded.
+        if (!disarmPending_)
+            return actions;
     }
 
     const bool leanPressed = in.lean.pressed && leanPending_;

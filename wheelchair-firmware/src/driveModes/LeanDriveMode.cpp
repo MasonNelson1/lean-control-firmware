@@ -13,6 +13,10 @@ static float normalizeSensorPair(int difference, int userWeightEstimate)
 
 static int aboveFloor(int raw, int floor) { return raw - floor; }
 
+// Raw 12-bit counts. An unloaded sensor reads about 372, so only a shorted or open sensor gets here.
+constexpr int SENSOR_RAIL_LOW = 100, SENSOR_RAIL_HIGH = 4000;
+static bool atRail(int raw) { return raw <= SENSOR_RAIL_LOW || raw >= SENSOR_RAIL_HIGH; }
+
 void LeanDriveMode::updateResponseCurve()
 {
     const auto &speedKnee = settings::leanForewardBackResponse.get();
@@ -27,6 +31,7 @@ void LeanDriveMode::sampleSensors(bool seatOnly)
     const int rawB = analogRead(common::PIN_B);
     const int rawL = analogRead(common::PIN_L);
     const int rawR = analogRead(common::PIN_R);
+    railed = atRail(rawF) || atRail(rawB) || atRail(rawL) || atRail(rawR);
     const int defaultFloor = settings::defaultFloor.get();
     seatLoad = (rawF - defaultFloor) + (rawB - defaultFloor) +
                (rawL - defaultFloor) + (rawR - defaultFloor);

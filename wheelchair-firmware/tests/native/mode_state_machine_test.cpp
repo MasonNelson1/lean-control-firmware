@@ -54,7 +54,7 @@ int main()
         assert(t.changed && t.resetLean && !t.seatDisarm);
         assert(!sm.applySeat(true, 41).changed);
     }
-    { // Unseated presses are discarded, including delayed debounce events.
+    { // Unseated presses other than DISARM are discarded, including delayed debounce events.
         SM sm;
         auto in = press(LEAN);
         in.seated = false;
@@ -63,6 +63,20 @@ int main()
         in.lean.pressed = true;
         sm.update(in, 50);
         assert(sm.selected() == REMOTE);
+    }
+    { // DISARM works with an empty seat, e.g. an empty chair driving in REMOTE.
+        SM sm;
+        SM::Inputs in; // unseated
+        in.disarm.edge = true;
+        sm.update(in, 10);
+        in = {};
+        in.disarm.pressed = true; // debounced press arrives on a later tick
+        sm.update(in, 50);
+        assert(sm.selected() == DISARM);
+        const auto t = sm.applySeat(false, 50);
+        assert(t.changed && !t.seatDisarm && sm.current() == DISARM);
+        // The empty seat still cancels the Assist hold.
+        assert(!sm.update({}, 1000).resetAssist && sm.selected() == DISARM);
     }
     { // Seat latch retains intent and requests resets once per transition.
         SM sm;

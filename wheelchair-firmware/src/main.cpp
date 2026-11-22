@@ -373,6 +373,11 @@ static void updateDrive()
     const bool calibrationRequested = modeState.takeCalibrationRequest();
     if (modeState.requiresSeat())
         leanMode.sampleSensors();
+    if (modeState.current() == LEAN && leanMode.sensorAtRail())
+    {
+        telemetry::Telemetry::logf("Sensor reading at ADC rail; disarming.\n");
+        modeState.requestDisarm();
+    }
     applySeatedLatch();
     if (modeState.current() == LEAN && leanMode.isSeated() && calibrationRequested)
     {

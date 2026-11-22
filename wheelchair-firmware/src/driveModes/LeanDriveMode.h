@@ -17,6 +17,7 @@ private:
     int floorR = 0;
 
     int seatLoad = 0;
+    bool railed = false;
     int userWeightEstimate = 370; // Unloaded sensor estimate until calibration.
 
     float speedResponseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
@@ -38,6 +39,8 @@ public:
     MotorTargets getTargets() override;
     MotorTargets getTargetsFromSample();
     bool isSeated() const { return 2 * seatLoad > userWeightEstimate; }
+    // True when the last sample had any raw reading at an ADC rail (shorted or open sensor).
+    bool sensorAtRail() const { return railed; }
     // Refresh the seat reading and optionally refresh lean telemetry.
     void sampleSensors(bool seatOnly = false);
     void calibrate();

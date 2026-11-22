@@ -68,6 +68,22 @@ int main() {
     mode.getTargets();
     assert(near(mode.getTelemetry().speed, -1));
 
+    // A raw reading at either ADC rail on any one sensor is flagged; resting readings are not.
+    sensors(372, 437, 372, 372);
+    mode.sampleSensors();
+    assert(!mode.sensorAtRail());
+    for (uint8_t pin : {common::PIN_F, common::PIN_B, common::PIN_L, common::PIN_R})
+        for (int stuck : {4095, 0})
+        {
+            sensors(372, 437, 372, 372);
+            sensorInputs[pin] = stuck;
+            mode.sampleSensors();
+            assert(mode.sensorAtRail());
+        }
+    sensors(372, 437, 372, 372);
+    mode.sampleSensors();
+    assert(!mode.sensorAtRail()); // not latched: the disarm in main.cpp is what sticks
+
     // Zero weight cannot cause division by zero or nonfinite commands.
     sensors(0, 0, 0, 0);
     mode.calibrate();

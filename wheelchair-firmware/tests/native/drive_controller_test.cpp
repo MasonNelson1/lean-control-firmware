@@ -311,10 +311,14 @@ int main()
             sim.press(LEAN);
             sim.run(100);
             assert(sim.drive.mode() == DISARM && sim.drive.fault() == Fault::VescSilent);
-            assert(sim.last.left.kind == Kind::Current && sim.last.left.value == 0);
+            // Never driven. After the fault the chair is held (brake current on both
+            // wheels, since there is no wheel speed to go by) until DISARM is pressed.
+            assert(sim.last.left.kind == Kind::Brake && sim.last.right.kind == Kind::Brake);
             sim.press(REMOTE);
             sim.runRemote(200, 1, 1);
-            assert(sim.drive.mode() == DISARM && sim.last.left.kind == Kind::Current);
+            assert(sim.drive.mode() == DISARM && sim.last.left.kind == Kind::Brake);
+            sim.press(DISARM); // acknowledged, rider aboard: a manual chair again
+            assert(sim.last.left.kind == Kind::Current && sim.last.left.value == 0);
             // Feedback back: arming works again and the fault clears.
             sim.leftAlive = sim.rightAlive = true;
             sim.press(LEAN);

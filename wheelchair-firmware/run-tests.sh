@@ -53,6 +53,8 @@ run_native() {
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
     native corner_layout       "${LEAN_INC[@]}" tests/native/corner_layout_test.cpp \
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
+    native corner_calibration  "${LEAN_INC[@]}" tests/native/corner_calibration_test.cpp \
+                               "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
     native plus_golden         "${LEAN_INC[@]}" tests/native/plus_golden_test.cpp \
                                "${LEAN_SRC[@]}" "${SETTINGS_SRC[@]}"
 }

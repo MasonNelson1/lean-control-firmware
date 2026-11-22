@@ -40,10 +40,89 @@ namespace lean
         return copysignf(std::min(beyond / (reach - deadzone), 1.0f), offset);
     }
 
-    Command cornerCommand(Point cop, Point neutral, const Reach &reach, float deadzone)
+    NeutralZone neutralZone(Point active, const Point *passive, float deadzone, float passiveMargin)
     {
-        return {axisLean(cop.y - neutral.y, reach.forward, reach.back, deadzone),
-                axisLean(cop.x - neutral.x, reach.right, reach.left, deadzone)};
+        if (!passive)
+            return {active.x, active.y, active.y, deadzone, deadzone};
+        return {active.x, std::min(active.y, passive->y), std::max(active.y, passive->y), deadzone, passiveMargin};
+    }
+
+    Command cornerCommand(Point cop, const NeutralZone &zone, const Reach &reach)
+    {
+        // Distance beyond the span's forward or back end; inside the span is 0.
+        // With no relaxed posture the span is a single point and this is just
+        // cop.y − neutral.y.
+        const float dy = cop.y > zone.yForward ? cop.y - zone.yForward
+                         : cop.y < zone.yBack  ? cop.y - zone.yBack
+                                               : 0.0f;
+        return {axisLean(dy, reach.forward, reach.back, zone.yDeadzone),
+                axisLean(cop.x - zone.x0, reach.right, reach.left, zone.xDeadzone)};
+    }
+
+    Box deadBox(const NeutralZone &zone)
+    {
+        return {zone.x0 - zone.xDeadzone, zone.x0 + zone.xDeadzone,
+                zone.yBack - zone.yDeadzone, zone.yForward + zone.yDeadzone};
+    }
+
+    Box fullLeanBox(const NeutralZone &zone, const Reach &reach)
+    {
+        return {zone.x0 - reach.left, zone.x0 + reach.right, zone.yBack - reach.back, zone.yForward + reach.forward};
+    }
+
+    void EmptyPlateTracker::start(const Counts &raw, uint32_t now)
+    {
+        collecting = true;
+        startedAt = now;
+        samples = 1;
+        low = high = raw;
+        for (size_t i = 0; i < Channels; ++i)
+            sum[i] = raw[i];
+    }
+
+    bool EmptyPlateTracker::update(const Counts &raw, uint32_t now, bool eligible, const Counts &configured)
+    {
+        if (!eligible)
+        {
+            collecting = false;
+            return false;
+        }
+        if (!collecting)
+        {
+            start(raw, now);
+            return false;
+        }
+        for (size_t i = 0; i < Channels; ++i)
+        {
+            low[i] = std::min(low[i], raw[i]);
+            high[i] = std::max(high[i], raw[i]);
+            sum[i] += raw[i];
+            if (high[i] - low[i] > EmptySteadyCounts)
+            {
+                start(raw, now); // something moved: begin a fresh window here
+                return false;
+            }
+        }
+        ++samples;
+        if (now - startedAt < EmptyZeroWindowMs)
+            return false;
+        collecting = false; // the next sample starts the next window
+        Counts mean{};
+        for (size_t i = 0; i < Channels; ++i)
+        {
+            mean[i] = static_cast<int>((sum[i] + samples / 2) / samples);
+            if (mean[i] - configured[i] > EmptyMaxShift || configured[i] - mean[i] > EmptyMaxShift)
+                return false;
+        }
+        hasAdopted = true;
+        adoptedBaseline = mean;
+        adoptedAgainst = configured;
+        return true;
+    }
+
+    Counts EmptyPlateTracker::baseline(const Counts &configured) const
+    {
+        return adopted(configured) ? adoptedBaseline : configured;
     }
 
     // Moved verbatim from LeanDriveMode.cpp (normalizeSensorPair). The plus golden

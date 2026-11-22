@@ -65,7 +65,7 @@ int main() {
             &settings::transitionPid.lowTau, &settings::transitionPid.highTau, &settings::transitionPid.ki,
             &settings::transitionPid.kd, &settings::transitionPid.filter, &settings::transitionPid.maxJerk,
             &settings::sensorLayout, &settings::cornerDeadzone,
-            &settings::reachForward, &settings::reachBack, &settings::reachLeft, &settings::reachRight,
+            &settings::reachForward, &settings::reachBack, &settings::reachLeft, &settings::reachRight, &settings::passiveMargin,
             &settings::emptyPlateF, &settings::emptyPlateB, &settings::emptyPlateL, &settings::emptyPlateR,
             &settings::cornerGainF, &settings::cornerGainB, &settings::cornerGainL, &settings::cornerGainR
         };
@@ -140,6 +140,20 @@ int main() {
         CHECK(request(Command::Set, settings::cornerDeadzone.id, reinterpret_cast<const uint8_t *>(&tooWide), 4) != Status::Ok);
         CHECK(settings::reachBack.get() == lean::DefaultReachBack);
         CHECK(settings::cornerDeadzone.get() == lean::DefaultDeadzone);
+    });
+    test("a profile saved before the corner layout selects corner defaults, not the last profile's", [] {
+        // Profile from older firmware: only the startup mode, no layout or corner fields.
+        const uint8_t older[] = {1, 0, uint8_t(Type::Enum), 1, uint8_t(common::DISARM)};
+        uint8_t name[Persistence::ProfileNameSize] = "Before corners";
+        CHECK(settings::persistence.writeProfile(6, name, older, sizeof(older)));
+        const uint8_t plus = 0;
+        const float reach = 3.0f;
+        CHECK(settings::sensorLayout.update(&plus, 1));
+        CHECK(settings::reachForward.update(reinterpret_cast<const uint8_t *>(&reach), 4));
+        CHECK(settings::protocol.selectProfile(6));
+        CHECK(settings::sensorLayout.get() == lean::SensorLayout::Corner);
+        CHECK(settings::reachForward.get() == lean::DefaultReachForward);
+        settings::registry().defaults();
     });
     test("actual settings fit EEPROM and survive reload", [] {
         CHECK(settings::persistence.save());

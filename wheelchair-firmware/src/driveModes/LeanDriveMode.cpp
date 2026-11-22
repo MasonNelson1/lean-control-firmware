@@ -9,17 +9,17 @@
 
 static int aboveFloor(int raw, int floor) { return raw - floor; }
 
-// Raw 12-bit counts. An unloaded sensor reads about 372, so only a shorted or open sensor gets here.
-constexpr int SENSOR_RAIL_LOW = 100, SENSOR_RAIL_HIGH = 4000;
-static bool atRail(int raw) { return raw <= SENSOR_RAIL_LOW || raw >= SENSOR_RAIL_HIGH; }
+static bool atRail(int raw) { return raw <= LeanDriveMode::SensorRailLow || raw >= LeanDriveMode::SensorRailHigh; }
 
 lean::SensorLayout LeanDriveMode::layout() { return settings::sensorLayout.get(); }
 
-static lean::Counts emptyPlate()
+static lean::Counts configuredEmptyPlate()
 {
     return {{settings::emptyPlateF.get(), settings::emptyPlateB.get(),
              settings::emptyPlateL.get(), settings::emptyPlateR.get()}};
 }
+
+lean::Counts LeanDriveMode::emptyPlate() const { return emptyTracker.baseline(configuredEmptyPlate()); }
 
 static lean::Gains cornerGains()
 {
@@ -27,22 +27,77 @@ static lean::Gains cornerGains()
              settings::cornerGainL.get(), settings::cornerGainR.get()}};
 }
 
-static lean::CentreOfPressure cornerCop(const lean::Counts &raw)
+lean::CentreOfPressure LeanDriveMode::cornerCop(const lean::Counts &raw) const
 {
     return lean::centreOfPressure(lean::cornerForces(raw, emptyPlate(), cornerGains()));
 }
 
+// Average of `samples` reads per channel 2 ms apart, rounded half up.
+static lean::Counts averageRaw(int samples)
+{
+    long sumF = 0, sumB = 0, sumL = 0, sumR = 0;
+    for (int i = 0; i < samples; i++)
+    {
+        sumF += analogRead(common::PIN_F);
+        sumB += analogRead(common::PIN_B);
+        sumL += analogRead(common::PIN_L);
+        sumR += analogRead(common::PIN_R);
+        delay(2);
+    }
+    return {{static_cast<int>((sumF + samples / 2) / samples), static_cast<int>((sumB + samples / 2) / samples),
+             static_cast<int>((sumL + samples / 2) / samples), static_cast<int>((sumR + samples / 2) / samples)}};
+}
+
+lean::NeutralZone LeanDriveMode::neutralZone() const
+{
+    return lean::neutralZone(neutral.at, passive.valid ? &passive.at : nullptr,
+                             settings::cornerDeadzone.get(), settings::passiveMargin.get());
+}
+
+bool LeanDriveMode::cornerCalibrated() const
+{
+    return initiallyCalibrated && calibratedLayout == lean::SensorLayout::Corner && neutral.valid;
+}
+
+// Calibrated for the live layout. On the corner layout that also needs a usable
+// neutral (enough load, every channel carrying some of it).
+bool LeanDriveMode::calibrated() const
+{
+    if (!initiallyCalibrated || layout() != calibratedLayout)
+        return false;
+    return calibratedLayout != lean::SensorLayout::Corner || neutral.valid;
+}
+
 bool LeanDriveMode::readyToDrive() const
 {
-    return initiallyCalibrated && !calibrationActive() && layout() == calibratedLayout;
+    return calibrated() && !calibrationActive();
+}
+
+static lean::Reach configuredReach()
+{
+    return {settings::reachForward.get(), settings::reachBack.get(),
+            settings::reachLeft.get(), settings::reachRight.get()};
+}
+
+// A hold-calibrated reach stands until a reach setting changes, the seat has
+// been empty for ForgetReachEmptyMs (a new rider), or the profile changes.
+bool LeanDriveMode::reachFromCalibration() const
+{
+    return reachCalibrated && configuredReach() == reachConfigAtCalibration;
+}
+
+void LeanDriveMode::settingsChanged()
+{
+    if (reachCalibrated && !(configuredReach() == reachConfigAtCalibration))
+    {
+        reachCalibrated = false;
+        telemetry::Telemetry::logf("Reach setting changed: hold-calibrated reach cleared.\n");
+    }
 }
 
 lean::Reach LeanDriveMode::activeReach() const
 {
-    if (reachCalibrated)
-        return calibratedReach;
-    return {settings::reachForward.get(), settings::reachBack.get(),
-            settings::reachLeft.get(), settings::reachRight.get()};
+    return reachFromCalibration() ? calibratedReach : configuredReach();
 }
 
 void LeanDriveMode::updateResponseCurve()
@@ -106,8 +161,12 @@ MotorTargets LeanDriveMode::getTargets()
 
 MotorTargets LeanDriveMode::getTargetsFromSample()
 {
+    copJumped = false;
     if (!readyToDrive())
+    {
+        lastDrivenCop = {}; // the jump check only compares consecutive driving ticks
         return {0, 0};
+    }
 
     const int f = telemetry.front, b = telemetry.back;
     const int l = telemetry.left, r = telemetry.right;
@@ -117,7 +176,12 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     lean::Command command;
     if (calibratedLayout == lean::SensorLayout::Corner)
     {
-        if (!cop.valid || !neutral.valid)
+        // A sensor dropping out moves the CoP further in one tick than a body
+        // can (lean::MaxCopStep). main.cpp disarms on copJumped.
+        copJumped = cop.valid && lastDrivenCop.valid &&
+                    hypotf(cop.at.x - lastDrivenCop.at.x, cop.at.y - lastDrivenCop.at.y) > lean::MaxCopStep;
+        lastDrivenCop = cop;
+        if (!cop.valid || copJumped)
         {
             telemetry.speed = telemetry.turn = 0.0f;
             telemetry.stopped = true;
@@ -125,9 +189,8 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
         }
         // The corner deadzone is in inches inside cornerCommand, with the output
         // ramping from its edge, so the normalised deadband is skipped (0).
-        command = lean::shapeCommand(
-            lean::cornerCommand(cop.at, neutral.at, activeReach(), settings::cornerDeadzone.get()),
-            0.0f, speedResponseExponent, turnResponseExponent);
+        command = lean::shapeCommand(lean::cornerCommand(cop.at, neutralZone(), activeReach()),
+                                     0.0f, speedResponseExponent, turnResponseExponent);
     }
     else
     {
@@ -151,19 +214,11 @@ void LeanDriveMode::calibrate()
 {
 
     const int samples = settings::calibrationSamples.get();
-    long sumF = 0, sumB = 0, sumL = 0, sumR = 0;
-    for (int i = 0; i < samples; i++)
-    {
-        sumF += analogRead(common::PIN_F);
-        sumB += analogRead(common::PIN_B);
-        sumL += analogRead(common::PIN_L);
-        sumR += analogRead(common::PIN_R);
-        delay(2);
-    }
-    floorF = (sumF + samples / 2) / samples;
-    floorB = (sumB + samples / 2) / samples;
-    floorL = (sumL + samples / 2) / samples;
-    floorR = (sumR + samples / 2) / samples;
+    const auto average = averageRaw(samples);
+    floorF = average[lean::F];
+    floorB = average[lean::B];
+    floorL = average[lean::L];
+    floorR = average[lean::R];
     userWeightEstimate = (floorF + floorB + floorL + floorR) / 4; // integer division ok here.
 
     initiallyCalibrated = true;
@@ -172,23 +227,59 @@ void LeanDriveMode::calibrate()
     telemetry::Telemetry::logf("** Calibrated (%d samples): floor F=%d B=%d L=%d R=%d **\n",
                                samples, floorF, floorB, floorL, floorR);
     neutral = {};
+    passive = {}; // a new neutral starts without a relaxed posture
     if (calibratedLayout != lean::SensorLayout::Corner)
         return;
     // The same averaged readings set the rider's neutral centre of pressure. The
     // rider should sit upright and engaged (active neutral) when pressing.
-    neutral = cornerCop({{floorF, floorB, floorL, floorR}});
+    neutral = cornerCop(average);
+    if (!neutral.valid)
+    {
+        telemetry::Telemetry::logf("Calibration rejected: plate load %.0f is too low for a centre of pressure; LEAN stays stopped.\n",
+                                   neutral.total);
+        return;
+    }
+    // Sitting still, every corner carries part of the rider. One that doesn't is
+    // a dead or unplugged sensor, and steering from it would be wrong.
+    const auto forces = lean::cornerForces(average, emptyPlate(), cornerGains());
+    for (size_t i = 0; i < lean::Channels; ++i)
+        if (forces[i] < lean::MinNeutralChannelLoad || forces[i] < lean::MinNeutralChannelShare * neutral.total)
+        {
+            telemetry::Telemetry::logf("Calibration rejected: channel %c (%s) carries %.0f of %.0f counts; check that sensor. LEAN stays stopped.\n",
+                                       lean::ChannelLetters[i], lean::CornerNames[i], forces[i], neutral.total);
+            neutral.valid = false;
+        }
     if (neutral.valid)
         telemetry::Telemetry::logf("** Neutral centre of pressure x=%.2f y=%.2f in (load %.0f) **\n",
                                    neutral.at.x, neutral.at.y, neutral.total);
-    else
-        telemetry::Telemetry::logf("Calibration: plate load %.0f is too low for a centre of pressure; LEAN stays stopped.\n",
-                                   neutral.total);
 }
 
+bool LeanDriveMode::relaxedPressDue(uint32_t pressedAt) const
+{
+    return passiveWindowOpen && cornerCalibrated() && layout() == lean::SensorLayout::Corner &&
+           pressedAt - neutralPressedAt <= lean::PassiveWindowMs;
+}
+
+// Calibrate button, corner layout: the first press (upright and engaged) takes
+// neutral. A second press within PassiveWindowMs, made while relaxed, records
+// the relaxed posture instead and closes the window; a later press starts over
+// with a new neutral. Holding either press also runs the dynamic reach
+// calibration. The plus layout ignores the window: every press is neutral.
 void LeanDriveMode::beginCalibration(uint32_t pressedAt)
 {
-    calibrate();
+    if (relaxedPressDue(pressedAt))
+    {
+        capturePassive();
+        passiveWindowOpen = false;
+    }
+    else
+    {
+        calibrate();
+        neutralPressedAt = pressedAt;
+        passiveWindowOpen = cornerCalibrated();
+    }
     calibrationPressedAt = pressedAt;
+    lastDrivenCop = {}; // the rider may have moved while the button was down
     calibrationPeaks.fill(0);
     oppositeAtPeak.fill(0);
     reachPeaks = {};
@@ -215,14 +306,15 @@ bool LeanDriveMode::updateCalibration(uint32_t now, bool buttonHeld)
     }
     if (calibrationState == CalibrationState::Collecting && calibratedLayout == lean::SensorLayout::Corner)
     {
-        // Furthest centre-of-pressure travel from neutral in each direction.
+        // Furthest centre-of-pressure travel beyond the neutral zone in each
+        // direction, measured the way cornerCommand measures reach.
         if (cop.valid && neutral.valid)
         {
-            const float dx = cop.at.x - neutral.at.x, dy = cop.at.y - neutral.at.y;
-            reachPeaks.forward = std::max(reachPeaks.forward, dy);
-            reachPeaks.back = std::max(reachPeaks.back, -dy);
-            reachPeaks.right = std::max(reachPeaks.right, dx);
-            reachPeaks.left = std::max(reachPeaks.left, -dx);
+            const auto zone = neutralZone();
+            reachPeaks.forward = std::max(reachPeaks.forward, cop.at.y - zone.yForward);
+            reachPeaks.back = std::max(reachPeaks.back, zone.yBack - cop.at.y);
+            reachPeaks.right = std::max(reachPeaks.right, cop.at.x - zone.x0);
+            reachPeaks.left = std::max(reachPeaks.left, zone.x0 - cop.at.x);
         }
     }
     else if (calibrationState == CalibrationState::Collecting)
@@ -240,6 +332,8 @@ bool LeanDriveMode::updateCalibration(uint32_t now, bool buttonHeld)
 
 void LeanDriveMode::finishDynamicCalibration()
 {
+    // A finished hold always ends in DISARM (main.cpp), so no relaxed press follows.
+    passiveWindowOpen = false;
     if (calibratedLayout == lean::SensorLayout::Corner)
     {
         finishReachCalibration();
@@ -298,8 +392,59 @@ void LeanDriveMode::finishReachCalibration()
     calibratedReach = {std::min(peaks[0], lean::MaxReach), std::min(peaks[1], lean::MaxReach),
                        std::min(peaks[2], lean::MaxReach), std::min(peaks[3], lean::MaxReach)};
     reachCalibrated = true;
+    reachConfigAtCalibration = configuredReach();
     telemetry::Telemetry::logf("Reach calibration complete: forward %.2f back %.2f left %.2f right %.2f in.\n",
                                calibratedReach.forward, calibratedReach.back, calibratedReach.left, calibratedReach.right);
+}
+
+void LeanDriveMode::capturePassive()
+{
+    const auto relaxed = cornerCop(averageRaw(settings::calibrationSamples.get()));
+    if (!relaxed.valid)
+    {
+        telemetry::Telemetry::logf("Relaxed posture rejected: plate load %.0f is too low.\n", relaxed.total);
+        return;
+    }
+    const float dx = relaxed.at.x - neutral.at.x, dy = relaxed.at.y - neutral.at.y;
+    if (fabsf(dx) > lean::MaxPassiveOffset || fabsf(dy) > lean::MaxPassiveOffset)
+    {
+        telemetry::Telemetry::logf("Relaxed posture rejected: %+.2f/%+.2f in from neutral is a lean (limit %.2f); keeping neutral only.\n",
+                                   dx, dy, lean::MaxPassiveOffset);
+        return;
+    }
+    passive = relaxed;
+    const auto dead = lean::deadBox(neutralZone());
+    telemetry::Telemetry::logf("** Relaxed posture x=%.2f y=%.2f in (%+.2f in from neutral); no speed from y=%.2f to %.2f **\n",
+                               passive.at.x, passive.at.y, dy, dead.back, dead.front);
+}
+
+void LeanDriveMode::trackEmptyPlate(uint32_t now, bool disarmed)
+{
+    // A seat empty for a few seconds means the rider got out: their
+    // hold-calibrated reach no longer applies.
+    if (isSeated())
+        seatEmptySince = now;
+    else if (now - seatEmptySince >= lean::ForgetReachEmptyMs && reachCalibrated)
+    {
+        reachCalibrated = false;
+        telemetry::Telemetry::logf("Seat empty: hold-calibrated reach cleared; using the configured reach.\n");
+    }
+
+    const auto configured = configuredEmptyPlate();
+    const bool eligible = disarmed && layout() == lean::SensorLayout::Corner && !isSeated() && !railed;
+    if (!emptyTracker.update(rawReadings, now, eligible, configured))
+        return;
+    // Re-zeroes every few seconds while the seat stays empty; only report real moves.
+    const auto adopted = emptyTracker.baseline(configured);
+    bool moved = false;
+    for (size_t i = 0; i < lean::Channels; ++i)
+        moved = moved || adopted[i] - lastReportedEmpty[i] >= 3 || lastReportedEmpty[i] - adopted[i] >= 3;
+    if (!moved)
+        return;
+    lastReportedEmpty = adopted;
+    telemetry::Telemetry::logf("Empty plate re-zeroed: F=%d B=%d L=%d R=%d (configured %d/%d/%d/%d).\n",
+                               adopted[0], adopted[1], adopted[2], adopted[3],
+                               configured[0], configured[1], configured[2], configured[3]);
 }
 
 void LeanDriveMode::cancelCalibration()
@@ -313,7 +458,11 @@ bool LeanDriveMode::calibrationLEDOn(uint32_t now) const
 {
     if (calibrationState == CalibrationState::Collecting)
         return ((now - collectionStartedAt) / 100) % 2 == 0;
-    return !initiallyCalibrated;
+    // Slow blink while a second press would record the relaxed posture.
+    if (passiveWindowOpen && cornerCalibrated() && now - neutralPressedAt <= lean::PassiveWindowMs)
+        return ((now - neutralPressedAt) / 500) % 2 == 1;
+    // On until a calibration that can drive: a rejected corner neutral stays lit.
+    return !calibrated();
 }
 
 void LeanDriveMode::resetDynamicGains()
@@ -334,22 +483,35 @@ void LeanDriveMode::publishDynamicGains() const
 
 void LeanDriveMode::publishSensorStatus() const
 {
-    // Corner fields: last CoP, calibrated neutral and the reach in use
-    // (forward/back/left/right), all in inches. Keep the line under Telemetry's
-    // 256-byte limit (≈210 at most today).
-    char corner[112] = "";
-    if (layout() == lean::SensorLayout::Corner)
-    {
-        const auto reach = activeReach();
-        snprintf(corner, sizeof(corner), " cop=%.2f/%.2f neutral=%.2f/%.2f reach=%.2f/%.2f/%.2f/%.2f%s",
-                 cop.at.x, cop.at.y, neutral.at.x, neutral.at.y,
-                 reach.forward, reach.back, reach.left, reach.right, reachCalibrated ? "*" : "");
-    }
-    telemetry::Telemetry::logf("DBG SENSORS raw=%d/%d/%d/%d floors=%d/%d/%d/%d W=%d seatLoad=%d seated=%d calibrated=%d calActive=%d railed=%d layout=%s%s\n",
+    telemetry::Telemetry::logf("DBG SENSORS raw=%d/%d/%d/%d floors=%d/%d/%d/%d W=%d seatLoad=%d seated=%d calibrated=%d calActive=%d railed=%d layout=%s\n",
                                rawReadings[0], rawReadings[1], rawReadings[2], rawReadings[3],
                                floorF, floorB, floorL, floorR, userWeightEstimate, seatLoad,
                                isSeated() ? 1 : 0, initiallyCalibrated ? 1 : 0, calibrationActive() ? 1 : 0, railed ? 1 : 0,
-                               lean::layoutName(layout()), corner);
+                               lean::layoutName(layout()));
+}
+
+void LeanDriveMode::publishCornerStatus() const
+{
+    if (layout() != lean::SensorLayout::Corner)
+        return;
+    // Plate inches. dead and full are {left x, right x, back y, front y}: the box
+    // where output is zero and the box where it reaches full. nan until a corner
+    // calibration. reachCal = 1 when a dynamic calibration set the reach; empty
+    // is the baseline in use (auto = 1 when the empty-seat zero set it).
+    const bool zoned = cornerCalibrated();
+    const auto zone = neutralZone();
+    const auto dead = lean::deadBox(zone);
+    const auto full = lean::fullLeanBox(zone, activeReach());
+    const auto empty = emptyPlate();
+    const auto z = [zoned](float v) { return zoned ? v : NAN; };
+    const auto p = [this](float v) { return passive.valid ? v : NAN; };
+    telemetry::Telemetry::logf("DBG CORNER neutral=%.2f/%.2f passive=%.2f/%.2f dead=%.2f/%.2f/%.2f/%.2f "
+                               "full=%.2f/%.2f/%.2f/%.2f reachCal=%d empty=%d/%d/%d/%d auto=%d\n",
+                               z(neutral.at.x), z(neutral.at.y), p(passive.at.x), p(passive.at.y),
+                               z(dead.left), z(dead.right), z(dead.back), z(dead.front),
+                               z(full.left), z(full.right), z(full.back), z(full.front),
+                               reachFromCalibration() ? 1 : 0, empty[0], empty[1], empty[2], empty[3],
+                               emptyTracker.adopted(configuredEmptyPlate()) ? 1 : 0);
 }
 
 void LeanDriveMode::publishCentreOfPressure(uint32_t now) const

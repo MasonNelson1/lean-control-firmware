@@ -118,15 +118,46 @@ namespace
 
         // Directions: forward and right are positive, back and left negative.
         const lean::Reach reach{2.0f, 1.9f, 1.7f, 1.6f};
-        const lean::Point neutral{-0.3f, -1.64f};
-        auto cmd = lean::cornerCommand({-0.3f, 0.36f}, neutral, reach, 0.25f);
+        const auto zone = lean::neutralZone({-0.3f, -1.64f}, nullptr, 0.25f, 0.15f);
+        assert(zone.x0 == -0.3f && zone.yBack == -1.64f && zone.yForward == -1.64f);
+        assert(zone.xDeadzone == 0.25f && zone.yDeadzone == 0.25f); // no relaxed posture: one deadzone
+        auto cmd = lean::cornerCommand({-0.3f, 0.36f}, zone, reach);
         assert(near(cmd.speed, 1) && cmd.turn == 0);
-        cmd = lean::cornerCommand({-0.3f, -3.54f}, neutral, reach, 0.25f);
+        cmd = lean::cornerCommand({-0.3f, -3.54f}, zone, reach);
         assert(near(cmd.speed, -1) && cmd.turn == 0);
-        cmd = lean::cornerCommand({1.3f, -1.64f}, neutral, reach, 0.25f);
+        cmd = lean::cornerCommand({1.3f, -1.64f}, zone, reach);
         assert(cmd.speed == 0 && near(cmd.turn, 1));
-        cmd = lean::cornerCommand({-2.0f, -1.64f}, neutral, reach, 0.25f);
+        cmd = lean::cornerCommand({-2.0f, -1.64f}, zone, reach);
         assert(cmd.speed == 0 && near(cmd.turn, -1));
+        // Without a relaxed posture this is exactly axisLean on the offset from neutral.
+        for (float y = -4.0f; y <= 1.0f; y += 0.0625f)
+            assert(lean::cornerCommand({-0.3f, y}, zone, reach).speed == lean::axisLean(y - -1.64f, 2.0f, 1.9f, 0.25f));
+
+        // With a relaxed posture 0.74" forward: no speed anywhere from upright to
+        // relaxed ± the margin, forward reach from the relaxed point, back reach
+        // still from upright, turning unchanged.
+        const lean::Point relaxed{-0.15f, -0.90f};
+        const auto both = lean::neutralZone({-0.3f, -1.64f}, &relaxed, 0.25f, 0.15f);
+        assert(both.x0 == -0.3f && both.yBack == -1.64f && both.yForward == -0.90f);
+        assert(both.xDeadzone == 0.25f && both.yDeadzone == 0.15f);
+        for (float y : {-1.79f, -1.64f, -1.2f, -0.90f, -0.751f})
+            assert(lean::cornerCommand({-0.3f, y}, both, reach).speed == 0);
+        assert(lean::cornerCommand({-0.3f, -0.74f}, both, reach).speed > 0);
+        assert(near(lean::cornerCommand({-0.3f, -0.90f + 1.075f}, both, reach).speed, 0.5f));
+        assert(near(lean::cornerCommand({-0.3f, -0.90f + 2.0f}, both, reach).speed, 1));
+        assert(near(lean::cornerCommand({-0.3f, -1.64f - 1.9f}, both, reach).speed, -1));
+        assert(lean::cornerCommand({-0.3f, -1.81f}, both, reach).speed < 0);
+        assert(near(lean::cornerCommand({1.3f, -1.2f}, both, reach).turn, 1));
+        // A relaxed posture behind upright works the same way round.
+        const lean::Point behind{-0.3f, -2.0f};
+        const auto reversed = lean::neutralZone({-0.3f, -1.64f}, &behind, 0.25f, 0.15f);
+        assert(reversed.yBack == -2.0f && reversed.yForward == -1.64f);
+
+        // Boxes for telemetry: {left, right, back, front}.
+        const auto dead = lean::deadBox(both);
+        assert(near(dead.left, -0.55f) && near(dead.right, -0.05f) && near(dead.back, -1.79f) && near(dead.front, -0.75f));
+        const auto full = lean::fullLeanBox(both, reach);
+        assert(near(full.left, -2.0f) && near(full.right, 1.3f) && near(full.back, -3.54f) && near(full.front, 1.10f));
 
         // Shared shaping: with no deadband a tiny input still passes through the
         // curve, and the reverse-turn flip and hard-reverse cut are intact.
@@ -153,10 +184,25 @@ namespace
         return mode;
     }
 
+    // Moves the readings to `raw` the way a rider does: over 40 control ticks
+    // (200 ms at 5 ms), so the CoP never steps further than lean::MaxCopStep in
+    // one tick. Returns the speed/turn and targets at the final posture.
+    lean::Counts lastRaw{};
     lean::Command drive(LeanDriveMode &mode, const lean::Counts &raw, MotorTargets *targets = nullptr)
     {
-        sensors(raw);
-        const auto out = mode.getTargets();
+        constexpr int Steps = 40;
+        const lean::Counts from = lastRaw[0] ? lastRaw : raw;
+        MotorTargets out{};
+        for (int step = 1; step <= Steps; ++step)
+        {
+            lean::Counts now;
+            for (size_t i = 0; i < lean::Channels; ++i)
+                now[i] = from[i] + (raw[i] - from[i]) * step / Steps;
+            sensors(now);
+            out = mode.getTargets();
+            assert(!mode.centreOfPressureJumped());
+        }
+        lastRaw = raw;
         if (targets)
             *targets = out;
         return {mode.getTelemetry().speed, mode.getTelemetry().turn};
@@ -322,7 +368,7 @@ namespace
         for (const auto &raw : {Forward, BackTouch, Left})
             step(raw, 2400);
         assert(step(ActiveNeutral, 2500, false));
-        assert(messages.find("Reach calibration rejected: right reached 0.49 in, required 0.60.") != std::string::npos);
+        assert(messages.find("Reach calibration rejected: right reached 0.49 in, required 1.20.") != std::string::npos);
         assert(mode.activeReach().right == reach.right && mode.activeReach().forward == reach.forward);
 
         // Recalibrating neutral keeps the rider's reach; a profile change drops it.
@@ -362,7 +408,11 @@ namespace
         messages.clear();
         mode.publishSensorStatus();
         assert(messages.find("DBG SENSORS raw=927/756/1058/1390 ") == 0);
-        assert(messages.find(" railed=0 layout=CORNER cop=0.19/0.43 neutral=-0.30/-1.63 reach=2.00/1.90/1.70/1.60\n") != std::string::npos);
+        assert(messages.find(" railed=0 layout=CORNER\n") != std::string::npos);
+        messages.clear();
+        mode.publishCornerStatus();
+        assert(messages == "DBG CORNER neutral=-0.30/-1.63 passive=nan/nan dead=-0.55/-0.05/-1.88/-1.38 "
+                           "full=-2.00/1.30/-3.53/0.37 reachCal=0 empty=391/406/427/400 auto=0\n");
         messages.clear();
         mode.publishDynamicGains(); // the dashboard shows the active layout's gains
         assert(messages == "DYNAMIC_GAINS F=1.0000 B=1.0000 L=1.0000 R=1.0000\n");
@@ -372,11 +422,20 @@ namespace
         mode.sampleSensors();
         messages.clear();
         mode.publishSensorStatus(); // logf asserts the line fits
+        mode.publishCornerStatus();
+
+        // Before any calibration the zone is unknown.
+        auto fresh = freshMode();
+        messages.clear();
+        fresh.publishCornerStatus();
+        assert(messages == "DBG CORNER neutral=nan/nan passive=nan/nan dead=nan/nan/nan/nan "
+                           "full=nan/nan/nan/nan reachCal=0 empty=391/406/427/400 auto=0\n");
 
         setLayout(SensorLayout::Plus);
         messages.clear();
         mode.publishCentreOfPressure(1384);
-        assert(messages.empty()); // no DBG COP on the plus layout
+        mode.publishCornerStatus();
+        assert(messages.empty()); // no DBG COP or DBG CORNER on the plus layout
         mode.publishSensorStatus();
         assert(messages.find(" layout=PLUS\n") != std::string::npos);
         setLayout(SensorLayout::Corner);

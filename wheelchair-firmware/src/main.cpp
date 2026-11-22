@@ -105,6 +105,7 @@ static void applyRuntimeSettings()
     remoteModeButton.setDebounceTime(settings::buttonDebounce.get());
     disarmModeButton.setDebounceTime(settings::buttonDebounce.get());
     leanMode.updateResponseCurve();
+    leanMode.settingsChanged();
     const auto tuning = settings::normalPid.tuning();
     leftRPMSetpointPID.setTuning(tuning);
     rightRPMSetpointPID.setTuning(tuning);
@@ -209,7 +210,12 @@ static void updateKnobs()
 }
 void setup()
 {
-    static uint8_t bluetoothTxBuffer[512];
+    // Worst-case burst when the 1 Hz lines and a 20 Hz group land in one loop:
+    // DYNAMIC_GAINS ≈45, DBG SENSORS ≈150, DBG CORNER ≈150, 2× DBG VESC ≈170,
+    // DBG R ≈30, DBG COP ≈40, CSV row ≈110: ≈700 bytes, plus room for the VESC
+    // probe lines on charles/dev-setup (≈100). Telemetry drops whole lines rather
+    // than block when this is full.
+    static uint8_t bluetoothTxBuffer[1024];
 
     // set up serial and telemetry stuff
     Serial.begin(115200);
@@ -414,6 +420,14 @@ static void updateDrive()
     {
     case LEAN:
         targets = leanMode.getTargetsFromSample();
+        // Corner layout: a CoP step no body can make in one tick is a sensor
+        // dropping out (lean::MaxCopStep). getTargetsFromSample already returned
+        // zero; disarm like a rail fault.
+        if (SENSOR_RAIL_DISARM && leanMode.centreOfPressureJumped())
+        {
+            telemetry::Telemetry::logf("Centre of pressure jumped; sensor fault suspected; disarming.\n");
+            modeState.requestDisarm();
+        }
         break;
 
     case REMOTE:
@@ -478,6 +492,7 @@ static void publishTelemetry()
         lastGainStatusMs = now;
         leanMode.publishDynamicGains();
         leanMode.publishSensorStatus();
+        leanMode.publishCornerStatus();
         // Motor controller health; age = ms since the last status frame (large = VESC silent).
         for (const VescStatus *v : {&measuredMotors[0], &measuredMotors[1]})
             telemetry::Telemetry::logf("DBG VESC id=%u age=%lu frames=%lu erpm=%ld current=%.1f duty=%.3f fetC=%.1f vin=%.1f\n",
@@ -491,6 +506,11 @@ static void publishTelemetry()
     // Lean samples on each control tick; other modes sample for display only.
     if (modeState.current() != LEAN)
         leanMode.sampleSensors();
+    // Corner layout: re-zero the empty-plate baseline (RAM only) while disarmed
+    // with nobody seated. Never runs in LEAN, and entering LEAN forces a new
+    // neutral calibration, so a baseline never changes under a live neutral.
+    constexpr bool EMPTY_SEAT_AUTO_ZERO = true;
+    leanMode.trackEmptyPlate(now, EMPTY_SEAT_AUTO_ZERO && modeState.current() == DISARM);
     {
         // 20 Hz raw ADC counts (front/back/left/right) for lean-transition analysis.
         const auto &raw = leanMode.getRawReadings();

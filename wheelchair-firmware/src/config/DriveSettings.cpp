@@ -82,7 +82,8 @@ namespace settings
 
     // Sensor layout and the corner layout's settings (IDs 90-107). The math is in
     // driveModes/lean_layout.h, which also holds the defaults and the sensor
-    // positions. These 17 fields take 101 bytes of each saved profile.
+    // positions. These 18 fields take 109 bytes of each saved profile, leaving
+    // about 7 (the "every setting fits one saved profile" test guards this).
     EnumField<lean::SensorLayout, 2> sensorLayout(registry(), 90,
                                                   {lean, "Sensor layout", "PLUS: one sensor in front of, behind, left and right of centre, steering from front-minus-back and right-minus-left. CORNER: one sensor at each corner, steering from the rider's centre of pressure. Takes effect at the next calibration."},
                                                   lean::SensorLayout::Corner, Layouts);
@@ -90,7 +91,7 @@ namespace settings
                                       {corner, "Deadzone", "Centre-of-pressure travel from neutral, per axis, that is ignored. Output ramps up from zero at its edge.", "in"},
                                       lean::DefaultDeadzone, 0.0f, lean::MaxDeadzone);
     ConfigField<float> reachForward(registry(), 92,
-                                    {corner, "Full lean forward", "Centre-of-pressure travel forward of neutral that gives full forward speed. A dynamic calibration overrides this for the current rider.", "in"},
+                                    {corner, "Full lean forward", "Centre-of-pressure travel forward of neutral (of the relaxed posture, when one is captured) that gives full forward speed. A dynamic calibration overrides this for the current rider.", "in"},
                                     lean::DefaultReachForward, lean::MinReach, lean::MaxReach);
     ConfigField<float> reachBack(registry(), 93,
                                  {corner, "Full lean back", "Distance behind neutral (a positive number) that gives full reverse. A dynamic calibration overrides this for the current rider.", "in"},
@@ -101,6 +102,9 @@ namespace settings
     ConfigField<float> reachRight(registry(), 95,
                                   {corner, "Full lean right", "Distance right of neutral that gives a full right turn. A dynamic calibration overrides this for the current rider.", "in"},
                                   lean::DefaultReachRight, lean::MinReach, lean::MaxReach);
+    ConfigField<float> passiveMargin(registry(), 96,
+                                     {corner, "Relaxed posture margin", "After a second calibrate press captures the relaxed posture, speed stays zero from the upright to the relaxed posture plus this margin at each end. Replaces the deadzone on the forward/back axis.", "in"},
+                                     lean::DefaultPassiveMargin, 0.0f, lean::MaxDeadzone);
 
     // Channel names are the ADC pins'. On today's chair F = back-left, B = back-right,
     // L = front-left, R = front-right (lean::CornerPositions).
@@ -116,8 +120,9 @@ namespace settings
     ConfigField<uint16_t> emptyPlateR(registry(), 103,
                                       {cornerSensors, "Empty plate R (front-right)", "Raw reading of channel R with the plate on and nobody seated. Force is counted above this.", "ADC counts"},
                                       lean::DefaultEmptyPlateR, 0, 4095);
-    // Gains default to 1: a single 8.6 lb test (E10) hinted back-right reads about
-    // half, but that is unconfirmed. Per-rider calibration absorbs most gain error.
+    // Gains default to 1. E10's bare-sensor test hinted back-right read about half,
+    // but the plate-on known-weight check (E11) located 28.2 lb within 0.4" with all
+    // gains at 1, so the system needs no correction today.
     ConfigField<float> cornerGainF(registry(), 104,
                                    {cornerSensors, "Gain F (back-left)", "Multiplier on channel F's force above the empty plate, to even out sensor sensitivity.", "×"}, 1.0f, 0.1f, 10.0f);
     ConfigField<float> cornerGainB(registry(), 105,

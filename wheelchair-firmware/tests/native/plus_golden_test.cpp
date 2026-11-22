@@ -5,7 +5,7 @@
 // code (selects SensorLayout::Plus). It drives LeanDriveMode through calibration,
 // dynamic calibration, setting changes and thousands of pseudo-random ADC
 // samples, and hashes every output's exact bits (targets, telemetry, gains,
-// seat and rail flags).
+// seat flag).
 //
 //   ./plus_golden_test            compare against plus_golden_expected.h
 //   ./plus_golden_test --generate print a new plus_golden_expected.h
@@ -89,7 +89,8 @@ namespace
         run.add(bits(t.turn));
         run.add(t.stopped);
         run.add(mode.isSeated());
-        run.add(mode.sensorAtRail());
+        // sensorAtRail() is deliberately not hashed: its low threshold moved from
+        // 100 to 340 counts for both layouts (corner_layout_test covers it).
         run.add(mode.getUserWeightEstimate());
         for (float g : mode.getDynamicGains())
             run.add(bits(g));

@@ -26,7 +26,7 @@ namespace settings
     // Which seat sensor layout the lean math assumes (lean_layout.h).
     extern config::EnumField<lean::SensorLayout, 2> sensorLayout;
     // Corner layout: rider-facing tuning, in inches of centre-of-pressure travel.
-    extern config::ConfigField<float> cornerDeadzone, reachForward, reachBack, reachLeft, reachRight;
+    extern config::ConfigField<float> cornerDeadzone, reachForward, reachBack, reachLeft, reachRight, passiveMargin;
     // Corner layout: per-channel empty-plate baseline (raw counts) and force gain.
     extern config::ConfigField<uint16_t> emptyPlateF, emptyPlateB, emptyPlateL, emptyPlateR;
     extern config::ConfigField<float> cornerGainF, cornerGainB, cornerGainL, cornerGainR;

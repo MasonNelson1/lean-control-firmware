@@ -473,6 +473,10 @@ static void replyToConfiguration()
 // Read-only VESC firmware-version probe (see vesc_probe.h).
 static vescprobe::Reply probeReply;
 static uint32_t probeAsked = 0, probeFrames = 0, probeReplies = 0;
+// A config reply being streamed out as hex, a chunk per telemetry tick.
+static uint8_t confDump[1024];
+static uint16_t confDumpLen = 0, confDumpOff = 0;
+static uint8_t confDumpId = 0;
 
 static void logProbeReply()
 {
@@ -484,8 +488,30 @@ static void logProbeReply()
             hw[j] = static_cast<char>(r.data[i]);
         telemetry::Telemetry::logf("DBG VESCFW id=%u fw=%u.%02u hw=%s len=%u crc=%d\n", r.fromId, r.data[1], r.data[2], hw, r.len, r.crcOk);
     }
+    else if (r.crcOk && r.len > 0 && (r.data[0] == vescprobe::COMM_GET_MCCONF || r.data[0] == vescprobe::COMM_GET_APPCONF) &&
+             confDumpOff >= confDumpLen && r.len <= sizeof(confDump))
+    {
+        memcpy(confDump, r.data, r.len);
+        confDumpLen = r.len;
+        confDumpOff = 0;
+        confDumpId = r.fromId;
+    }
     else
         telemetry::Telemetry::logf("DBG VESCFW id=%u cmd=%u len=%u crc=%d\n", r.fromId, r.len ? r.data[0] : 255, r.len, r.crcOk);
+}
+
+// One 24-byte hex chunk of the pending config dump (decoded by tools/vesc_conf.py).
+static void streamConfDump()
+{
+    if (confDumpOff >= confDumpLen)
+        return;
+    char hex[49];
+    const uint16_t n = min<uint16_t>(24, confDumpLen - confDumpOff);
+    for (uint16_t i = 0; i < n; ++i)
+        snprintf(hex + 2 * i, 3, "%02x", confDump[confDumpOff + i]);
+    hex[2 * n] = 0;
+    telemetry::Telemetry::logf("DBG VCONF id=%u cmd=%u len=%u off=%u %s\n", confDumpId, confDump[0], confDumpLen, confDumpOff, hex);
+    confDumpOff += n;
 }
 
 static void publishTelemetry()
@@ -497,11 +523,14 @@ static void publishTelemetry()
         lastGainStatusMs = now;
         leanMode.publishDynamicGains();
         leanMode.publishSensorStatus();
-        // Every 5 s ask one VESC (alternating) for its firmware version. Read-only.
+        // Every 5 s one read-only GET to one VESC, cycling: firmware version,
+        // motor config, app config; left then right. A full cycle takes 30 s.
         static uint8_t probeTick = 0;
         if (++probeTick % 5 == 0)
         {
-            vescprobe::askFwVersion(can1, (probeTick / 5) % 2 ? motors.leftId : motors.rightId);
+            static const uint8_t comms[3] = {vescprobe::COMM_FW_VERSION, vescprobe::COMM_GET_MCCONF, vescprobe::COMM_GET_APPCONF};
+            const uint8_t slot = (probeTick / 5) % 6;
+            vescprobe::ask(can1, slot < 3 ? motors.leftId : motors.rightId, comms[slot % 3]);
             ++probeAsked;
         }
         telemetry::Telemetry::logf("DBG VESCPROBE asked=%lu frames=%lu replies=%lu\n", static_cast<unsigned long>(probeAsked),
@@ -516,6 +545,7 @@ static void publishTelemetry()
     }
     if (!telemetryOutput.due(now))
         return;
+    streamConfDump();
     // Lean samples on each control tick; other modes sample for display only.
     if (modeState.current() != LEAN)
         leanMode.sampleSensors();

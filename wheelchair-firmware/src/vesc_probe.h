@@ -6,7 +6,9 @@
 // Asks each VESC for its firmware version, the same way VESC Tool reaches a
 // second VESC through "CAN forward": a COMM packet wrapped in CAN buffer
 // frames. If replies come back, the Teensy can act as a VESC Tool bridge.
-// Only COMM_FW_VERSION is ever sent: it changes nothing and moves nothing.
+// Only GET commands are ever sent (firmware version, motor config, app config):
+// they change nothing and move nothing. The raw config bytes are streamed over
+// Bluetooth and decoded on the laptop by tools/vesc_conf.py.
 // ============================================================
 
 namespace vescprobe
@@ -19,6 +21,8 @@ constexpr uint8_t CAN_FILL_RX_BUFFER_LONG = 6;
 constexpr uint8_t CAN_PROCESS_RX_BUFFER = 7;
 constexpr uint8_t CAN_PROCESS_SHORT_BUFFER = 8;
 constexpr uint8_t COMM_FW_VERSION = 0;
+constexpr uint8_t COMM_GET_MCCONF = 14;
+constexpr uint8_t COMM_GET_APPCONF = 17;
 
 struct Reply
 {
@@ -26,7 +30,7 @@ struct Reply
   uint8_t fromId = 0;
   uint16_t len = 0;
   bool crcOk = false;
-  uint8_t data[512];
+  uint8_t data[1024]; // mcconf is 484 bytes on firmware 6.06
 };
 
 inline uint16_t crc16(const uint8_t *p, uint16_t n)
@@ -41,8 +45,8 @@ inline uint16_t crc16(const uint8_t *p, uint16_t n)
   return c;
 }
 
-// Ask one VESC for its firmware version (payload fits a short-buffer frame).
-inline void askFwVersion(VescBus &bus, uint8_t vescId)
+// Ask one VESC a one-byte GET command (fits a short-buffer frame).
+inline void ask(VescBus &bus, uint8_t vescId, uint8_t comm)
 {
   CAN_message_t m;
   m.id = vescId | ((uint32_t)CAN_PROCESS_SHORT_BUFFER << 8);
@@ -50,7 +54,7 @@ inline void askFwVersion(VescBus &bus, uint8_t vescId)
   m.len = 3;
   m.buf[0] = PROBE_CAN_ID; // reply to us
   m.buf[1] = 0;            // 0 = process the command and send the answer back
-  m.buf[2] = COMM_FW_VERSION;
+  m.buf[2] = comm;
   bus.write(m);
 }
 
@@ -64,13 +68,13 @@ inline bool handleFrame(const CAN_message_t &msg, Reply &r)
   if (type == CAN_FILL_RX_BUFFER && msg.len >= 2)
   {
     const uint16_t off = msg.buf[0];
-    for (uint8_t i = 1; i < msg.len && off + i - 1 < sizeof(r.data); ++i)
+    for (uint8_t i = 1; i < msg.len && off + i - 1 < (int)sizeof(r.data); ++i)
       r.data[off + i - 1] = msg.buf[i];
   }
   else if (type == CAN_FILL_RX_BUFFER_LONG && msg.len >= 3)
   {
     const uint16_t off = ((uint16_t)msg.buf[0] << 8) | msg.buf[1];
-    for (uint8_t i = 2; i < msg.len && off + i - 2 < sizeof(r.data); ++i)
+    for (uint8_t i = 2; i < msg.len && off + i - 2 < (int)sizeof(r.data); ++i)
       r.data[off + i - 2] = msg.buf[i];
   }
   else if (type == CAN_PROCESS_RX_BUFFER && msg.len >= 6)

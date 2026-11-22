@@ -127,7 +127,7 @@ async def follow_tap(path):
         await asyncio.sleep(0.05)
 async def acquire():
     global proc, dynamic_gains
-    if args.follow:
+    if getattr(args, 'follow', None):
         await follow_tap(args.follow); return
     if args.replay:
         while True:

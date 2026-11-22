@@ -234,7 +234,7 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         // would coast from that speed. Hold the command at the edge until the
         // wheel has come down, so the VESC keeps braking.
         const auto keepBraking = [](float command, float wheel) {
-            return std::fabs(command) < STOP_HANDOFF_RPM && std::fabs(wheel) > STOP_HANDOFF_RPM + 10.0f
+            return std::fabs(command) < STOP_HANDOFF_RPM && std::fabs(wheel) > STOP_HANDOFF_RPM + 4.0f
                        ? std::copysign(STOP_HANDOFF_RPM, wheel)
                        : command;
         };

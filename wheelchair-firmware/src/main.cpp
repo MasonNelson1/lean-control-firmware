@@ -16,6 +16,9 @@ using namespace common;
 knobs::RotarySwitch speedKnob;
 knobs::RotarySwitch profileKnob;
 static int lastProfilePosition = knobs::Invalid;
+// The knob position the current settings belong to: the position at power-on,
+// then the position of each profile confirmation.
+static int confirmedProfilePosition = knobs::Invalid;
 static int pendingProfile = knobs::Invalid;
 static int activeProfile = knobs::Invalid;
 float userMaxSpeedMS = knobs::speedLimitMS(0);
@@ -154,7 +157,10 @@ static void updateKnobs()
     if (profileKnob.settled() && profileKnob.position() != lastProfilePosition)
     {
         lastProfilePosition = profileKnob.position();
-        pendingProfile = lastProfilePosition;
+        // A pending profile reserves the LEAN button until it is confirmed.
+        // Turning the knob back to where it was cancels that, so a knob that
+        // was only bumped does not leave the LEAN button dead.
+        pendingProfile = lastProfilePosition == confirmedProfilePosition ? knobs::Invalid : lastProfilePosition;
     }
     if (speedChanged || profileChanged)
         applyKnobs();
@@ -190,7 +196,7 @@ void setup()
     speedKnob.seed(analogRead(PIN_SPEED), millis());
     const auto profileRaw = analogRead(PIN_ACCEL);
     profileKnob.seed(profileRaw, millis());
-    lastProfilePosition = knobs::classify(profileRaw);
+    lastProfilePosition = confirmedProfilePosition = knobs::classify(profileRaw);
     if (lastProfilePosition != knobs::Invalid)
         activateProfile(lastProfilePosition);
     applyKnobs();
@@ -246,6 +252,7 @@ static void updateModeInputs()
     {
         if (!activateProfile(actions.activateProfile))
             telemetry::Telemetry::logf("Profile %d unavailable; keeping current settings.\n", actions.activateProfile + 1);
+        confirmedProfilePosition = actions.activateProfile;
         pendingProfile = knobs::Invalid;
     }
 }

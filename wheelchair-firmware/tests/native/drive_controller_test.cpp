@@ -646,14 +646,14 @@ int main()
             sim.run(4000);
             assert(sim.left > 100.0f);
             lean(0, 0);
-            for (int k = 0; k < 1200 && sim.left > STOP_HANDOFF_RPM + 10.0f; ++k)
+            for (int k = 0; k < 1200 && sim.left > STOP_HANDOFF_RPM + 4.0f; ++k)
             {
                 const float before = sim.left;
                 sim.tick();
                 assert(sim.last.kind == Kind::RPM && sim.last.left >= STOP_HANDOFF_RPM);
                 assert(sim.left < before); // braked all the way down, never coasting
             }
-            assert(sim.left <= STOP_HANDOFF_RPM + 10.0f);
+            assert(sim.left <= STOP_HANDOFF_RPM + 4.0f);
             sim.run(500);
             assert(std::fabs(sim.last.left) < 1.0f); // then the command goes to zero as before
         }

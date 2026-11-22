@@ -11,12 +11,46 @@ except ImportError:
 
 ROOT = Path(__file__).parent
 FIELDS = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped leftActualRPM rightActualRPM leftBoostCurrent rightBoostCurrent'.split()
+HEALTH_TOKEN = re.compile(r'([A-Za-z][A-Za-z0-9]*)=(\S+)')
+
+def parse_health(line):
+    """HEALTH key=value ...; unknown keys are ignored, malformed known values dropped."""
+    words = line.split()
+    if len(words) < 2 or words[0] != 'HEALTH': return None
+    tokens = [HEALTH_TOKEN.fullmatch(word) for word in words[1:]]
+    if not all(tokens): return None
+    fields = dict(token.groups() for token in tokens)
+    if not re.fullmatch(r'[A-Z_]+', fields.get('fault', '')): return None
+    health = {'fault': fields['fault']}
+    for key in ('seated', 'stop', 'cal'):
+        if fields.get(key) in ('0', '1'): health[key] = fields[key] == '1'
+    if re.fullmatch(r'[+-]?[0-9]{1,9}', fields.get('load', '')): health['load'] = int(fields['load'])
+    for key in ('vescL', 'vescR'):
+        if re.fullmatch(r'[0-9]{1,6}(?:\.[0-9]{1,6})?', fields.get(key, '')):
+            value = float(fields[key])
+            health[key] = int(value) if value.is_integer() else value
+    return health
+
+def health_transition(previous, fault):
+    """Console text for a fault change; the firmware repeats HEALTH every second."""
+    if fault == previous or (fault == 'NONE' and previous is None): return None
+    return 'Fault cleared' if fault == 'NONE' else f'Fault: {fault}'
+
 def parse(line):
+    # Lean scale: current LEAN_RANGES (counts of difference for a full lean) or
+    # legacy DYNAMIC_GAINS multipliers, still found in --replay recordings.
+    ranges = re.fullmatch(r'LEAN_RANGES F=([0-9]{1,9}) B=([0-9]{1,9}) L=([0-9]{1,9}) R=([0-9]{1,9})', line.strip())
+    if ranges:
+        values = [int(value) for value in ranges.groups()]
+        if all(value > 0 for value in values):
+            return 'scale', {'kind': 'ranges', **dict(zip(('F', 'B', 'L', 'R'), values))}
     gains = re.fullmatch(r'DYNAMIC_GAINS F=(\d+(?:\.\d+)?) B=(\d+(?:\.\d+)?) L=(\d+(?:\.\d+)?) R=(\d+(?:\.\d+)?)', line.strip())
     if gains:
         values = [float(value) for value in gains.groups()]
         if all(math.isfinite(value) and value > 0 for value in values):
-            return 'gains', dict(zip(('F', 'B', 'L', 'R'), values))
+            return 'scale', {'kind': 'gains', **dict(zip(('F', 'B', 'L', 'R'), values))}
+    health = parse_health(line)
+    if health: return 'health', health
     parts = [p.strip() for p in next(csv.reader([line]))]
     if not parts: return 'text', line
     if parts[0] == 'time_ms': return 'header', None
@@ -52,7 +86,9 @@ def recover_telemetry_rows(line):
 app=FastAPI()
 history=deque(maxlen=13000); console=deque(maxlen=400); clients=set()
 connected=True; proc=None; args=None
-dynamic_gains = None
+lean_scale = None
+health = None; health_at = float("-inf"); last_fault = None
+HEALTH_STALE_S = 3  # HEALTH arrives once a second
 telemetry_warning_at = float("-inf")
 telemetry_warning_rows = 0
 async def emit(event):
@@ -60,11 +96,19 @@ async def emit(event):
         try: await asyncio.wait_for(ws.send_json(event), .3)
         except Exception: clients.discard(ws)
 async def line_received(line):
-    global telemetry_warning_at, telemetry_warning_rows, dynamic_gains
+    global telemetry_warning_at, telemetry_warning_rows, lean_scale, health, health_at, last_fault
     kind,value=parse(line)
-    if kind == 'gains':
-        dynamic_gains = value
-        await emit({'dynamicGains': value})
+    if kind == 'scale':
+        lean_scale = value
+        await emit({'leanScale': value})
+        return
+    if kind == 'health':
+        transition = health_transition(last_fault, value['fault'])
+        last_fault = value['fault']
+        if transition:
+            console.append(transition); await emit({'console': transition})
+        health = value; health_at = time.monotonic()
+        await emit({'health': value})
         return
     issue = None
     recovered = []
@@ -98,11 +142,16 @@ async def line_received(line):
         console.append(line); await emit({'console':line})
 async def note(s):
     await line_received(s)
+def clear_chair_status():
+    global lean_scale, health, last_fault
+    lean_scale = None; health = None; last_fault = None
+def current_health():
+    return health if time.monotonic() - health_at <= HEALTH_STALE_S else None
 async def acquire():
-    global proc, dynamic_gains
+    global proc
     if args.replay:
         while True:
-            dynamic_gains = None
+            clear_chair_status()
             previous=None
             for line in Path(args.replay).read_text().splitlines():
                 while not connected: await asyncio.sleep(.1)
@@ -119,7 +168,7 @@ async def acquire():
         if not connected: await asyncio.sleep(.3); continue
         master,slave=pty.openpty()
         try:
-            dynamic_gains = None
+            clear_chair_status()
             cmd=['pio','device','monitor','-d',str(ROOT.parent),'-e','teensy41','-b',str(args.baud)]
             if args.port: cmd+=['-p',args.port]
             proc=await asyncio.create_subprocess_exec(*cmd,stdin=slave,stdout=slave,stderr=slave,cwd=ROOT,start_new_session=True)
@@ -145,7 +194,7 @@ async def acquire():
 async def broadcast():
     while True:
         await emit({'history':list(history),'stale':not history or time.monotonic()-last_change[0]>2,
-                    'dynamicGains': dynamic_gains})
+                    'leanScale': lean_scale, 'health': current_health()})
         await asyncio.sleep(.05)
 last_change=[0]
 @app.on_event('startup')
@@ -266,7 +315,7 @@ async def release_bluetooth(request: Request):
 
 @app.websocket('/ws')
 async def socket(ws:WebSocket):
-    global connected, dynamic_gains
+    global connected
     await ws.accept(); clients.add(ws)
     await ws.send_json({'console':'\n'.join(console)})
     try:
@@ -274,7 +323,7 @@ async def socket(ws:WebSocket):
             command=await ws.receive_text()
             if command=='disconnect':
                 connected=False
-                dynamic_gains = None
+                clear_chair_status()
                 if proc and proc.returncode is None:
                     try: proc.terminate()
                     except ProcessLookupError: pass

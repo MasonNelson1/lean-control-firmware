@@ -16,27 +16,26 @@ void ModeStateMachine::requestDisarm()
     confirmingProfile_ = NoProfile;
 }
 
-bool ModeStateMachine::needsSeatSample(const Inputs &in) const
-{
-    return in.lean.edge || in.remote.edge || in.disarm.edge ||
-           leanPending_ || remotePending_ || disarmPending_ ||
-           assistHoldPending_ || confirmingProfile_ != NoProfile;
-}
-
 ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t now)
 {
     Actions actions;
+    disarmPending_ |= in.disarm.edge;
     if (in.calibrationActive)
     {
-        // Poll buttons normally, but discard presses instead of queuing a mode change.
-        leanPending_ = remotePending_ = disarmPending_ = assistHoldPending_ = false;
+        // While calibrating, the other mode buttons are discarded instead of
+        // queued. DISARM always works: it ends the calibration and disarms,
+        // without starting the hold that leads to Assist.
+        leanPending_ = remotePending_ = assistHoldPending_ = false;
         calibrationPending_ = false;
         confirmingProfile_ = NoProfile;
+        if (in.disarm.pressed && disarmPending_)
+            selectedMode_ = DISARM;
+        if (in.disarm.pressed || in.disarm.released)
+            disarmPending_ = false;
         return actions;
     }
     leanPending_ |= in.lean.edge;
     remotePending_ |= in.remote.edge;
-    disarmPending_ |= in.disarm.edge;
     calibrationPending_ |= in.calibrate.pressed && selectedMode_ == LEAN;
 
     if (confirmingProfile_ != in.pendingProfile || !in.profileSettled ||

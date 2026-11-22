@@ -46,10 +46,16 @@ run_native() {
     native mode_state_machine  -I src tests/native/mode_state_machine_test.cpp src/ModeStateMachine.cpp
     native telemetry           -I tests/native/telemetry_stubs -I src tests/native/telemetry_test.cpp \
                                src/telemetry/TelemetryFrame.cpp src/telemetry/Telemetry.cpp
-    native lean_normalization  "${LEAN_INC[@]}" tests/native/lean_normalization_test.cpp \
+    native vesc_protocol       -I src tests/native/vesc_protocol_test.cpp
+    native motion              -I src tests/native/motion_test.cpp
+    native lean_input          "${LEAN_INC[@]}" tests/native/lean_input_test.cpp \
                                src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
-    native dynamic_calibration "${LEAN_INC[@]}" tests/native/dynamic_calibration_test.cpp \
+    native lean_calibration    "${LEAN_INC[@]}" tests/native/lean_calibration_test.cpp \
                                src/driveModes/LeanDriveMode.cpp "${SETTINGS_SRC[@]}"
+    native drive_controller    "${LEAN_INC[@]}" tests/native/drive_controller_test.cpp \
+                               src/DriveController.cpp src/ModeStateMachine.cpp \
+                               src/driveModes/LeanDriveMode.cpp src/driveModes/RemoteDriveMode.cpp \
+                               "${SETTINGS_SRC[@]}"
 }
 
 run_viewer() {

@@ -153,7 +153,9 @@ bool Protocol::selectProfile(uint8_t slot) {
     uint8_t old[Persistence::PayloadCapacity];
     const size_t oldLength = snapshot(registry_, old, sizeof(old));
     if (!oldLength) return false;
-    applyTlvs(registry_, payload, length);
+    // A profile is a driving feel. Sensor zeros, lean ranges and the other
+    // calibration fields belong to the chair and rider, so they stay as they are.
+    applyTlvs(registry_, payload, length, /*keepCalibration=*/true);
     if (validate_ && !validate_()) {
         applyTlvs(registry_, old, oldLength);
         return false;

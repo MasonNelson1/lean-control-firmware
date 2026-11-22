@@ -1,5 +1,7 @@
 // g++ -std=c++17 -Wall -Wextra -Werror -I tests/native/config_stubs -I src tests/native/drive_settings_test.cpp src/config/DriveSettings.cpp src/config/Registry.cpp src/config/Persistence.cpp src/config/Protocol.cpp -o .pio/drive_settings_test.exe
 #include "config/DriveSettings.h"
+#include <EEPROM.h>
+#include <cmath>
 #include <functional>
 #include <iostream>
 #include <set>
@@ -54,12 +56,13 @@ int main() {
     test("every exported declaration is discoverable under its own ID", [] {
         const std::vector<const Field *> exported = {
             &settings::defaultMode, &settings::deadband,
-            &settings::frontGain, &settings::rearGain, &settings::leftGain, &settings::rightGain,
-            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse, &settings::leanTurnMix,
+            &settings::rangeForward, &settings::rangeBack, &settings::rangeLeft, &settings::rangeRight,
+            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse,
+            &settings::maxTurnRate, &settings::maxLateralAccel,
             &settings::assistMaxBoostAmps, &settings::assistSlowdownRPM, &settings::assistSlowdownBoostFraction,
-            &settings::controllerTimeout, &settings::buttonDebounce,
-            &settings::controlPeriod, &settings::calibrationSamples, &settings::defaultFloor,
-            &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference,
+            &settings::controllerTimeout, &settings::buttonDebounce, &settings::controlPeriod,
+            &settings::zeroFront, &settings::zeroBack, &settings::zeroLeft, &settings::zeroRight, &settings::seatThreshold,
+            &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference, &settings::trackWidth,
             &settings::normalPid.lowTau, &settings::normalPid.highTau, &settings::normalPid.ki,
             &settings::normalPid.kd, &settings::normalPid.filter, &settings::normalPid.maxJerk,
             &settings::transitionPid.lowTau, &settings::transitionPid.highTau, &settings::transitionPid.ki,
@@ -126,6 +129,106 @@ int main() {
         settings::persistence.load();
         CHECK(settings::leftVesc.get() != settings::rightVesc.get());
         CHECK(settings::deadband.get() == deadband);
+    });
+    test("retired field and group IDs stay unused", [] {
+        for (uint16_t id : {10, 11, 12, 13, 20, 21, 22, 23, 36, 50, 51}) CHECK(!settings::registry().find(id));
+        CHECK(!settings::registry().findGroup(3) && !settings::registry().findGroup(4));
+    });
+    test("calibration fields are exactly the chair and rider measurements", [] {
+        const std::set<const Field *> expected = {
+            &settings::rangeForward, &settings::rangeBack, &settings::rangeLeft, &settings::rangeRight,
+            &settings::zeroFront, &settings::zeroBack, &settings::zeroLeft, &settings::zeroRight,
+            &settings::seatThreshold, &settings::trackWidth};
+        for (auto *f = settings::registry().fields(); f; f = f->next())
+            CHECK(f->info.calibration == (expected.count(f) == 1));
+    });
+    test("typed set() enforces the same bounds as a dashboard write", [] {
+        CHECK(!settings::rangeForward.set(settings::LeanRangeMin - 1));
+        CHECK(!settings::rangeForward.set(settings::LeanRangeMax + 1));
+        CHECK(settings::rangeForward.set(settings::LeanRangeMin) && settings::rangeForward.get() == settings::LeanRangeMin);
+        CHECK(!settings::maxTurnRate.set(NAN) && !settings::maxTurnRate.set(1000.0f));
+        settings::rangeForward.reset();
+    });
+    test("a calibration save keeps other unsaved edits unsaved", [] {
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+        CHECK(settings::persistence.save());
+        // An unsaved dashboard edit, then a calibration.
+        const float edited = .2f;
+        CHECK(request(Command::Set, settings::deadband.id, reinterpret_cast<const uint8_t *>(&edited), sizeof(edited)) == Status::Ok);
+        CHECK(settings::persistence.dirty());
+        CHECK(settings::rangeBack.set(321) && settings::zeroBack.set(437));
+        CHECK(settings::persistence.saveCalibration());
+        // RAM keeps everything; the edit is still reported as unsaved.
+        CHECK(settings::deadband.get() == edited && settings::rangeBack.get() == 321);
+        CHECK(settings::persistence.dirty());
+        // After a power cycle: the calibration is there, the unsaved edit is not.
+        settings::persistence.load();
+        CHECK(settings::rangeBack.get() == 321 && settings::zeroBack.get() == 437);
+        CHECK(settings::deadband.get() == .05f);
+        CHECK(!settings::persistence.dirty());
+        // With nothing else pending, the bank and RAM agree afterwards.
+        CHECK(settings::rangeLeft.set(222));
+        CHECK(settings::persistence.saveCalibration() && !settings::persistence.dirty());
+    });
+    test("a calibration save works on a blank EEPROM and keeps saved values of other fields", [] {
+        for (auto &byte : EEPROM.bytes) byte = 0xff;
+        settings::persistence.load();
+        CHECK(settings::rangeLeft.get() == 500);
+        CHECK(settings::rangeRight.set(444));
+        CHECK(settings::persistence.saveCalibration());
+        settings::persistence.load();
+        CHECK(settings::rangeRight.get() == 444 && !settings::persistence.dirty());
+        // A saved non-calibration value survives a later calibration save.
+        const float edited = .3f;
+        CHECK(request(Command::Set, settings::deadband.id, reinterpret_cast<const uint8_t *>(&edited), sizeof(edited)) == Status::Ok);
+        CHECK(settings::persistence.save());
+        CHECK(settings::rangeRight.set(555) && settings::persistence.saveCalibration());
+        settings::persistence.load();
+        CHECK(settings::deadband.get() == edited && settings::rangeRight.get() == 555);
+    });
+    test("a failed EEPROM write is reported and leaves RAM intact", [] {
+        CHECK(settings::rangeRight.set(600));
+        EEPROM.failWrites = true;
+        const bool saved = settings::persistence.saveCalibration();
+        EEPROM.failWrites = false;
+        CHECK(!saved && settings::rangeRight.get() == 600);
+        CHECK(settings::persistence.saveCalibration());
+    });
+    test("loading a profile leaves calibration fields alone", [] {
+        settings::registry().defaults();
+        // The profile was saved with one rider's ranges and a different feel.
+        CHECK(settings::rangeForward.set(900) && settings::zeroBack.set(500) && settings::seatThreshold.set(300));
+        const float feel = .25f, rate = 90.0f;
+        CHECK(settings::deadband.set(feel) && settings::maxTurnRate.set(rate));
+        uint8_t payload[Persistence::ProfileCapacity], name[Persistence::ProfileNameSize] = "feel";
+        const size_t length = snapshot(settings::registry(), payload, sizeof(payload));
+        CHECK(length && settings::persistence.writeProfile(2, name, payload, length));
+        // Now the chair has been tared and calibrated for someone else.
+        settings::registry().defaults();
+        CHECK(settings::rangeForward.set(450) && settings::zeroBack.set(437));
+        CHECK(settings::protocol.selectProfile(2));
+        CHECK(settings::deadband.get() == feel && settings::maxTurnRate.get() == rate); // the feel loads
+        CHECK(settings::rangeForward.get() == 450 && settings::zeroBack.get() == 437);  // the calibration stays
+        CHECK(settings::seatThreshold.get() == 200 && settings::trackWidth.get() == 0.60f);
+        settings::registry().defaults();
+    });
+    test("every EEPROM byte written reports activity for the watchdog", [] {
+        static int calls;
+        calls = 0;
+        settings::storageActivity = [] { ++calls; };
+        CHECK(settings::rangeForward.set(700) && settings::persistence.saveCalibration());
+        settings::storageActivity = nullptr;
+        CHECK(calls > 100);
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+    });
+    test("bounds keep settings inside what the firmware can use", [] {
+        const float tooWide = 0.6f;
+        CHECK(request(Command::Set, settings::deadband.id, reinterpret_cast<const uint8_t *>(&tooWide), sizeof(tooWide)) == Status::Invalid);
+        const unsigned long slow = 201, debounce = 101;
+        CHECK(request(Command::Set, settings::controllerTimeout.id, reinterpret_cast<const uint8_t *>(&slow), sizeof(slow)) == Status::Invalid);
+        CHECK(request(Command::Set, settings::buttonDebounce.id, reinterpret_cast<const uint8_t *>(&debounce), sizeof(debounce)) == Status::Invalid);
     });
     std::cout << "TOTAL " << passed + failed << " / PASS " << passed << " / FAIL " << failed << '\n';
     return failed ? 1 : 0;

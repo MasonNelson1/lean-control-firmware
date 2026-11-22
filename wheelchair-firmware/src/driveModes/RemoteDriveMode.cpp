@@ -1,9 +1,10 @@
 #include "RemoteDriveMode.h"
-#include "Arduino.h"
 #include "../config/DriveSettings.h"
 #include "../telemetry/Telemetry.h"
 
-void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
+#include <cstring>
+
+void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size, uint32_t now)
 {
     if (buffer == nullptr || size < 1)
         return;
@@ -21,11 +22,12 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
         if (leftInt == INT16_MIN || rightInt == INT16_MIN)
             return;
 
-        lastPacketMillis = millis();
+        lastPacketMillis = now;
+        havePacket = true;
         if (!softStopLatched)
         {
-            requestedLeftPower = leftInt / 32767.0;
-            requestedRightPower = rightInt / 32767.0;
+            requestedLeftPower = leftInt / 32767.0f;
+            requestedRightPower = rightInt / 32767.0f;
         }
         break;
     }
@@ -37,7 +39,8 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
         softStopLatched = true;
         requestedLeftPower = 0.0f;
         requestedRightPower = 0.0f;
-        lastPacketMillis = millis(); // needed so it doesn't think it disconnected
+        lastPacketMillis = now; // needed so it doesn't think it disconnected
+        havePacket = true;
         break;
 
     case PACKET_SOFT_STOP_CLEAR:
@@ -45,29 +48,32 @@ void RemoteDriveMode::onPacketReceived(const uint8_t *buffer, size_t size)
             return;
         telemetry::Telemetry::logf("Clearing soft stop\n");
         softStopLatched = false;
-        lastPacketMillis = millis(); // needed so it doesn't think it disconnected
+        lastPacketMillis = now; // needed so it doesn't think it disconnected
+        havePacket = true;
         break;
     }
 }
 
-MotorTargets RemoteDriveMode::getTargets()
+MotorTargets RemoteDriveMode::getTargets(uint32_t now)
 {
-    const bool timedOut = millis() - lastPacketMillis >= settings::controllerTimeout.get();
-    telemetry.stopped = timedOut || softStopLatched;
+    const bool timedOut = !havePacket || now - lastPacketMillis >= settings::controllerTimeout.get();
+    stopped_ = timedOut || softStopLatched;
     if (timedOut)
     {
-        requestedLeftPower = 0.0;
-        requestedRightPower = 0.0;
+        // A stale command must not come back to life with the next packet's timestamp.
+        havePacket = false;
+        requestedLeftPower = 0.0f;
+        requestedRightPower = 0.0f;
     }
 
-    return {static_cast<float>(requestedLeftPower), static_cast<float>(requestedRightPower)};
+    return {requestedLeftPower, requestedRightPower};
 }
 
 void RemoteDriveMode::reset()
 {
     // Discard the previous drive command while preserving any latched soft stop.
-    telemetry.stopped = true;
-    lastPacketMillis = 0;
-    requestedLeftPower = 0.0;
-    requestedRightPower = 0.0;
+    stopped_ = true;
+    havePacket = false;
+    requestedLeftPower = 0.0f;
+    requestedRightPower = 0.0f;
 }

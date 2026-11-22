@@ -25,7 +25,11 @@ private:
         const float responseExponent = logf(knee[1]) / logf(knee[0]);
         const float speedFraction = fminf(fabsf(currRpm) / maxRPM, 1.0f);
         const float maxBoostAmps = settings::assistMaxBoostAmps.get();
-        const float boostAmps = powf(speedFraction, responseExponent) * maxBoostAmps;
+        // The boost pushes the way the wheel already turns, so left alone it
+        // feeds on itself. Fade it out over the last part of the speed-knob
+        // range and give none at or above the limit.
+        const float headroom = fminf(fmaxf((1.0f - fabsf(currRpm) / maxRPM) / speedCapFadeFraction, 0.0f), 1.0f);
+        const float boostAmps = powf(speedFraction, responseExponent) * maxBoostAmps * headroom;
         if (!std::isfinite(boostAmps))
             return 0.0f;
 
@@ -89,6 +93,8 @@ private:
     }
 
 public:
+    // Boost is full up to 85% of the speed-knob limit and zero from 100%.
+    static constexpr float speedCapFadeFraction = 0.15f;
     static constexpr uint32_t pulseWidth = 10; // ms
     static constexpr float duty = 0.5f;
     static constexpr uint32_t boostMs = duty * pulseWidth;

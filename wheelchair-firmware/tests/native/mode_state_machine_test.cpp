@@ -45,9 +45,7 @@ int main()
         assert(sm.selected() == REMOTE);
         in.lean.pressed = false;
         in.lean.edge = true;
-        assert(sm.needsSeatSample(in));
         sm.update(in, 20);
-        assert(sm.needsSeatSample(seated()));
         sm.update(press(LEAN), 40);
         assert(sm.selected() == LEAN && sm.current() == REMOTE);
         const auto t = sm.applySeat(true, 40);
@@ -195,9 +193,8 @@ int main()
         in.lean.pressed = true;
         sm.update(in, 30);
         assert(sm.selected() == REMOTE);
-        assert(!sm.needsSeatSample(seated()));
     }
-    { // Calibration discards even partly debounced mode presses and profile holds.
+    { // Calibration discards even partly debounced Lean/Remote presses and profile holds.
         SM sm;
         sm.begin(LEAN);
         auto in = seated();
@@ -210,15 +207,34 @@ int main()
         in.remote.pressed = true;
         sm.update(in, 60);
         assert(sm.selected() == LEAN);
-        in = press(DISARM);
-        in.calibrationActive = true;
-        sm.update(in, 70);
-        sm.update(seated(), 1000);
-        assert(sm.selected() == LEAN);
         const auto seatLoss = sm.applySeat(false, 1001);
         assert(seatLoss.changed && seatLoss.seatDisarm);
         sm.update(press(REMOTE), 1100);
         assert(sm.selected() == REMOTE);
+    }
+    { // DISARM works during calibration, and never starts the Assist hold from there.
+        SM sm;
+        sm.begin(LEAN);
+        sm.applySeat(true, 0);
+        auto in = seated();
+        in.calibrationActive = true;
+        in.disarm.edge = true; // ISR edge first, debounced press on a later loop
+        sm.update(in, 10);
+        assert(sm.selected() == LEAN);
+        in = seated();
+        in.calibrationActive = true;
+        in.disarm.pressed = true;
+        sm.update(in, 60);
+        assert(sm.selected() == DISARM);
+        assert(sm.applySeat(true, 60).changed && sm.current() == DISARM);
+        assert(!sm.update(seated(), 1000).resetAssist && sm.selected() == DISARM);
+        // A debounced press with no ISR edge behind it still cannot switch.
+        sm.begin(LEAN);
+        in = seated();
+        in.calibrationActive = true;
+        in.disarm.pressed = true;
+        sm.update(in, 2000);
+        assert(sm.selected() == LEAN);
     }
     { // A completed dynamic calibration disarms until a fresh mode selection.
         SM sm;

@@ -41,14 +41,15 @@ bool validTlvs(const uint8_t *data, size_t size) {
     return true;
 }
 
-void applyTlvs(Registry &registry, const uint8_t *data, size_t size) {
+void applyTlvs(Registry &registry, const uint8_t *data, size_t size, bool keepCalibration) {
     if (!validTlvs(data, size)) return;
     const uint8_t *end = data + size;
     while (data != end) {
         Field *field = registry.find(read<uint16_t>(data));
         // update() additionally checks width, range, enum choices, and profile
         // constraints. Rejected records leave the caller's existing value intact.
-        if (field && data[2] == static_cast<uint8_t>(field->type))
+        if (field && data[2] == static_cast<uint8_t>(field->type) &&
+            !(keepCalibration && field->info.calibration))
             field->update(data + TlvHeaderSize, data[3]);
         data += TlvHeaderSize + data[3];
     }
@@ -95,6 +96,13 @@ bool Persistence::save() {
 
     const uint16_t length = snapshot(registry_, payload, sizeof(payload));
     if (length == 0 && registry_.fieldCount() != 0) return false;
+    if (!write(payload, length)) return false;
+    dirty_ = false;
+    return true;
+}
+
+// Writes one bank and verifies it. On success the dirty baseline is this payload.
+bool Persistence::write(uint8_t *payload, uint16_t length) {
     const uint32_t signature = crc32(payload, length);
     uint8_t header[HeaderSize];
     Writer out(header, sizeof(header));
@@ -114,8 +122,32 @@ bool Persistence::save() {
     if (!committed.valid || committed.length != length ||
         crc32(payload, length) != signature) return false;
     savedSignature_ = signature;
-    dirty_ = false;
     return true;
+}
+
+bool Persistence::saveCalibration() {
+    // Rebuild what the bank holds (defaults, saved records, repair) in the
+    // current field layout, overlay the calibration fields from RAM, write
+    // that, then put RAM back. Runs from the main loop only, so nothing reads
+    // the registry while it briefly holds the saved values.
+    uint8_t ram[PayloadCapacity], target[PayloadCapacity];
+    const size_t ramLength = snapshot(registry_, ram, sizeof(ram));
+    if (ramLength == 0) return registry_.fieldCount() == 0;
+
+    const Slot active = inspect(target);
+    registry_.defaults();
+    if (active.valid) applyTlvs(registry_, target, active.length);
+    if (repair_) repair_();
+    for (const uint8_t *record = ram; record != ram + ramLength; record += TlvHeaderSize + record[3]) {
+        Field *field = registry_.find(read<uint16_t>(record));
+        if (field && field->info.calibration) field->update(record + TlvHeaderSize, record[3]);
+    }
+    const uint16_t length = snapshot(registry_, target, sizeof(target));
+    applyTlvs(registry_, ram, ramLength);
+
+    const bool written = length != 0 && write(target, length);
+    refreshDirty();
+    return written;
 }
 
 size_t Persistence::readProfile(uint8_t slot, uint8_t *name, uint8_t *payload) const {

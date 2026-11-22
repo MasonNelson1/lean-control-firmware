@@ -153,6 +153,33 @@ test('live gain status appears beside sensor ADC counts and clears on reconnect'
   await expect(page.locator('.sensor.front .gain')).toHaveText('—');
   await page.evaluate(() => serialTestLine('DYNAMIC_GAINS F=5.0000 B=4.0000 L=3.0000 R=2.0000'));
   await expect(page.locator('.sensor.front .gain')).toHaveText('×5.00');
+  await page.evaluate(() => serialTestLine('LEAN_RANGES F=600 B=400 L=500 R=500'));
+  await expect(page.locator('.sensor.front .gain')).toHaveText('full 600');
+  await expect(page.locator('.sensor.back .gain')).toHaveText('full 400');
+  await expect(page.locator('.sensor.front .gain')).toHaveAttribute('title', /full lean this way/);
+  await expect(page.locator('pre')).not.toContainText('LEAN_RANGES');
   expect(errors).toEqual([]);
   await page.locator('#connection-disconnect').click();
+});
+
+test('HEALTH shows a header badge, logs fault changes once, and clears on disconnect', async ({page}) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await mockSerial(page);
+  await page.goto('./');
+  await expect(page.locator('#health')).toBeHidden();
+  await page.locator('#connection-connect').click();
+  await page.evaluate(() => serialTestLine('HEALTH fault=NONE seated=1 load=330 vescL=50 vescR=50 stop=0 cal=1'));
+  await expect(page.locator('#health')).toHaveText('Health: OK');
+  await expect(page.locator('#health-detail')).toHaveText('Seated · VESC L 50 Hz · R 50 Hz');
+  for (let i = 0; i < 3; i++) await page.evaluate(() => serialTestLine('HEALTH fault=VESC_SILENT seated=1 load=330 vescL=0 vescR=50 stop=1 cal=1'));
+  await expect(page.locator('#health')).toHaveText('Fault: VESC silent');
+  await expect(page.locator('#health')).toHaveClass(/off/);
+  await expect(page.locator('#health-detail')).toContainText('0 Hz (silent)');
+  await expect(page.locator('#health-detail')).toContainText('Braking');
+  await expect(page.locator('pre')).not.toContainText('HEALTH');
+  expect((await page.locator('pre').textContent()).match(/Fault: VESC_SILENT/g)).toHaveLength(1);
+  await page.locator('#connection-disconnect').click();
+  await expect(page.locator('#health')).toBeHidden();
+  expect(errors).toEqual([]);
 });

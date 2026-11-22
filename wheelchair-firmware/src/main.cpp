@@ -1,18 +1,13 @@
 #include <Arduino.h>
 #include <ezButton.h>
 #include "vesc_can.h"
-#include "rpm_setpoint_pid.h"
 #include "common.h"
-#include "driveModes/DriveMode.h"
-#include "driveModes/LeanDriveMode.h"
-#include "driveModes/RemoteDriveMode.h"
-#include "driveModes/DisarmDriveMode.h"
-#include "driveModes/AssistDriveMode.h"
+#include "DriveController.h"
 #include "PacketSerial.h"
 #include "config/DriveSettings.h"
 #include "drive_knobs.h"
-#include "ModeStateMachine.h"
 #include "telemetry/Telemetry.h"
+#include "watchdog.h"
 
 using namespace common;
 
@@ -24,17 +19,12 @@ static int lastProfilePosition = knobs::Invalid;
 static int pendingProfile = knobs::Invalid;
 static int activeProfile = knobs::Invalid;
 float userMaxSpeedMS = knobs::speedLimitMS(0);
-// TODO: a stop/fault should bypass smoothing and reset BOTH PID instances.
 
 // MISC CONSTANTS and vars
 ezButton calibrateButton(PIN_CAL_BUTTON);
 ezButton leanModeButton(PIN_LEAN_BUTTON);
 ezButton remoteModeButton(PIN_REMOTE_BUTTON);
 ezButton disarmModeButton(PIN_DISARM_BUTTON);
-static uint32_t calibrationPressedAt = 0;
-
-RPMSetpointPID leftRPMSetpointPID(RPMSetpointPID::defaultTuning());
-RPMSetpointPID rightRPMSetpointPID(RPMSetpointPID::defaultTuning());
 
 VescBus can1;
 
@@ -47,67 +37,34 @@ struct MotorSetup
 
 static MotorSetup motors;
 static VescStatus measuredMotors[2]{};
+// Speed frames per second from each VESC, measured over the last second.
+static uint32_t vescRateHz[2]{};
 
-static telemetry::MotorCommands motorTelemetry{};
 static telemetry::Telemetry telemetryOutput;
-static MotorTargets assistBoostCurrent{};
 
-// This function takes doubles from -1 to 1 for the left and right motors and sets their speeds to those values
-// where the value is the percentage of the speed-knob max speed (full input = selected top speed).
-// PID smoothing is applied prior to using the setpoints.
-void setMotorPower(double left, double right, float dt)
-{
-    // Turning the speed knob up takes effect at once (the PID still limits
-    // acceleration). Turning it down lowers the cap no faster than the design
-    // braking rate, so the smoother never sees a step drop in its speed limit.
-    static float speedLimitMS = 0.0f;
-    speedLimitMS = knobs::slewDown(speedLimitMS, userMaxSpeedMS, MAX_ACCEL, dt);
-
-    const float leftTargetRPM = constrain(left, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-    const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-    const float leftMeasuredRPM = measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM;
-    const float rightMeasuredRPM = measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM;
-    const float leftRpms = constrain(
-        leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, MAX_ACCEL),
-        leftMeasuredRPM - common::MAX_RPM_COMMAND_DIFF, leftMeasuredRPM + common::MAX_RPM_COMMAND_DIFF);
-    const float rightRpms = constrain(
-        rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, MAX_ACCEL),
-        rightMeasuredRPM - common::MAX_RPM_COMMAND_DIFF, rightMeasuredRPM + common::MAX_RPM_COMMAND_DIFF);
-    vescSetWheelRPM(can1, motors.leftId, leftRpms);
-    vescSetWheelRPM(can1, motors.rightId, rightRpms);
-    motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};
-}
-
-ModeStateMachine modeState;
-LeanDriveMode leanMode;
-AssistDriveMode assistMode;
+// Modes, faults, lean/remote/assist, smoothing and stopping all live here.
+DriveController drive;
 
 PacketSerial packetSerial;
-RemoteDriveMode remoteMode;
-DisarmDriveMode disarmMode;
 
 static void onBluetoothPacket(const uint8_t *buffer, size_t size)
 {
     // PacketSerial calls this with decoded bytes. Configuration packets enter
     // their own request slot, and ordinary remote packets keep their handler.
     if (!settings::protocol.queue(buffer, size))
-        remoteMode.onPacketReceived(buffer, size);
+        drive.onRemotePacket(buffer, size, millis());
 }
 
 static void applyRuntimeSettings()
 {
     // Refresh values cached outside the registry after a successful mutation.
-    // setTuning() preserves the existing PID motion and error history.
     LINEAR_TO_RPM = 60.0f / settings::wheelCircumference.get();
     motors = {settings::leftVesc.get(), settings::rightVesc.get()};
     calibrateButton.setDebounceTime(settings::buttonDebounce.get());
     leanModeButton.setDebounceTime(settings::buttonDebounce.get());
     remoteModeButton.setDebounceTime(settings::buttonDebounce.get());
     disarmModeButton.setDebounceTime(settings::buttonDebounce.get());
-    leanMode.updateResponseCurve();
-    const auto tuning = settings::normalPid.tuning();
-    leftRPMSetpointPID.setTuning(tuning);
-    rightRPMSetpointPID.setTuning(tuning);
+    drive.applySettings();
 }
 
 // Interrupts latch raw presses; ezButton confirms the debounced press in loop().
@@ -151,12 +108,7 @@ static bool activateProfile(int slot)
         return false;
     activeProfile = slot;
     applyRuntimeSettings();
-    leanMode.reset();
-    leanMode.resetDynamicGains();
-    assistMode.reset();
-    leftRPMSetpointPID.reset();
-    rightRPMSetpointPID.reset();
-    motorTelemetry = {};
+    drive.resetForProfile();
     for (auto &motor : measuredMotors)
         motor = {};
     return true;
@@ -210,6 +162,7 @@ static void updateKnobs()
 void setup()
 {
     static uint8_t bluetoothTxBuffer[512];
+    const bool watchdogReset = watchdog::causedLastReset();
 
     // set up serial and telemetry stuff
     Serial.begin(115200);
@@ -226,12 +179,8 @@ void setup()
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
 
     settings::persistence.load();
-    modeState.begin(settings::defaultMode.get());
-    if (modeState.selected() == LEAN)
-        leanMode.reset();
+    drive.begin(settings::defaultMode.get());
     applyRuntimeSettings();
-
-    leanMode.resetDynamicGains();
 
     // user input
     analogReadResolution(12);
@@ -254,8 +203,15 @@ void setup()
     // motors
     vescBegin(can1);
     delay(200);
-    telemetry::Telemetry::logf("Mode: %s\n", modeName(modeState.current()));
+    if (watchdogReset)
+        telemetry::Telemetry::logf("Restarted by the watchdog: the firmware had stopped responding.\n");
+    telemetry::Telemetry::logf("Mode: %s\n", modeName(drive.mode()));
+    drive.lean().publishRanges();
     telemetry::Telemetry::logf("Setup successful, ready to drive.\n");
+
+    // Last: everything above may take longer than the watchdog allows.
+    settings::storageActivity = watchdog::feed;
+    watchdog::begin();
 }
 
 // Hardware adapter: the state machine owns all pending presses and timers.
@@ -280,22 +236,12 @@ static void updateModeInputs()
     input.disarm.pressed = disarmModeButton.isPressed();
     input.disarm.released = disarmModeButton.isReleased();
     input.calibrate.pressed = calibrateButton.isPressed();
-    if (input.calibrate.pressed)
-        calibrationPressedAt = millis();
     input.calibrate.released = calibrateButton.isReleased();
     input.leanHeld = leanModeButton.getStateRaw() == LOW;
     input.profileSettled = profileKnob.settled();
     input.pendingProfile = pendingProfile;
-    input.calibrationActive = leanMode.calibrationActive();
-    // Refresh only the seat reading, leaving the control/telemetry sample intact.
-    if (modeState.needsSeatSample(input))
-        leanMode.sampleSensors(/*seatOnly=*/true);
-    input.seated = leanMode.isSeated();
-    const auto actions = modeState.update(input, millis());
-    if (actions.resetRemote)
-        remoteMode.reset();
-    if (actions.resetAssist)
-        assistMode.reset();
+    // The controller fills in the seat and calibration state.
+    const auto actions = drive.updateButtons(input, millis());
     if (actions.activateProfile != ModeStateMachine::NoProfile)
     {
         if (!activateProfile(actions.activateProfile))
@@ -306,55 +252,16 @@ static void updateModeInputs()
 
 static void updateModeLEDs()
 {
-    switch (modeState.current())
-    {
-    case LEAN:
-        digitalWrite(common::PIN_LEAN_LED, HIGH);
-        digitalWrite(common::PIN_DISARM_LED, LOW);
-        digitalWrite(common::PIN_REMOTE_LED, LOW);
-        digitalWrite(common::PIN_CAL_LED, leanMode.calibrationLEDOn(millis()) ? HIGH : LOW);
-        break;
-
-    case REMOTE:
-        digitalWrite(common::PIN_LEAN_LED, LOW);
-        digitalWrite(common::PIN_DISARM_LED, LOW);
-        digitalWrite(common::PIN_REMOTE_LED, HIGH);
-        digitalWrite(common::PIN_CAL_LED, LOW);
-        break;
-    case DISARM:
-        digitalWrite(common::PIN_LEAN_LED, LOW);
-        digitalWrite(common::PIN_DISARM_LED, HIGH);
-        digitalWrite(common::PIN_REMOTE_LED, LOW);
-        digitalWrite(common::PIN_CAL_LED, LOW);
-        break;
-    case ASSIST:
-        digitalWrite(common::PIN_LEAN_LED, LOW);
-        digitalWrite(common::PIN_DISARM_LED,
-                     modeState.assistLEDOn(millis()) ? HIGH : LOW);
-        digitalWrite(common::PIN_REMOTE_LED, LOW);
-        digitalWrite(common::PIN_CAL_LED, LOW);
-        break;
-    default:
-        break;
-    }
-}
-
-static void applySeatedLatch()
-{
-    const auto transition = modeState.applySeat(leanMode.isSeated(), millis());
-    if (!transition.changed)
-        return;
-    // Clear old motion on every entry to Disarm, including the mode button.
-    if (modeState.current() == DISARM)
-    {
-        leanMode.cancelCalibration();
-        leftRPMSetpointPID.reset();
-        rightRPMSetpointPID.reset();
-        assistMode.reset();
-    }
-    if (transition.resetLean)
-        leanMode.reset();
-    telemetry::Telemetry::logf("Mode: %s\n", modeName(modeState.current()));
+    const uint32_t now = millis();
+    const mode current = drive.mode();
+    digitalWrite(common::PIN_LEAN_LED, current == LEAN ? HIGH : LOW);
+    digitalWrite(common::PIN_REMOTE_LED, current == REMOTE ? HIGH : LOW);
+    // DISARM: solid. Assist: blinking.
+    digitalWrite(common::PIN_DISARM_LED,
+                 current == DISARM || (current == ASSIST && drive.modeState().assistLEDOn(now)) ? HIGH : LOW);
+    // Calibration LED: lean calibration in LEAN, the sensor tare in DISARM.
+    const bool calLED = current == LEAN || (current == DISARM && drive.lean().tareActive());
+    digitalWrite(common::PIN_CAL_LED, calLED && drive.lean().calibrationLEDOn(now) ? HIGH : LOW);
 }
 
 static void updateDrive()
@@ -364,93 +271,49 @@ static void updateDrive()
     static uint32_t tSend = 0;
     const uint32_t now = millis();
     const uint32_t period = settings::controlPeriod.get();
-    if (now - tSend < period)
+    const uint32_t elapsed = now - tSend;
+    if (elapsed < period)
     {
         return;
     }
     tSend = now;
 
-    const bool calibrationRequested = modeState.takeCalibrationRequest();
-    if (modeState.requiresSeat())
-        leanMode.sampleSensors();
-    if (modeState.current() == LEAN && leanMode.sensorAtRail())
-    {
-        telemetry::Telemetry::logf("Sensor reading at ADC rail; disarming.\n");
-        modeState.requestDisarm();
-    }
-    applySeatedLatch();
-    if (modeState.current() == LEAN && leanMode.isSeated() && calibrationRequested)
-    {
-        vescSetCurrent(can1, motors.leftId, 0.0f);
-        vescSetCurrent(can1, motors.rightId, 0.0f);
-        leftRPMSetpointPID.reset();
-        rightRPMSetpointPID.reset();
-        motorTelemetry = {};
-        leanMode.beginCalibration(calibrationPressedAt);
-        leanMode.sampleSensors();
-        // Calibration updates the seat threshold as well as the neutral floors.
-        applySeatedLatch();
-    }
-    if (leanMode.calibrationActive())
-    {
-        if (leanMode.updateCalibration(millis(), calibrateButton.getState() == LOW))
-        {
-            modeState.requestDisarm();
-            applySeatedLatch();
-        }
-        leanMode.sampleSensors();
-        vescSetCurrent(can1, motors.leftId, 0.0f);
-        vescSetCurrent(can1, motors.rightId, 0.0f);
-        assistBoostCurrent = {};
-        return;
-    }
+    DriveController::TickInput input;
+    input.now = now;
+    // The real time since the last tick, so the filters and ramps stay right
+    // when a loop runs late. Capped: after a long stall (an EEPROM save) one
+    // tick must not take one huge step.
+    input.dt = min(elapsed, 4 * period) / 1000.0f;
+    input.leftRPM = vescWheelRpm(measuredMotors[0]);
+    input.rightRPM = vescWheelRpm(measuredMotors[1]);
+    input.leftFresh = vescFresh(measuredMotors[0], now, VESC_STALE_MS);
+    input.rightFresh = vescFresh(measuredMotors[1], now, VESC_STALE_MS);
+    input.speedLimitMS = userMaxSpeedMS;
+    input.calButtonHeld = calibrateButton.getState() == LOW;
 
-    const float dt = period / 1000.0f;
-    MotorTargets targets;
-    switch (modeState.current())
+    const auto command = drive.tick(input);
+    switch (command.kind)
     {
-    case LEAN:
-        targets = leanMode.getTargetsFromSample();
+    case DriveController::MotorCommand::Kind::RPM:
+        vescSetWheelRPM(can1, motors.leftId, command.left);
+        vescSetWheelRPM(can1, motors.rightId, command.right);
         break;
-
-    case REMOTE:
-        targets = remoteMode.getTargets();
-        break;
-    case DISARM:
-        targets = disarmMode.getTargets();
-        break;
-    case ASSIST:
-        assistMode.loop(measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM,
-                        measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM,
-                        userMaxSpeedMS * LINEAR_TO_RPM);
-        targets = assistMode.getTargets();
+    case DriveController::MotorCommand::Kind::Brake:
+        vescSetBrakeCurrent(can1, motors.leftId, command.left);
+        vescSetBrakeCurrent(can1, motors.rightId, command.right);
         break;
     default:
-        targets = {0.0f, 0.0f};
-        telemetry::Telemetry::logf("Unknown mode detected, setting motor power to 0, this should never happen\n");
+        vescSetCurrent(can1, motors.leftId, command.left);
+        vescSetCurrent(can1, motors.rightId, command.right);
         break;
-    }
-    assistBoostCurrent = modeState.current() == ASSIST ? targets : MotorTargets{};
-    if (modeState.current() == LEAN || modeState.current() == REMOTE)
-    {
-        setMotorPower(targets.left, targets.right, dt);
-    }
-    else if (modeState.current() == DISARM)
-    {
-        vescSetCurrent(can1, motors.leftId, 0.0f);
-        vescSetCurrent(can1, motors.rightId, 0.0f);
-    }
-    else
-    {
-        vescSetCurrent(can1, motors.leftId, targets.left);
-        vescSetCurrent(can1, motors.rightId, targets.right);
     }
 }
 
 static void replyToConfiguration()
 {
     constexpr size_t MaxPacketBytes = config::MaxResponseSize + config::MaxResponseSize / 254 + 3;
-    settings::protocol.tick(millis(), modeState.current() == DISARM);
+    const bool disarmed = drive.mode() == DISARM;
+    settings::protocol.tick(millis(), disarmed);
     if (!settings::protocol.pending() || Serial1.availableForWrite() < static_cast<int>(MaxPacketBytes))
         return;
 
@@ -458,7 +321,7 @@ static void replyToConfiguration()
     // Configuration writes are permitted only while the current mode is DISARM.
     // Only successful runtime mutations require refreshing derived settings.
     const uint32_t revision = settings::protocol.revision();
-    const size_t length = settings::protocol.reply(response, modeState.current() == DISARM);
+    const size_t length = settings::protocol.reply(response, disarmed);
     if (settings::protocol.revision() != revision)
         applyRuntimeSettings();
     // The leading zero distinguishes PacketSerial responses from legacy CSV.
@@ -466,40 +329,56 @@ static void replyToConfiguration()
     packetSerial.send(response, length);
 }
 
+// Once a second: lean ranges and a health summary, as text lines the dashboard reads.
+static void publishStatus(uint32_t now)
+{
+    static uint32_t lastStatusMs = 0;
+    static uint32_t lastFrames[2]{};
+    if (now - lastStatusMs < 1000)
+        return;
+    const uint32_t elapsed = now - lastStatusMs;
+    lastStatusMs = now;
+    for (int i = 0; i < 2; ++i)
+    {
+        // A profile load clears the counters; treat that as no frames.
+        const uint32_t frames = measuredMotors[i].rpmFrames;
+        vescRateHz[i] = frames >= lastFrames[i] ? (frames - lastFrames[i]) * 1000 / elapsed : 0;
+        lastFrames[i] = frames;
+    }
+    drive.lean().publishRanges();
+    telemetry::Telemetry::logf("HEALTH fault=%s seated=%d load=%d vescL=%lu vescR=%lu stop=%d cal=%d\n",
+                               DriveController::faultName(drive.fault()), drive.lean().isSeated() ? 1 : 0,
+                               drive.lean().totalLoad(), static_cast<unsigned long>(vescRateHz[0]),
+                               static_cast<unsigned long>(vescRateHz[1]), drive.stopping() ? 1 : 0,
+                               drive.lean().calibrated() ? 1 : 0);
+}
+
 static void publishTelemetry()
 {
     const uint32_t now = millis();
-    static uint32_t lastGainStatusMs = 0;
-    if (now - lastGainStatusMs >= 1000)
-    {
-        lastGainStatusMs = now;
-        leanMode.publishDynamicGains();
-    }
+    publishStatus(now);
     if (!telemetryOutput.due(now))
         return;
-    // Lean samples on each control tick; other modes sample for display only.
-    if (modeState.current() != LEAN)
-        leanMode.sampleSensors();
     telemetry::TelemetryFrame frame;
     frame.timeMs = now;
-    frame.mode = modeState.current();
-    frame.lean = leanMode.getTelemetry();
-    frame.userWeight = leanMode.getUserWeightEstimate();
-    frame.remoteStopped = remoteMode.getTelemetry().stopped;
-    frame.commands = motorTelemetry;
+    frame.mode = drive.mode();
+    frame.lean = drive.lean().getTelemetry();
+    frame.userWeight = drive.lean().getUserWeightEstimate();
+    frame.remoteStopped = drive.remoteStopped();
+    frame.commands = drive.commands();
     const auto feedback = [](const VescStatus &motor)
     {
-        return telemetry::MotorFeedback{motor.erpm / VESC_ERPM_PER_WHEEL_RPM,
-                                        motor.lastRpmMs, motor.rpmFrames != 0};
+        return telemetry::MotorFeedback{vescWheelRpm(motor), motor.lastRpmMs, motor.rpmFrames != 0};
     };
     frame.left = feedback(measuredMotors[0]);
     frame.right = feedback(measuredMotors[1]);
-    frame.boostCurrent = assistBoostCurrent;
+    frame.boostCurrent = drive.assistCurrent();
     telemetryOutput.publish(frame);
 }
 
 void loop()
 {
+    watchdog::feed();
     updateKnobs();
     updateModeInputs();
     packetSerial.update();

@@ -188,6 +188,24 @@ public:
     havePreviousRPM_ = false;
   }
 
+  /**
+   * Start from a wheel that is already turning, e.g. when drive is engaged
+   * while the chair rolls. Without this the command restarts at zero and the
+   * VESC brakes hard toward it. Acceleration and history start from rest.
+   */
+  void seed(float rpm)
+  {
+    reset();
+    if (isfinite(rpm))
+    {
+      rpm_ = rpm;
+      previousRPM_ = rpm;
+    }
+  }
+
+  /** The command RPM returned by the last smoothRPM() call (or seed()). */
+  float rpm() const { return rpm_; }
+
   /** Return whether the constructor's tuning values are valid. */
   bool isValid() const { return valid_; }
 

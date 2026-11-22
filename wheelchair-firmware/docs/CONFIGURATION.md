@@ -104,20 +104,29 @@ history. The transition profile is retained as a configurable profile for
 future integration, matching the original firmware's unused transition
 tuning declaration.
 
-The default startup selection is REMOTE. A valid controller packet is required
-for remote propulsion. LEAN remains calibration-gated. The default sensor
-floor is the pre-calibration telemetry baseline. After subtracting floors and
-applying sensor gains, forward/back and right/left differences are each divided
-by the calibrated user weight estimate and clamped to [-1, 1]. Individual sensor
-values are not saturation-capped. The former directional saturation fields
-(IDs 20-23) and their group (ID 4) are retired; those IDs must not be reused.
-Older saved records for these fields are ignored when loading configuration.
+The default startup selection is DISARM. A valid controller packet is required
+for remote propulsion. LEAN remains calibration-gated.
 
-The watchdog can only be shortened from its 100 ms default, the control
-period stays within 4–10 ms, and configurable jerk cannot exceed the original
-400 RPM/s² limit. The hard speed restriction remains 45% of the 11 mph design
-speed, and the hard acceleration cap remains 2.85 m/s². RPM and RPM/s limits
-use the shared `LINEAR_TO_RPM` value. Loading or applying configuration assigns
+Retired IDs, never to be reused: fields 10-13 (per-sensor gains), 20-23
+(directional saturation), 36 (turn mix), 50 (calibration samples), 51 (shared
+sensor floor); groups 3 and 4. Older saved records for them are ignored on
+load.
+
+### Calibration fields
+
+A field declared with `calibration = true` (the last `FieldInfo` member)
+describes this chair or its rider, not a driving feel: the sensor zeros, the
+full-lean ranges, the seat threshold and the track width. Two things follow:
+
+- Loading a profile, from the dashboard or the profile knob, leaves these
+  fields as they are.
+- The firmware saves them by itself after a tare or a range calibration
+  (`Persistence::saveCalibration`). Only these fields are written: other
+  unsaved dashboard edits stay unsaved.
+
+The hard speed and acceleration limits are in `src/drive_constants.h`. RPM and
+RPM/s limits use the shared `LINEAR_TO_RPM` value. Loading or applying
+configuration assigns
 `LINEAR_TO_RPM = 60.0f / settings::wheelCircumference.get()` directly in
 `applyRuntimeSettings()`. All motor and PID conversions read that same value.
 The default circumference, propulsion limits, and configurable field ranges can

@@ -17,19 +17,25 @@ namespace settings
     config::Registry &registry();
     extern config::Persistence persistence;
     extern config::Protocol protocol;
+    // Called before each EEPROM byte is written. main.cpp points it at the
+    // watchdog so a long save cannot reset the Teensy halfway through.
+    extern void (*storageActivity)();
 
     extern config::EnumField<common::mode, 4> defaultMode;
     extern config::ConfigField<float> deadband;
-    extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain;
+    // Bounds shared with the calibration code that writes these fields.
+    constexpr int LeanRangeMin = 40, LeanRangeMax = 3000;
+    constexpr int SensorZeroMin = 100, SensorZeroMax = 1500;
+    extern config::ConfigField<int> rangeForward, rangeBack, rangeLeft, rangeRight;
+    extern config::ConfigField<int> zeroFront, zeroBack, zeroLeft, zeroRight, seatThreshold;
+    extern config::ConfigField<float> maxTurnRate, maxLateralAccel, trackWidth;
     extern config::ProfileField<2> leanForewardBackResponse;
     extern config::ProfileField<2> leanSideToSideResponse;
     extern config::ProfileField<2> assistResponse;
-    extern config::ProfileField<6> leanTurnMix;
     extern config::ConfigField<float> assistMaxBoostAmps, assistSlowdownRPM, assistSlowdownBoostFraction;
 
     extern config::ConfigField<unsigned long> controllerTimeout, buttonDebounce;
     extern config::ConfigField<uint32_t> controlPeriod;
-    extern config::ConfigField<int> calibrationSamples, defaultFloor;
     extern config::ConfigField<uint8_t> leftVesc, rightVesc;
     extern config::ConfigField<float> wheelCircumference;
 

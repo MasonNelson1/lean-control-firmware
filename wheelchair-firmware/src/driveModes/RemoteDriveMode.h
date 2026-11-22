@@ -1,28 +1,31 @@
 #pragma once
 
 #include "DriveMode.h"
-#include "../telemetry/TelemetryTypes.h"
 #include <cstddef>
 #include <cstdint>
 
-class RemoteDriveMode : public DriveMode
+// Hand-controller drive: wheel targets from Bluetooth packets, each -1 to 1 as
+// a share of the speed-knob limit.
+class RemoteDriveMode
 {
 private:
     static constexpr uint8_t PACKET_DRIVE = 0x01;
     static constexpr uint8_t PACKET_SOFT_STOP = 0x02;
     static constexpr uint8_t PACKET_SOFT_STOP_CLEAR = 0x03;
 
-    telemetry::RemoteTelemetry telemetry{};
-
-    unsigned long lastPacketMillis = 0;
+    bool stopped_ = true;
+    bool havePacket = false; // no command is trusted until a packet arrives after reset()
+    uint32_t lastPacketMillis = 0;
     bool softStopLatched = false;
-    double requestedLeftPower = 0.0;
-    double requestedRightPower = 0.0;
+    float requestedLeftPower = 0.0f;
+    float requestedRightPower = 0.0f;
 
 public:
-    void onPacketReceived(const uint8_t *buffer, size_t size);
-    MotorTargets getTargets() override;
-    const telemetry::RemoteTelemetry &getTelemetry() const { return telemetry; }
+    void onPacketReceived(const uint8_t *buffer, size_t size, uint32_t now);
+    // Targets for this tick. Zero, with stopped() true, once the controller
+    // has been silent for the timeout or its soft stop is latched.
+    MotorTargets getTargets(uint32_t now);
+    bool stopped() const { return stopped_; }
 
     void reset();
 };

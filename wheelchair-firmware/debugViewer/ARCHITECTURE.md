@@ -30,6 +30,13 @@ CSV/configuration stream. It delivers configuration frames to `configLink`.
 Keep a single serial reader: adding another reader breaks configuration/CSV
 demultiplexing. Disconnecting discards the connection-specific schema and drafts.
 
+Besides CSV, the firmware prints `LEAN_RANGES` (or legacy `DYNAMIC_GAINS` in old
+recordings) and `HEALTH key=value ...` once a second. `bluetooth.js` and `app.py`
+parse both identically, keep them out of the console, and log only fault
+changes. They become `leanScale` (`{kind: 'ranges'|'gains', F, B, L, R}`) and
+`health` state, which clear on disconnect; `health` also clears after 3 s
+without a line.
+
 Stale telemetry does not close the serial port, cancel configuration reads, or
 disable reload/profile-read controls. It removes confirmation of Disarm, so
 mutation controls remain disabled until fresh Disarm telemetry arrives. The

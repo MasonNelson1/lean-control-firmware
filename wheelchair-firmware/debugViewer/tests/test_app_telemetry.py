@@ -17,8 +17,8 @@ def row(time=1000, mode="LEAN"):
 class ParseTests(unittest.TestCase):
     def test_gain_status(self):
         kind, gains = viewer.parse('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800')
-        self.assertEqual(kind, 'gains')
-        self.assertEqual(gains, {'F': 1.23, 'B': 2.34, 'L': 1, 'R': .98})
+        self.assertEqual(kind, 'scale')
+        self.assertEqual(gains, {'kind': 'gains', 'F': 1.23, 'B': 2.34, 'L': 1, 'R': .98})
 
     def test_invalid_gain_status(self):
         for message in (
@@ -29,6 +29,37 @@ class ParseTests(unittest.TestCase):
             'DYNAMIC_GAINS F=1 B=2 L=3 R=4 garbage',
         ):
             self.assertEqual(viewer.parse(message)[0], 'text')
+
+    def test_lean_ranges(self):
+        kind, ranges = viewer.parse('LEAN_RANGES F=600 B=400 L=500 R=500')
+        self.assertEqual(kind, 'scale')
+        self.assertEqual(ranges, {'kind': 'ranges', 'F': 600, 'B': 400, 'L': 500, 'R': 500})
+
+    def test_invalid_lean_ranges(self):
+        for message in (
+            'LEAN_RANGES F=600 B=400 L=500',
+            'LEAN_RANGES F=600 B=400 L=500 R=0',
+            'LEAN_RANGES F=-600 B=400 L=500 R=500',
+            'LEAN_RANGES F=600.5 B=400 L=500 R=500',
+            'LEAN_RANGES F=600 B=400 L=500 R=500 garbage',
+        ):
+            self.assertEqual(viewer.parse(message)[0], 'text')
+
+    def test_health(self):
+        kind, health = viewer.parse('HEALTH fault=NONE seated=1 load=330 vescL=50 vescR=50 stop=0 cal=1')
+        self.assertEqual(kind, 'health')
+        self.assertEqual(health, {'fault': 'NONE', 'seated': True, 'stop': False, 'cal': True,
+                                  'load': 330, 'vescL': 50, 'vescR': 50})
+
+    def test_health_ignores_unknown_keys_and_bad_known_values(self):
+        self.assertEqual(viewer.parse('HEALTH future=7 fault=VESC_SILENT load=-12 vescL=0 brandNew2=x')[1],
+                         {'fault': 'VESC_SILENT', 'load': -12, 'vescL': 0})
+        self.assertEqual(viewer.parse('HEALTH fault=NEW_THING seated=maybe')[1], {'fault': 'NEW_THING'})
+
+    def test_invalid_health_is_console_text(self):
+        for message in ('HEALTH', 'HEALTH seated=1 load=3', 'HEALTH fault=none', 'HEALTH fault=NONE garbage',
+                        'HEALTH fault=NONE 9x=1', 'HEALTHY fault=NONE', 'Health fault=NONE'):
+            self.assertEqual(viewer.parse(message), ('text', message))
 
 
 def install_parse_case(name, line, kind, mode=None):
@@ -72,7 +103,8 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
         viewer.clients.clear()
         viewer.telemetry_warning_at = float("-inf")
         viewer.telemetry_warning_rows = 0
-        viewer.dynamic_gains = None
+        viewer.clear_chair_status()
+        viewer.health_at = float("-inf")
 
     async def test_gain_status_is_cached_and_emitted_without_console_or_csv_changes(self):
         events = []
@@ -80,9 +112,9 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
             events.append(event)
         with patch.object(viewer, 'emit', emit):
             await viewer.line_received('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800')
-        gains = {'F': 1.23, 'B': 2.34, 'L': 1, 'R': .98}
-        self.assertEqual(viewer.dynamic_gains, gains)
-        self.assertEqual(events, [{'dynamicGains': gains}])
+        gains = {'kind': 'gains', 'F': 1.23, 'B': 2.34, 'L': 1, 'R': .98}
+        self.assertEqual(viewer.lean_scale, gains)
+        self.assertEqual(events, [{'leanScale': gains}])
         self.assertFalse(viewer.history)
         self.assertFalse(viewer.console)
 
@@ -96,7 +128,75 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        self.assertEqual(events[0]['dynamicGains'], {'F': 1, 'B': 2, 'L': 3, 'R': 4})
+        self.assertEqual(events[0]['leanScale'], {'kind': 'gains', 'F': 1, 'B': 2, 'L': 3, 'R': 4})
+        self.assertIsNone(events[0]['health'])
+
+    async def test_ranges_and_health_are_cached_emitted_and_kept_out_of_console(self):
+        events = []
+        async def emit(event):
+            events.append(event)
+        ok = 'HEALTH fault=NONE seated=1 load=330 vescL=50 vescR=50 stop=0 cal=1'
+        with patch.object(viewer, 'emit', emit):
+            await viewer.line_received('LEAN_RANGES F=600 B=400 L=500 R=500')
+            await viewer.line_received(ok)
+        ranges = {'kind': 'ranges', 'F': 600, 'B': 400, 'L': 500, 'R': 500}
+        health = {'fault': 'NONE', 'seated': True, 'stop': False, 'cal': True, 'load': 330, 'vescL': 50, 'vescR': 50}
+        self.assertEqual(events, [{'leanScale': ranges}, {'health': health}])
+        self.assertFalse(viewer.console)
+        self.assertFalse(viewer.history)
+        with patch.object(viewer, 'emit', emit):
+            events.clear()
+            task = asyncio.create_task(viewer.broadcast())
+            await asyncio.sleep(0)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self.assertEqual(events[0]['leanScale'], ranges)
+        self.assertEqual(events[0]['health'], health)
+
+    async def test_stale_health_is_not_broadcast(self):
+        await viewer.line_received('HEALTH fault=NONE')
+        viewer.health_at -= viewer.HEALTH_STALE_S + .5
+        events = []
+        async def emit(event):
+            events.append(event)
+        with patch.object(viewer, 'emit', emit):
+            task = asyncio.create_task(viewer.broadcast())
+            await asyncio.sleep(0)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self.assertIsNone(events[0]['health'])
+
+    async def test_fault_change_is_logged_once(self):
+        events = []
+        async def emit(event):
+            events.append(event)
+        ok, silent = 'HEALTH fault=NONE vescL=50', 'HEALTH fault=VESC_SILENT vescL=0'
+        with patch.object(viewer, 'emit', emit):
+            for line in (ok, ok, silent, silent, silent, ok, ok, 'HEALTH fault=SENSOR_RAIL'):
+                await viewer.line_received(line)
+        self.assertEqual(list(viewer.console), ['Fault: VESC_SILENT', 'Fault cleared', 'Fault: SENSOR_RAIL'])
+        self.assertEqual([e['console'] for e in events if 'console' in e], list(viewer.console))
+        self.assertEqual(viewer.health, {'fault': 'SENSOR_RAIL'})
+
+    async def test_disconnect_clears_chair_status(self):
+        await viewer.line_received('LEAN_RANGES F=600 B=400 L=500 R=500')
+        await viewer.line_received('HEALTH fault=VESC_SILENT')
+        class Socket:
+            commands = ['disconnect']
+            async def accept(self): pass
+            async def send_json(self, event): pass
+            async def receive_text(self):
+                if self.commands: return self.commands.pop()
+                raise viewer.WebSocketDisconnect()
+        saved = viewer.connected
+        try:
+            await viewer.socket(Socket())
+        finally:
+            viewer.connected = saved
+        self.assertIsNone(viewer.lean_scale)
+        self.assertIsNone(viewer.health)
+        await viewer.line_received('HEALTH fault=VESC_SILENT')
+        self.assertEqual(list(viewer.console).count('Fault: VESC_SILENT'), 2)
 
     async def test_reboot_clears_previous_history(self):
         await viewer.line_received(row(1000))

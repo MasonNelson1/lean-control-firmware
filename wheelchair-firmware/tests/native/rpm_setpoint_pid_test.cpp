@@ -146,4 +146,24 @@ int main() {
   }
   assert(updatedRPM > designRPM);
   LINEAR_TO_RPM = defaultConversion;
+
+  // seed(): start from a wheel that is already turning. The first command is
+  // next to the seeded speed, not next to zero, and braking from there is
+  // limited like any other.
+  RPMSetpointPID rolling(tuning());
+  rolling.seed(80.0f);
+  assert(rolling.rpm() == 80.0f);
+  float seeded = rolling.smoothRPM(80.0f, dt, MAX_SPEED, MAX_ACCEL);
+  assert(std::fabs(seeded - 80.0f) < 0.01f);
+  for (int k = 0; k < 400; ++k) {
+    const float before = seeded;
+    seeded = rolling.smoothRPM(0.0f, dt, MAX_SPEED, MAX_ACCEL);
+    assert(std::fabs(seeded - before) / dt <= MAX_ACCEL * LINEAR_TO_RPM + .001f);
+  }
+  assert(std::fabs(seeded) < 1.0f);
+  // A seed beyond the speed limit is pulled inside it on the next update.
+  rolling.seed(10000.0f);
+  assert(std::fabs(rolling.smoothRPM(0.0f, dt, 1.0f, MAX_ACCEL)) <= 1.0f * LINEAR_TO_RPM);
+  rolling.seed(NAN);
+  assert(rolling.rpm() == 0.0f);
 }

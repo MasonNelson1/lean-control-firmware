@@ -22,7 +22,7 @@ function harness({secure = true, openError = null, backend = true, configWire = 
     TextDecoder, performance: {now: () => now},
     window: {isSecureContext: secure},
     navigator: {serial: {async requestPort(options) { requestOptions = options; return port; }}},
-    bluetoothActive: false, displayed: [], latest: [], lastRow: null, dynamicGains: null,
+    bluetoothActive: false, displayed: [], latest: [], lastRow: null, leanScale: null, health: null,
     dashboardBackend: backend, connectionMode: 'bluetooth', usbConnected: false,
     ws: {readyState: 1, send: command => commands.push(command)},
     $: selector => {
@@ -30,7 +30,7 @@ function harness({secure = true, openError = null, backend = true, configWire = 
         querySelector: () => ({remove() {}})});
       return elements.get(selector);
     },
-    graphs() {}, showMode() {}, sensors() {},
+    graphs() {}, showMode() {}, sensors() {}, showHealth() {},
     appendConsole: line => messages.push(line),
     applyTelemetry: (rows, stale, source) => frames.push({rows: rows.slice(), stale, source}),
     setInterval() { return 1; }, clearInterval() {}, setTimeout, clearTimeout,
@@ -86,7 +86,7 @@ test('parses measured wheel RPM and requested assist current', () => {
 test('parses gain status without accepting incomplete, nonfinite, or nonpositive gains', () => {
   const parse = harness().context.parseDynamicGains;
   assert.equal(JSON.stringify(parse('DYNAMIC_GAINS F=1.2300 B=2.3400 L=1.0000 R=0.9800')),
-    JSON.stringify({F: 1.23, B: 2.34, L: 1, R: 0.98}));
+    JSON.stringify({kind: 'gains', F: 1.23, B: 2.34, L: 1, R: 0.98}));
   for (const line of [
     'DYNAMIC_GAINS F=1 B=2 L=3',
     'DYNAMIC_GAINS F=nan B=2 L=3 R=4',
@@ -101,16 +101,16 @@ test('fragmented gain status updates separately from telemetry and clears on dis
   await h.context.connectBluetooth();
   h.send('DYNAMIC_GAINS F=1.2300 B=');
   await settle();
-  assert.equal(h.context.dynamicGains, null);
+  assert.equal(h.context.leanScale, null);
   h.send('2.3400 L=1.0000 R=0.9800\n' + row() + '\n');
   await settle();
-  assert.equal(h.context.dynamicGains.F, 1.23);
-  assert.equal(h.context.dynamicGains.B, 2.34);
+  assert.equal(h.context.leanScale.F, 1.23);
+  assert.equal(h.context.leanScale.B, 2.34);
   h.context.renderBluetooth();
   assert.equal(h.frames.at(-1).rows.length, 1);
   assert.ok(!h.messages.some(message => message.startsWith('DYNAMIC_GAINS')));
   await h.context.disconnectBluetooth();
-  assert.equal(h.context.dynamicGains, null);
+  assert.equal(h.context.leanScale, null);
 });
 
 test('source changes discard gains and inactive Bluetooth cannot overwrite the USB cache', async () => {
@@ -118,19 +118,20 @@ test('source changes discard gains and inactive Bluetooth cannot overwrite the U
   await h.context.connectBluetooth();
   h.send('DYNAMIC_GAINS F=1 B=2 L=3 R=4\n');
   await settle();
-  assert.equal(h.context.dynamicGains.R, 4);
+  assert.equal(h.context.leanScale.R, 4);
   h.elements.get('#connection-mode').value = 'usb';
   await h.context.changeConnectionMode();
-  assert.equal(h.context.dynamicGains, null);
+  assert.equal(h.context.leanScale, null);
   h.send('DYNAMIC_GAINS F=9 B=9 L=9 R=9\n');
   await settle();
-  assert.equal(h.context.dynamicGains, null);
+  assert.equal(h.context.leanScale, null);
   await h.context.disconnectBluetooth();
 });
 
-test('sensor panel displays active gains beside the sensor counts', () => {
+function sensorPanel(leanScale) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const code = html.slice(html.indexOf('    function sensors(r)'), html.indexOf('    function connect()'));
+  const elements = new Map();
   const panels = ['F', 'B', 'L', 'R'].map(key => {
     const children = new Map();
     return {dataset: {key}, querySelector(selector) {
@@ -139,19 +140,152 @@ test('sensor panel displays active gains beside the sensor counts', () => {
     }};
   });
   const context = vm.createContext({
-    dynamicGains: {F: 1.23, B: 2.34, L: 1, R: 0.98},
+    leanScale,
     document: {querySelectorAll: () => panels},
-    $: () => ({classList: {toggle() {}}}),
+    $: id => {
+      if (!elements.has(id)) elements.set(id, {classList: {toggle() {}}});
+      return elements.get(id);
+    },
     smoothedDirection: () => null, drawDirection() {},
   });
   vm.runInContext(code, context);
+  return {context, panels, elements, gain: index => panels[index].querySelector('.gain')};
+}
+
+test('sensor panel displays legacy gains beside the sensor counts', () => {
+  const {context, panels, gain} = sensorPanel({kind: 'gains', F: 1.23, B: 2.34, L: 1, R: 0.98});
   context.sensors({F: 100, B: 200, L: 300, R: 400, total: 1000});
   assert.equal(panels[0].querySelector('strong').textContent, 100);
-  assert.equal(panels[0].querySelector('.gain').textContent, '×1.23');
-  assert.equal(panels[3].querySelector('.gain').textContent, '×0.98');
-  context.dynamicGains = null;
+  assert.equal(gain(0).textContent, '×1.23');
+  assert.equal(gain(3).textContent, '×0.98');
+  context.leanScale = null;
   context.sensors(null);
-  assert.equal(panels[0].querySelector('.gain').textContent, '—');
+  assert.equal(gain(0).textContent, '—');
+});
+
+test('sensor panel displays full-lean ranges with an explanatory tooltip', () => {
+  const {context, gain} = sensorPanel({kind: 'ranges', F: 600, B: 400, L: 500, R: 500});
+  context.sensors({F: 100, B: 200, L: 300, R: 400, total: 1000, userWeight: 0});
+  assert.equal(gain(0).textContent, 'full 600');
+  assert.equal(gain(1).textContent, 'full 400');
+  assert.equal(gain(3).textContent, 'full 500');
+  assert.match(gain(0).title, /full lean this way/);
+});
+
+test('seated load at calibration shows a dash until calibrated', () => {
+  const {context, elements} = sensorPanel(null);
+  context.sensors({F: 1, B: 2, L: 3, R: 4, total: 10, userWeight: 0});
+  assert.equal(elements.get('#weight').textContent, '\u2014');
+  context.sensors({F: 1, B: 2, L: 3, R: 4, total: 10, userWeight: 330.4});
+  assert.equal(elements.get('#weight').textContent, 330);
+  context.sensors(null);
+  assert.equal(elements.get('#weight').textContent, '\u2014');
+});
+
+test('parses lean ranges without accepting incomplete, fractional, or nonpositive ranges', () => {
+  const h = harness();
+  assert.equal(JSON.stringify(h.context.parseLeanRanges('LEAN_RANGES F=600 B=400 L=500 R=500')),
+    JSON.stringify({kind: 'ranges', F: 600, B: 400, L: 500, R: 500}));
+  assert.equal(h.context.parseLeanScale('DYNAMIC_GAINS F=7.0000 B=3.0000 L=0.0100 R=0.0100').kind, 'gains');
+  for (const line of [
+    'LEAN_RANGES F=600 B=400 L=500',
+    'LEAN_RANGES F=600 B=400 L=500 R=0',
+    'LEAN_RANGES F=-600 B=400 L=500 R=500',
+    'LEAN_RANGES F=600.5 B=400 L=500 R=500',
+    'LEAN_RANGES F=600 B=400 L=500 R=500 garbage',
+  ]) assert.equal(h.context.parseLeanScale(line), null);
+});
+
+test('parses HEALTH generically, ignores unknown keys, and requires a fault', () => {
+  const parse = harness().context.parseHealth;
+  assert.equal(JSON.stringify(parse('HEALTH fault=NONE seated=1 load=330 vescL=50 vescR=50 stop=0 cal=1')),
+    JSON.stringify({fault: 'NONE', seated: true, stop: false, cal: true, load: 330, vescL: 50, vescR: 50}));
+  assert.equal(JSON.stringify(parse('HEALTH future=7 fault=VESC_SILENT load=-12 vescL=0 brandNew2=x')),
+    JSON.stringify({fault: 'VESC_SILENT', load: -12, vescL: 0}));
+  assert.equal(parse('HEALTH fault=NEW_THING').fault, 'NEW_THING');
+  assert.equal(parse('HEALTH fault=NONE seated=maybe').seated, undefined);
+  for (const line of ['HEALTH', 'HEALTH seated=1 load=3', 'HEALTH fault=none', 'HEALTH fault=NONE garbage',
+    'HEALTH fault=NONE 9x=1', 'HEALTHY fault=NONE', 'Health fault=NONE']) assert.equal(parse(line), null);
+});
+
+test('HEALTH stays out of the console, logs fault changes once, and clears when stale or disconnected', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  const ok = 'HEALTH fault=NONE seated=1 load=330 vescL=50 vescR=50 stop=0 cal=1\n';
+  const silent = 'HEALTH fault=VESC_SILENT seated=1 load=330 vescL=0 vescR=50 stop=1 cal=1\n';
+  h.send(ok + ok + 'LEAN_RANGES F=600 B=400 L=500 R=500\n' + row() + '\n');
+  await settle();
+  assert.equal(h.context.health.fault, 'NONE');
+  assert.equal(h.context.leanScale.kind, 'ranges');
+  assert.equal(h.context.leanScale.F, 600);
+  h.send(silent + silent + silent);
+  await settle();
+  assert.equal(h.context.health.vescL, 0);
+  assert.equal(h.context.health.stop, true);
+  h.send(ok + ok + 'HEALTH seated=1\nHEALTH fault=NONE junk\n');
+  await settle();
+  assert.deepEqual(h.messages.filter(m => !m.startsWith('Bluetooth')),
+    ['Fault: VESC_SILENT', 'Fault cleared', 'HEALTH seated=1', 'HEALTH fault=NONE junk']);
+  assert.ok(!h.messages.some(m => m.startsWith('LEAN_RANGES')));
+  h.setNow(3000);
+  h.context.renderBluetooth();
+  assert.notEqual(h.context.health, null);
+  h.setNow(3001);
+  h.context.renderBluetooth();
+  assert.equal(h.context.health, null);
+  h.send(ok);
+  await settle();
+  assert.equal(h.context.health.fault, 'NONE');
+  await h.context.disconnectBluetooth();
+  assert.equal(h.context.health, null);
+  assert.equal(h.context.leanScale, null);
+});
+
+test('HEALTH from inactive Bluetooth cannot overwrite the USB view', async () => {
+  const h = harness();
+  await h.context.connectBluetooth();
+  h.elements.get('#connection-mode').value = 'usb';
+  await h.context.changeConnectionMode();
+  h.send('HEALTH fault=SENSOR_RAIL\nLEAN_RANGES F=1 B=1 L=1 R=1\n');
+  await settle();
+  assert.equal(h.context.health, null);
+  assert.equal(h.context.leanScale, null);
+  assert.ok(!h.messages.includes('Fault: SENSOR_RAIL'));
+  await h.context.disconnectBluetooth();
+});
+
+function healthBadge(health) {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const code = html.slice(html.indexOf('    const faultLabels'), html.indexOf('    function showMode('));
+  const elements = new Map();
+  const context = vm.createContext({health, $: id => {
+    if (!elements.has(id)) {
+      const classes = new Set();
+      elements.set(id, {classes, classList: {toggle: (name, on) => on ? classes.add(name) : classes.delete(name)}});
+    }
+    return elements.get(id);
+  }});
+  vm.runInContext(code, context);
+  context.showHealth();
+  return {badge: elements.get('#health'), detail: elements.get('#health-detail')};
+}
+
+test('health badge shows OK or a readable fault, with seated, VESC rates and braking', () => {
+  let {badge, detail} = healthBadge({fault: 'NONE', seated: true, load: 330, vescL: 50, vescR: 50, stop: false, cal: true});
+  assert.equal(badge.hidden, false);
+  assert.equal(badge.textContent, 'Health: OK');
+  assert.equal(badge.classes.has('off'), false);
+  assert.equal(detail.textContent, 'Seated · VESC L 50 Hz · R 50 Hz');
+  assert.match(badge.title, /Seat load 330/);
+  ({badge, detail} = healthBadge({fault: 'VESC_SILENT', seated: false, vescL: 0, vescR: 50, stop: true, cal: false}));
+  assert.equal(badge.textContent, 'Fault: VESC silent');
+  assert.equal(badge.classes.has('off'), true);
+  assert.equal(detail.textContent, 'Not seated · VESC L 0 Hz (silent) · R 50 Hz · Braking · Lean neutral not calibrated');
+  assert.equal(healthBadge({fault: 'SENSOR_RAIL'}).badge.textContent, 'Fault: Sensor at rail');
+  assert.equal(healthBadge({fault: 'NEW_THING'}).badge.textContent, 'Fault: NEW_THING');
+  ({badge, detail} = healthBadge(null));
+  assert.equal(badge.hidden, true);
+  assert.equal(detail.hidden, true);
 });
 
 test('reads fragmented lines, marks stale data, clears history after device reboot, and disconnects cleanly', async () => {

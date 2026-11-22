@@ -71,6 +71,12 @@
       background: #cc9244
     }
 
+    .health-detail {
+      margin: -6px 0 14px;
+      color: #7b8796;
+      font-size: 11px
+    }
+
     main {
       display: grid;
       grid-template-columns: minmax(0, 2.25fr) minmax(320px, 1fr);
@@ -807,7 +813,7 @@
           </select><button id="connection-connect" title="Connect to wheelchair">Connect</button><button
             id="connection-disconnect" title="Disconnect from wheelchair.">Disconnect</button><span id="mode"
             class="badge off" role="status">Mode: Unknown</span><span id="status" class="badge off"
-            role="status">Bluetooth disconnected</span></div>
+            role="status">Bluetooth disconnected</span><span id="health" class="badge" role="status" hidden></span></div>
       </header>
       <div id="telemetry-page">
         <p id="bluetooth-help" class="sub">Pair the HC-06 in your system Bluetooth settings and connect using desktop
@@ -872,22 +878,22 @@
                     <rect x="9" y="5" width="22" height="30" rx="8" />
                     <path d="M10 15h20M10 27h20" />
                   </svg>SEAT</div>
-                <div class="sensor front" data-key="F"><label>Front</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
+                <div class="sensor front" data-key="F"><label>Front</label><strong>—</strong><span class="gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
                 </div>
-                <div class="sensor back" data-key="B"><label>Back</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
+                <div class="sensor back" data-key="B"><label>Back</label><strong>—</strong><span class="gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
                 </div>
-                <div class="sensor left" data-key="L"><label>Left</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
+                <div class="sensor left" data-key="L"><label>Left</label><strong>—</strong><span class="gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
                 </div>
-                <div class="sensor right" data-key="R"><label>Right</label><strong>—</strong><span class="gain" title="Active sensor gain">—</span>
+                <div class="sensor right" data-key="R"><label>Right</label><strong>—</strong><span class="gain">—</span>
                   <div class="track">
                     <div class="fill"></div>
                   </div>
@@ -895,9 +901,10 @@
               </div>
               <div class="metrics">
                 <div>Total force<strong id="total">—</strong></div>
-                <div>User weight reference<strong id="weight">—</strong></div>
+                <div>Seated load at calibration<strong id="weight">—</strong></div>
                 <div>Bars show<strong style="font-size:12px">Share of total</strong></div>
               </div>
+              <div id="health-detail" class="health-detail" hidden></div>
             </div>
           </section>
         </main>
@@ -944,10 +951,25 @@
     </div>
   </div>
   <script>
-    let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'bluetooth', usbConnected = false, dynamicGains = null;
+    let ws, paused = false, displayed = [], latest = [], lastRow = null, bluetoothActive = false, connectionMode = 'bluetooth', usbConnected = false, leanScale = null, health = null;
     const $ = s => document.querySelector(s);
     function appendConsole(line) { const p = $('pre'); p.textContent = (p.textContent + line + '\n').split('\n').slice(-400).join('\n'); if ($('#scroll').checked) p.scrollTop = p.scrollHeight }
     function applyTelemetry(rows, stale, source) { latest = rows; lastRow = latest.at(-1) || null; showMode(lastRow, stale); $('#status').textContent = `${source} · ${stale ? 'Waiting for telemetry' : 'Receiving telemetry'}`; $('#status').classList.toggle('off', stale); if (!paused) { displayed = latest; graphs() } sensors(lastRow) }
+    // HEALTH from the firmware: a header badge plus one detail line in the sensor panel.
+    const faultLabels = { SENSOR_RAIL: 'Sensor at rail', VESC_SILENT: 'VESC silent' };
+    function showHealth() {
+      const badge = $('#health'), detail = $('#health-detail'), h = health;
+      badge.hidden = detail.hidden = !h;
+      if (!h) { badge.textContent = detail.textContent = badge.title = ''; return }
+      const fault = h.fault !== 'NONE', rate = v => v === undefined ? '—' : v > 0 ? `${v} Hz` : '0 Hz (silent)';
+      badge.textContent = fault ? `Fault: ${faultLabels[h.fault] ?? h.fault}` : 'Health: OK';
+      badge.classList.toggle('off', fault);
+      const parts = [h.seated === undefined ? null : h.seated ? 'Seated' : 'Not seated',
+        h.vescL === undefined && h.vescR === undefined ? null : `VESC L ${rate(h.vescL)} · R ${rate(h.vescR)}`,
+        h.stop ? 'Braking' : null, h.cal === false ? 'Lean neutral not calibrated' : null].filter(Boolean);
+      detail.textContent = parts.join(' · ');
+      badge.title = [`Fault: ${h.fault}`, ...parts, h.load === undefined ? null : `Seat load ${h.load}`, h.cal ? 'Lean neutral calibrated' : null].filter(Boolean).join('\n');
+    }
     function showMode(row, stale = false) { const mode = ['LEAN', 'REMOTE', 'DISARM', 'ASSIST'].includes(row?.mode) ? row.mode : 'Unknown'; $('#mode').textContent = `Mode: ${mode}${stale && row ? ' (stale)' : ''}`; $('#mode').classList.toggle('off', stale || mode === 'Unknown') }
 
     function surface(id) { const c = $('#' + id), b = c.getBoundingClientRect(), d = devicePixelRatio || 1; c.width = Math.round(b.width * d); c.height = Math.round(b.height * d); const g = c.getContext('2d'); g.scale(d, d); return [g, b.width, b.height] }
@@ -1130,12 +1152,15 @@
       for (const el of document.querySelectorAll('.sensor')) {
         const value = r?.[el.dataset.key];
         el.querySelector('strong').textContent = value === undefined ? '—' : Math.round(value);
-        const gain = dynamicGains?.[el.dataset.key];
-        el.querySelector('.gain').textContent = Number.isFinite(gain) ? `×${gain.toFixed(2)}` : '—';
+        const scale = leanScale?.[el.dataset.key], gain = el.querySelector('.gain');
+        if (!Number.isFinite(scale)) { gain.textContent = '—'; gain.title = 'Lean range not reported' }
+        else if (leanScale.kind === 'ranges') { gain.textContent = `full ${Math.round(scale)}`; gain.title = 'Counts of difference that count as a full lean this way' }
+        else { gain.textContent = `×${scale.toFixed(2)}`; gain.title = 'Active sensor gain (legacy firmware)' }
         el.querySelector('.fill').style.width = (r ? Math.min(100, Math.max(0, value) / Math.max(1, r.F + r.B + r.L + r.R) * 100) : 0) + '%';
       }
       $('#total').textContent = r ? Math.round(r.total) : '—';
-      $('#weight').textContent = r ? Math.round(r.userWeight) : '—';
+      // Total seat load captured at the last neutral calibration; 0 means not calibrated yet.
+      $('#weight').textContent = r && Math.round(r.userWeight) ? Math.round(r.userWeight) : '—';
       $('#drive').textContent = r ? (r.stopped ? 'Stopped' : 'Enabled') : 'Waiting';
       $('#drive').classList.toggle('off', !r || !!r.stopped);
 
@@ -1152,7 +1177,7 @@
       ws.onopen = () => { if (typeof syncUsbMonitoring === 'function') syncUsbMonitoring() };
       ws.onclose = () => {
         if (connectionMode === 'usb') {
-          setDynamicGains(null);
+          clearChairStatus();
           showMode(lastRow, true);
           $('#status').textContent = 'Server disconnected';
           $('#status').classList.add('off');
@@ -1162,7 +1187,8 @@
       ws.onmessage = e => {
         const d = JSON.parse(e.data);
         if (connectionMode !== 'usb' || !usbConnected) return;
-        if ('dynamicGains' in d) setDynamicGains(d.dynamicGains);
+        if ('leanScale' in d) setLeanScale(d.leanScale);
+        if ('health' in d) setHealth(d.health);
         if (d.console) appendConsole(d.console);
         if (d.history) applyTelemetry(d.history, !!d.stale, 'USB / replay');
       };

@@ -1,18 +1,67 @@
 // HC-06 is Bluetooth Classic SPP (serial), not a BLE GATT device.
 const telemetryFields = 'time_ms F B L R total userWeight speed turn leftTargetRPM rightTargetRPM leftSmoothedRPM rightSmoothedRPM stopped leftActualRPM rightActualRPM leftBoostCurrent rightBoostCurrent'.split(' ');
 
+// Legacy firmware: per-sensor multipliers, still parsed for --replay recordings.
 function parseDynamicGains(line) {
   const match = line.trim().match(/^DYNAMIC_GAINS F=(\d+(?:\.\d+)?) B=(\d+(?:\.\d+)?) L=(\d+(?:\.\d+)?) R=(\d+(?:\.\d+)?)$/);
   if (!match) return null;
   const values = match.slice(1).map(Number);
   if (!values.every(value => Number.isFinite(value) && value > 0)) return null;
-  return Object.fromEntries(['F', 'B', 'L', 'R'].map((key, index) => [key, values[index]]));
+  return {kind: 'gains', ...Object.fromEntries(['F', 'B', 'L', 'R'].map((key, index) => [key, values[index]]))};
 }
 
-// Gain status belongs to the connection, independently of CSV history.
-function setDynamicGains(gains) {
-  dynamicGains = gains;
+// Counts of front-minus-back (right-minus-left) difference that make a full lean each way.
+function parseLeanRanges(line) {
+  const match = line.trim().match(/^LEAN_RANGES F=([0-9]{1,9}) B=([0-9]{1,9}) L=([0-9]{1,9}) R=([0-9]{1,9})$/);
+  if (!match) return null;
+  const values = match.slice(1).map(Number);
+  if (!values.every(value => value > 0)) return null;
+  return {kind: 'ranges', ...Object.fromEntries(['F', 'B', 'L', 'R'].map((key, index) => [key, values[index]]))};
+}
+
+function parseLeanScale(line) {
+  return parseLeanRanges(line) ?? parseDynamicGains(line);
+}
+
+// HEALTH key=value ... ; keys may be added later, so unknown ones are ignored and
+// a malformed known value is dropped. Without a valid fault it is plain text.
+function parseHealth(line) {
+  const [word, ...tokens] = line.trim().split(/\s+/);
+  if (word !== 'HEALTH' || !tokens.length) return null;
+  const fields = new Map();
+  for (const token of tokens) {
+    const match = token.match(/^([A-Za-z][A-Za-z0-9]*)=(\S+)$/);
+    if (!match) return null;
+    fields.set(match[1], match[2]);
+  }
+  if (!/^[A-Z_]+$/.test(fields.get('fault') ?? '')) return null;
+  const health = {fault: fields.get('fault')};
+  for (const key of ['seated', 'stop', 'cal']) if (/^[01]$/.test(fields.get(key))) health[key] = fields.get(key) === '1';
+  if (/^[+-]?[0-9]{1,9}$/.test(fields.get('load'))) health.load = Number(fields.get('load'));
+  for (const key of ['vescL', 'vescR']) if (/^[0-9]{1,6}(?:\.[0-9]{1,6})?$/.test(fields.get(key))) health[key] = Number(fields.get(key));
+  return health;
+}
+
+// Print a fault transition once, not every second the firmware repeats it.
+function healthTransition(previous, fault) {
+  if (fault === previous || (fault === 'NONE' && !previous)) return null;
+  return fault === 'NONE' ? 'Fault cleared' : `Fault: ${fault}`;
+}
+
+// Range/gain and health status belong to the connection, independently of CSV history.
+function setLeanScale(scale) {
+  leanScale = scale;
   sensors(lastRow);
+}
+
+function setHealth(value) {
+  health = value;
+  showHealth();
+}
+
+function clearChairStatus() {
+  setLeanScale(null);
+  setHealth(null);
 }
 
 function parseBluetoothLine(line) {
@@ -89,7 +138,7 @@ class BluetoothReceiver {
 }
 
 let bluetoothPort = null, bluetoothReader = null, bluetoothReadTask = null;
-let bluetoothRows = [], bluetoothLastRowAt = 0, bluetoothTimer = null;
+let bluetoothRows = [], bluetoothLastRowAt = 0, bluetoothHealthAt = 0, bluetoothTimer = null;
 let connectionBusy = false;
 
 function syncUsbMonitoring() {
@@ -113,11 +162,13 @@ function showDisconnected(message) {
 function renderBluetooth() {
   const stale = !bluetoothRows.length || performance.now() - bluetoothLastRowAt > 2000;
   window.configurationModeChanged?.(stale ? null : bluetoothRows.at(-1).mode);
+  // HEALTH arrives once a second; after three silent seconds it no longer describes the chair.
+  if (connectionMode === 'bluetooth' && health && performance.now() - bluetoothHealthAt > 3000) setHealth(null);
   if (connectionMode === 'bluetooth') applyTelemetry(bluetoothRows, stale, 'Bluetooth');
 }
 
 async function readBluetooth(port) {
-  let lastTelemetryWarning = -Infinity, suppressedTelemetryRows = 0;
+  let lastTelemetryWarning = -Infinity, suppressedTelemetryRows = 0, lastFault = null;
   const warnTelemetry = detail => {
     suppressedTelemetryRows++;
     const now = performance.now();
@@ -127,9 +178,19 @@ async function readBluetooth(port) {
     suppressedTelemetryRows = 0;
   };
   const receiver = new BluetoothReceiver(line => {
-    const gains = parseDynamicGains(line);
-    if (gains) {
-      if (connectionMode === 'bluetooth') setDynamicGains(gains);
+    const scale = parseLeanScale(line);
+    if (scale) {
+      if (connectionMode === 'bluetooth') setLeanScale(scale);
+      return;
+    }
+    const status = parseHealth(line);
+    if (status) {
+      if (connectionMode !== 'bluetooth') return;
+      const transition = healthTransition(lastFault, status.fault);
+      lastFault = status.fault;
+      if (transition) appendConsole(transition);
+      bluetoothHealthAt = performance.now();
+      setHealth(status);
       return;
     }
     const row = parseBluetoothLine(line);
@@ -179,7 +240,7 @@ async function readBluetooth(port) {
     try { await port.close(); } catch (error) { appendConsole(`Bluetooth close: ${error.message}`); }
     bluetoothPort = null;
     bluetoothActive = false;
-    if (connectionMode === 'bluetooth') setDynamicGains(null);
+    if (connectionMode === 'bluetooth') clearChairStatus();
     updateConnectionButtons();
     if (connectionMode === 'bluetooth') showDisconnected('Bluetooth disconnected');
     appendConsole('Bluetooth disconnected. Choose a connection mode and click Connect to reconnect.');
@@ -203,7 +264,7 @@ async function connectBluetooth() {
     bluetoothActive = true;
     bluetoothRows = [];
     bluetoothLastRowAt = 0;
-    setDynamicGains(null);
+    clearChairStatus();
     // Do not overlay old USB data on the newly selected wireless source.
     displayed = [];
     graphs();
@@ -240,7 +301,7 @@ async function changeConnectionMode() {
     connectionMode = dashboardBackend ? $('#connection-mode').value : 'bluetooth';
     // A new source starts disconnected and never shows the old source's data.
     latest = []; displayed = []; lastRow = null;
-    setDynamicGains(null);
+    clearChairStatus();
     graphs(); sensors(null);
     $('pre').textContent = '';
     if (connectionMode === 'bluetooth' && bluetoothActive) renderBluetooth();
@@ -254,7 +315,7 @@ async function changeConnectionMode() {
 async function connectSelected() {
   if (!dashboardBackend || connectionMode === 'bluetooth') return connectBluetooth();
   usbConnected = true;
-  setDynamicGains(null);
+  clearChairStatus();
   syncUsbMonitoring();
   showDisconnected('USB / replay · waiting for telemetry');
   updateConnectionButtons();
@@ -267,7 +328,7 @@ async function disconnectSelected() {
     if (connectionMode === 'bluetooth') await disconnectBluetooth();
     else {
       usbConnected = false;
-      setDynamicGains(null);
+      clearChairStatus();
       syncUsbMonitoring();
       showDisconnected('USB / replay disconnected');
     }

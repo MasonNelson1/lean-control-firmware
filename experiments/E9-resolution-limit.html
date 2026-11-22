@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What Limits Resolution</title>
+<style>
+:root{--s1:var(--chart-1,#2a78d6);--s2:var(--chart-2,#eb6834);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.sq{width:12px;height:12px;border-radius:3px;display:inline-block}
+svg{width:100%;height:auto;display:block;overflow:visible}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+</style></head><body>
+<h1>What limits resolution: the sensors or the rider?</h1>
+<p>Rectangle layout, Mason's full lean range (E9). Steps = lean range ÷ 2σ. Sensor noise is measured on the empty seat (±1–1.4 counts per channel); rider sway is measured while Mason held each lean.</p>
+<div class="take"><ul>
+<li><b>The sensors and placement resolve 100–180 steps.</b> On their own, they place the centre of pressure to ±0.006–0.008".</li>
+<li><b>The rider is the limit.</b> Even holding still, Mason's weight drifts ±0.05" side to side and ±0.08" front to back. That's real body motion, and any sensor would see it.</li>
+<li>Smoothing barely helps: averaging over 0.5 s only trims the sway 10–30%, because it's slow drift, not jitter.</li></ul></div>
+<div class="legend"><span class="key"><span class="sq" style="background:var(--s1)"></span>What the sensors can resolve</span><span class="key"><span class="sq" style="background:var(--s2)"></span>What a rider can hold steady</span></div>
+<div id="c"></div>
+<script>
+const D={forward:[181,13],back:[166,9],left:[111,23],right:[104,17]},K=Object.keys(D),C=['--s1','--s2'];
+const W=700,H=250,M={l:40,r:6,t:18,b:30},max=200,gw=(W-M.l-M.r)/K.length,bw=40,y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sensor vs rider resolution">`;
+for(let v=0;v<=max;v+=50)s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v}</text>`;
+K.forEach((k,i)=>{const c=M.l+gw*i+gw/2;D[k].forEach((v,j)=>{const x=c+(j?1:-bw-1),t=y(v),r=4;
+ s+=`<path d="M${x} ${y(0)} V${t+r} Q${x} ${t} ${x+r} ${t} H${x+bw-r} Q${x+bw} ${t} ${x+bw} ${t+r} V${y(0)} Z" fill="var(${C[j]})"/><text x="${x+bw/2}" y="${t-4}" text-anchor="middle" font-size="11" fill="var(--ink2)">${v}</text>`});
+ s+=`<text x="${c}" y="${H-M.b+18}" text-anchor="middle" font-size="12" fill="var(--ink)">${k}</text>`});
+document.getElementById('c').innerHTML=s+`<line x1="${M.l}" x2="${W-M.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink2)"/></svg>`;
+</script></body></html>

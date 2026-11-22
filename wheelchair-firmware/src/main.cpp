@@ -474,6 +474,14 @@ static void publishTelemetry()
     {
         lastGainStatusMs = now;
         leanMode.publishDynamicGains();
+        leanMode.publishSensorStatus();
+        // Motor controller health; age = ms since the last status frame (large = VESC silent).
+        for (const VescStatus *v : {&measuredMotors[0], &measuredMotors[1]})
+            telemetry::Telemetry::logf("DBG VESC id=%u age=%lu frames=%lu erpm=%ld current=%.1f duty=%.3f fetC=%.1f vin=%.1f\n",
+                                       v == &measuredMotors[0] ? motors.leftId : motors.rightId,
+                                       v->frames ? static_cast<unsigned long>(now - v->lastMs) : 0UL,
+                                       static_cast<unsigned long>(v->frames), static_cast<long>(v->erpm),
+                                       v->current, v->duty, v->mosfetTempC, v->inputVoltage);
     }
     if (!telemetryOutput.due(now))
         return;

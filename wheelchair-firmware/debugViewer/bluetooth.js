@@ -148,7 +148,8 @@ async function readBluetooth(port) {
         warnTelemetry(`${recovered.length ? `recovered ${recovered.length} complete rows from damaged CSV` : 'rejected CSV'} (${line.split(',').length} columns): ${line.slice(0, 256)}`);
         for (const candidate of recovered) receiver.onLine(candidate);
       }
-      else appendConsole(line);
+      // DBG lines are once-a-second debug status for log taps, not for the console.
+      else if (!line.startsWith('DBG ')) appendConsole(line);
     }
   }, frame => window.configLink?.receive(frame),
     frame => typeof ConfigWire === 'undefined' || ConfigWire.responseFrame(frame) !== null);

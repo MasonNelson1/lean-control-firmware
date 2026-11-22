@@ -32,6 +32,7 @@ void LeanDriveMode::sampleSensors(bool seatOnly)
     const int rawL = analogRead(common::PIN_L);
     const int rawR = analogRead(common::PIN_R);
     railed = atRail(rawF) || atRail(rawB) || atRail(rawL) || atRail(rawR);
+    rawReadings = {{rawF, rawB, rawL, rawR}};
     const int defaultFloor = settings::defaultFloor.get();
     seatLoad = (rawF - defaultFloor) + (rawB - defaultFloor) +
                (rawL - defaultFloor) + (rawR - defaultFloor);
@@ -226,4 +227,12 @@ void LeanDriveMode::publishDynamicGains() const
 {
     telemetry::Telemetry::logf("DYNAMIC_GAINS F=%.4f B=%.4f L=%.4f R=%.4f\n",
                                dynamicGains[0], dynamicGains[1], dynamicGains[2], dynamicGains[3]);
+}
+
+void LeanDriveMode::publishSensorStatus() const
+{
+    telemetry::Telemetry::logf("DBG SENSORS raw=%d/%d/%d/%d floors=%d/%d/%d/%d W=%d seatLoad=%d seated=%d calibrated=%d calActive=%d\n",
+                               rawReadings[0], rawReadings[1], rawReadings[2], rawReadings[3],
+                               floorF, floorB, floorL, floorR, userWeightEstimate, seatLoad,
+                               isSeated() ? 1 : 0, initiallyCalibrated ? 1 : 0, calibrationActive() ? 1 : 0);
 }

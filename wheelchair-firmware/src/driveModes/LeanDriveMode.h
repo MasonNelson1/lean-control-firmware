@@ -18,6 +18,7 @@ private:
 
     int seatLoad = 0;
     bool railed = false;
+    std::array<int, 4> rawReadings{}; // last raw ADC counts, front/back/left/right
     int userWeightEstimate = 370; // Unloaded sensor estimate until calibration.
 
     float speedResponseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.
@@ -52,6 +53,8 @@ public:
     bool calibrationLEDOn(uint32_t now) const;
     void resetDynamicGains();
     void publishDynamicGains() const;
+    // Once-a-second debug lines: raw ADC counts and calibration state.
+    void publishSensorStatus() const;
     const std::array<float, 4> &getDynamicGains() const { return dynamicGains; }
     void updateResponseCurve();
     const telemetry::SensorTelemetry &getTelemetry() const { return telemetry; }

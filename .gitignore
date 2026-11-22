@@ -1,0 +1,15 @@
+# Build output (PlatformIO regenerates all of it)
+.pio/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.DS_Store

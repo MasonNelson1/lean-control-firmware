@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Back Sensor Positions</title>
+<style>
+:root{--s1:var(--chart-1,#2a78d6);--s2:var(--chart-2,#eb6834);--s3:var(--chart-3,#1baf7a);--s4:var(--chart-4,#eda100);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.wrap{position:relative}svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--pop);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:nowrap;color:var(--ink)}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+</style></head><body>
+<h1>Back sensor at B2, B5, B6: every lean, one chart</h1>
+<p>Mason, 2026-11-21. Each dot is one slow lean. Range = how far the centre of pressure moved from active neutral at full lean. The bar marks each group's average.</p>
+<div class="take"><b>What it shows</b><ul>
+<li><b>No position clearly wins.</b> The back-lean dots overlap across B2, B5 and B6. The lean-to-lean spread is as big as any difference between positions.</li>
+<li>B2's back value depends on which neutral you measure from (the range shown is 0.11–0.18).</li>
+<li>Back stays at about half the side range wherever the sensor sits. The limit looks physical: the backrest takes the load.</li>
+<li>Charles's rule: if B6 isn't clearly better, keep B5. It isn't.</li></ul></div>
+<div class="legend"><span class="key"><span class="dot" style="background:var(--s2)"></span>Back</span><span class="key"><span class="dot" style="background:var(--s1)"></span>Forward</span><span class="key"><span class="dot" style="background:var(--s3)"></span>Left</span><span class="key"><span class="dot" style="background:var(--s4)"></span>Right</span></div>
+<div class="wrap" id="c"></div>
+<script>
+const G=['B2 (S1)','B5 (E5)','B6 (E6)'];
+const D={back:[[0.113,0.179],[0.137,0.150,0.158],[0.151,0.183,0.158]],forward:[[0.192,0.197],[0.288],[0.252,0.244]],left:[[0.218],[0.345],[0.316,0.351]],right:[[0.219],[0.325],[0.313,0.299]]};
+const K=['back','forward','left','right'],C={back:'--s2',forward:'--s1',left:'--s3',right:'--s4'};
+const W=700,H=320,M={l:46,r:10,t:12,b:34},max=0.4,gw=(W-M.l-M.r)/G.length,sub=gw/5,y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lean range by back-sensor position">`;
+for(let v=0;v<=max+1e-9;v+=0.1)s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v.toFixed(1)}</text>`;
+G.forEach((g,i)=>{const x0=M.l+gw*i;s+=`<text x="${x0+gw/2}" y="${H-M.b+18}" text-anchor="middle" font-size="12" fill="var(--ink)">${g}</text>`;
+ K.forEach((k,j)=>{const cx=x0+sub*(j+0.5)+sub/2,v=D[k][i],m=v.reduce((a,b)=>a+b,0)/v.length;
+  s+=`<line x1="${cx-12}" x2="${cx+12}" y1="${y(m)}" y2="${y(m)}" stroke="var(${C[k]})" stroke-width="2"/>`;
+  v.forEach((q,n)=>{const dx=(n-(v.length-1)/2)*7;s+=`<circle cx="${cx+dx}" cy="${y(q)}" r="4.5" fill="var(${C[k]})" stroke="var(--pop)" stroke-width="2"/><circle data-t="${g} · ${k} lean ${n+1}: ${q.toFixed(3)}" cx="${cx+dx}" cy="${y(q)}" r="10" fill="transparent"/>`})})});
+s+=`</svg><div class="tip"></div>`;const el=document.getElementById('c');el.innerHTML=s;const tip=el.querySelector('.tip');
+el.querySelectorAll('[data-t]').forEach(h=>{h.addEventListener('pointermove',e=>{const r=el.getBoundingClientRect();tip.style.display='block';tip.textContent=h.dataset.t;tip.style.left=Math.min(e.clientX-r.left+10,r.width-200)+'px';tip.style.top=(e.clientY-r.top-34)+'px'});h.addEventListener('pointerleave',()=>tip.style.display='none')});
+</script></body></html>

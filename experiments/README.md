@@ -47,6 +47,7 @@ paralyzed from the waist down.
 | E3 | 2026-11-21 | Mason, bolts loosened: same moves as E2 | `data/2026-11-21-E3-mason-bolts-loose.csv` |
 | S1 | 2026-11-21 | Mason, sensitivity sweep at F5 B2 L5 R5 | `data/2026-11-21-S1-sweep.csv`, chart `S1-sweep-sensitivity.html` |
 | E5 | 2026-11-21 | Mason, back sensor moved to B5, sweep | `data/2026-11-21-E5-B5-sweep.csv`, chart `E5-vs-S1.html` |
+| E6 | 2026-11-21 | Mason, back sensor at B6, sweeps with reps (back ×3) | `data/2026-11-21-E6-B6-sweep.csv`, chart `E6-B2-B5-B6.html` |
 | E4 | 2026-11-21 | Mason, all four sensors raw (new firmware), no plate bolts, wheels on | `data/2026-11-21-E4-mason-four-sensors.csv`, chart `E4-four-sensors.html` |
 
 Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans.html` (time series).
@@ -257,3 +258,18 @@ Noise at rest: σx 0.005, σy 0.010.
 **Correction (after Mason and Charles questioned why the unmoved sensors also "improved"):** use left/right as a control. They weren't moved, yet they grew 31–50%, about as much as back (+40%). Back range relative to the sides is unchanged: back/left = 0.50 (S1) vs 0.48 (E5), back/right = 0.50 vs 0.55. **So most of the range gain is Mason leaning further or faster at B5, not the sensor position.** What still favours B5 is the shape: the mid-lean plateau is gone in both B5 back leans. Error bands: sensor noise is tiny (σ 0.006–0.010); the uncertainty is lean-to-lean variation. The two B5 back leans agree at the end (0.158 vs 0.156) but differ by up to 0.05 mid-lean. From B6 on: 3 reps per direction, and report back range normalized to the side ranges.
 
 **Original interpretation (superseded):** B5 beats B2. Back range is up ~40%, and the mid-lean plateau is gone in both back leans (repeatable). Caveat: one sweep per config, and Mason leaned somewhat faster and maybe deeper at B5, which inflates every range a little. The change in the back curve's shape is the most trustworthy part. **Next:** try B6 (Charles); if it improves again, keep going outward.
+
+## E6: back sensor at B6, repeated sweeps (2026-11-21, 23:02–23:07:30)
+**Setup:** config `F5 B6 L5 R5` (B6 never tried before). The plate slid slightly forward during setup. Empty seat 23:02:15–23:04:10: raw 373/428/376/377 (back preload +56).
+**Protocol:** passive-neutral, active-neutral (23:05:51–23:05:57, the baseline), forward ×2, right ×2, left ×2 (one too fast and redone), back-touch ×3.
+**Method:** sweeps found automatically by `tools/auto_sweeps.py` (CoP leaves neutral by > 0.06, 0.25 s smoothing); range = excursion at full lean. Return-overshoot and stand-up artefacts discarded. E5 was re-measured the same way; S1 sides by hand.
+
+| Config | Back (each lean) | Forward | Left | Right |
+|---|---|---|---|---|
+| B2 (S1) | 0.11–0.18 (depends on the baseline) | 0.19, 0.20 | 0.22 | 0.22 |
+| B5 (E5) | 0.137, 0.150, 0.158 | 0.288 | 0.345 | 0.325 |
+| B6 (E6) | 0.151, 0.183, 0.158 | 0.252, 0.244 | 0.316, 0.351 | 0.313, 0.299 |
+
+Noise at rest σx 0.005, σy 0.011.
+
+**Interpretation:** no back-sensor position clearly wins. The back-lean dots overlap across B2/B5/B6, and the lean-to-lean spread (≈0.03) is as big as the differences between positions. Back stays at ≈ half the side range wherever the sensor sits, so the limit looks physical (the backrest takes the load during a back lean), not a hole-position problem. Per Charles's rule ("if B6 isn't clearly better, keep B5"): **keep B5**. Higher-value next steps: the centre-of-pressure math (#13), drilling side holes behind centre (seesaw), or sensing load on the backrest itself.

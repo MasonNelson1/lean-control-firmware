@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bolt Test Compare</title>
+<style>
+:root{--e2:var(--chart-1,#2a78d6);--e3:var(--chart-2,#eb6834);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:18px 0 2px}
+p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:18px;color:var(--ink2);margin:8px 0 4px}
+.key{display:inline-flex;align-items:center;gap:6px}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.wrap{position:relative}svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--pop);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:nowrap;color:var(--ink)}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}
+.take li{margin:3px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--ink2);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+</style></head><body>
+<h1>Bolts as before vs loosened: same rider, same leans</h1>
+<p>Mason, 2026-11-21. Sensor load above zero force (raw counts − 372), averaged over each hold.</p>
+<div class="legend"><span class="key"><span class="sw" style="background:var(--e2)"></span>E2: bolts as before</span><span class="key"><span class="sw" style="background:var(--e3)"></span>E3: bolts loosened</span></div>
+<h2>Back sensor</h2><div class="wrap" id="back"></div>
+<h2>Front sensor</h2><div class="wrap" id="front"></div>
+<div class="take"><b>What it shows</b><ul>
+<li>The paired bars match in every lean, so loosening the bolts made no real difference.</li>
+<li>The back sensor carries the back-lean signal. <i>back-touch</i> beats <i>back-pivot</i> in both runs.</li>
+<li><i>Active neutral</i> sits ~150–200 above <i>passive neutral</i>, close to the size of a back lean.</li>
+<li>The front sensor only wakes up on <i>forward</i>.</li></ul></div>
+<table><thead><tr><th>Lean</th><th class="n">Back E2</th><th class="n">Back E3</th><th class="n">Front E2</th><th class="n">Front E3</th></tr></thead><tbody id="tb"></tbody></table>
+<script>
+const L=['passive-neutral','active-neutral','forward','back-pivot','back-touch'];
+const D={E2:{b:[661,869,610,816,967],f:[381,373,554,373,372]},E3:{b:[699,845,669,799,956],f:[375,372,532,372,372]}};
+function chart(id,key,max){
+ const W=700,H=230,M={l:44,r:8,t:16,b:30},gw=(W-M.l-M.r)/L.length,bw=Math.min(34,gw*0.3),gap=2;
+ const y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${key==='b'?'Back':'Front'} sensor load by lean, E2 vs E3">`;
+ for(let v=0;v<=max;v+=max/4){s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v}</text>`}
+ L.forEach((name,i)=>{const cx=M.l+gw*i+gw/2;
+  ['E2','E3'].forEach((r,j)=>{const v=D[r][key][i]-372,x=cx+(j?gap/2:-bw-gap/2),top=y(Math.max(v,0)),h=Math.max(y(0)-top,1);
+   s+=`<path d="M${x} ${y(0)} V${top+Math.min(4,h)} Q${x} ${top} ${x+Math.min(4,h)} ${top} H${x+bw-Math.min(4,h)} Q${x+bw} ${top} ${x+bw} ${top+Math.min(4,h)} V${y(0)} Z" fill="var(--${r.toLowerCase()})"/>`;
+   s+=`<text x="${x+bw/2}" y="${top-4}" text-anchor="middle" font-size="11" fill="var(--ink2)">${Math.max(v,0)}</text>`;
+   s+=`<rect class="hit" data-t="${name} · ${r}: ${Math.max(v,0)} above zero (raw ${D[r][key][i]})" x="${x-2}" y="${M.t}" width="${bw+4}" height="${H-M.t-M.b}" fill="transparent"/>`});
+  s+=`<text x="${cx}" y="${H-M.b+18}" text-anchor="middle" font-size="12" fill="var(--ink)">${name}</text>`});
+ s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink2)"/></svg><div class="tip"></div>`;
+ const el=document.getElementById(id);el.innerHTML=s;const tip=el.querySelector('.tip'),svg=el.querySelector('svg');
+ el.querySelectorAll('.hit').forEach(h=>{h.addEventListener('pointermove',e=>{const r=el.getBoundingClientRect();tip.style.display='block';tip.textContent=h.dataset.t;tip.style.left=Math.min(e.clientX-r.left+10,r.width-230)+'px';tip.style.top=(e.clientY-r.top-34)+'px'});h.addEventListener('pointerleave',()=>tip.style.display='none')});
+}
+chart('back','b',800);chart('front','f',200);
+const tb=document.getElementById('tb');L.forEach((n,i)=>tb.insertAdjacentHTML('beforeend',`<tr><td>${n}</td><td class="n">${D.E2.b[i]}</td><td class="n">${D.E3.b[i]}</td><td class="n">${D.E2.f[i]}</td><td class="n">${D.E3.f[i]}</td></tr>`));
+</script></body></html>

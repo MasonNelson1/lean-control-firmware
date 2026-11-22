@@ -46,7 +46,7 @@ paralyzed from the waist down.
 | E2 | 2026-11-21 | Mason, bolts as before: forward / back-push / back-touch / slouch / tall | `data/2026-11-21-E2-mason-bolts-as-before.csv` |
 | E3 | 2026-11-21 | Mason, bolts loosened: same moves as E2 | `data/2026-11-21-E3-mason-bolts-loose.csv` |
 
-Chart of E2 vs E3: `E2-E3-leans.html` (open in a browser).
+Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans.html` (time series).
 
 ---
 
@@ -143,3 +143,14 @@ Chart of E2 vs E3: `E2-E3-leans.html` (open in a browser).
 **Scored on:** back-lean swing over `active-neutral`, front swing on `forward`, the passive/active-neutral gap as a fraction of the back-lean swing (smaller is better), left/right symmetry, and reseat repeatability.
 
 **Limitation until the DBG firmware is uploaded:** left/right gains are 0.01, so the side sensors can't be seen. That is a big hole for a seesaw study.
+
+### E2/E3 by lean type (hold averages, above zero force)
+| Lean | Back E2 | Back E3 | Front E2 | Front E3 |
+|---|---|---|---|---|
+| passive-neutral | 289 | 327 | 9 | 3 |
+| active-neutral | 497 | 473 | 1 | 0 |
+| forward | 238 | 297 | 182 | 160 |
+| back-pivot | 444 | 427 | 1 | 0 |
+| back-touch | 595 | 584 | 0 | 0 |
+
+**Key implication:** measured from `active-neutral`, a `back-touch` adds only ≈100 counts on the back sensor, and `back-pivot` actually reads *lower* than `active-neutral`. Measured from `passive-neutral` it adds ≈270–300. If the chair is calibrated in `active-neutral`, the usable back-lean range is small, and leaning hard into the backrest reads as a slight *forward* lean. That could be the "lean back, nothing (or forward) happens" complaint, without the hip thrust.

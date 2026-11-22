@@ -81,6 +81,34 @@ public:
     return {clip(left, -maxRPM, maxRPM), clip(right, -maxRPM, maxRPM)};
   }
 
+  /**
+   * Call before update() when wheel feedback is fresh.
+   *
+   * The wheels cannot always accelerate as fast as the command does, so the
+   * command can run ahead of them. If the rider then asks for less than the
+   * chair is actually doing, the chair would carry on speeding up (or
+   * turning harder) until the command had unwound back past the wheels.
+   * This drops the command to the real speed on that axis, so the chair
+   * starts slowing on the next tick. The mirror case (command fell faster
+   * than the wheels slowed, rider asks for more) is handled the same way.
+   *
+   * @param measuredLinearRPM mean of the measured wheel speeds
+   * @param measuredTurnRPM   half their difference (left minus right)
+   */
+  void unwind(float measuredLinearRPM, float measuredTurnRPM, float linearTargetRPM, float turnTargetRPM)
+  {
+    if (!isfinite(measuredLinearRPM) || !isfinite(measuredTurnRPM))
+      return;
+    if (ranAhead(linear_.rpm(), measuredLinearRPM, linearTargetRPM, LinearUnwindRPM))
+      linear_.seed(measuredLinearRPM);
+    if (ranAhead(turn_, measuredTurnRPM, turnTargetRPM, TurnUnwindRPM))
+      turn_ = measuredTurnRPM;
+  }
+  // The command must be this far from the wheels before unwind() acts, so
+  // ordinary tracking error and measurement noise never trigger it.
+  static constexpr float LinearUnwindRPM = 5.0f;
+  static constexpr float TurnUnwindRPM = 2.0f;
+
   /** Forget all motion: both axes at rest. */
   void reset()
   {
@@ -105,6 +133,12 @@ public:
 
 private:
   static float clip(float value, float low, float high) { return fminf(high, fmaxf(low, value)); }
+  // The command is on one side of the measured value and the target on the other.
+  static bool ranAhead(float command, float measured, float target, float margin)
+  {
+    return (command > measured + margin && target < measured) ||
+           (command < measured - margin && target > measured);
+  }
 
   RPMSetpointPID linear_;
   float turn_ = 0.0f;

@@ -312,7 +312,9 @@ static void updateDrive()
 static void replyToConfiguration()
 {
     constexpr size_t MaxPacketBytes = config::MaxResponseSize + config::MaxResponseSize / 254 + 3;
-    const bool disarmed = drive.mode() == DISARM;
+    // Settings can change only in DISARM, and not while the chair is still
+    // braking to a stop there: an EEPROM save would stall the stop.
+    const bool disarmed = drive.mode() == DISARM && !drive.stopping();
     settings::protocol.tick(millis(), disarmed);
     if (!settings::protocol.pending() || Serial1.availableForWrite() < static_cast<int>(MaxPacketBytes))
         return;

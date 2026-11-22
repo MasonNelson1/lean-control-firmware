@@ -91,11 +91,22 @@ void DriveController::beginStop(const TickInput &in, bool fromMeasured)
             stop_.begin(in.leftRPM, in.rightRPM, in.now);
         return;
     }
-    if (fresh && measured < STOP_DONE_RPM && commanded < STOP_DONE_RPM)
+    if (!fresh)
+    {
+        // A VESC has gone silent: the commands being sent are the best
+        // knowledge of the wheel speeds (within MAX_RPM_COMMAND_DIFF of them).
+        stop_.begin(sentLeftRPM_, sentRightRPM_, in.now);
+        return;
+    }
+    if (measured < STOP_DONE_RPM && commanded < STOP_DONE_RPM)
         return; // standing still
-    // Ramp from the commands being sent. They are within MAX_RPM_COMMAND_DIFF
-    // of the wheels, and they are still right when a VESC has gone silent.
-    stop_.begin(sentLeftRPM_, sentRightRPM_, in.now);
+    // Ramp from the commands being sent, but never from above the wheel's real
+    // speed: while the chair is accelerating the command leads the wheel, and
+    // a stop that started from the command would keep speeding up at first.
+    const auto start = [](float sent, float wheel) {
+        return sent >= 0.0f ? std::min(sent, std::max(wheel, 0.0f)) : std::max(sent, std::min(wheel, 0.0f));
+    };
+    stop_.begin(start(sentLeftRPM_, in.leftRPM), start(sentRightRPM_, in.rightRPM), in.now);
 }
 
 void DriveController::applySeat(const TickInput &in)
@@ -195,6 +206,11 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         driving_ = true;
     }
 
+    const float measuredLinear = (in.leftRPM + in.rightRPM) / 2.0f;
+    const float measuredTurn = (in.leftRPM - in.rightRPM) / 2.0f;
+    if (fresh)
+        motion_.unwind(measuredLinear, measuredTurn, linearTargetRPM, turnTargetRPM);
+
     const float halfTrackRPM = settings::trackWidth.get() / 2.0f * LINEAR_TO_RPM; // wheel RPM per rad/s of turn
     const auto wheels = motion_.update(linearTargetRPM, turnTargetRPM, in.dt, speedLimitMS_,
                                        TURN_ACCEL_DEG_S2 * DegToRad * halfTrackRPM,
@@ -202,13 +218,64 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
     float left = wheels.left, right = wheels.right;
     if (fresh)
     {
-        left = clampTo(left, in.leftRPM - MAX_RPM_COMMAND_DIFF, in.leftRPM + MAX_RPM_COMMAND_DIFF);
-        right = clampTo(right, in.rightRPM - MAX_RPM_COMMAND_DIFF, in.rightRPM + MAX_RPM_COMMAND_DIFF);
+        // Keep each wheel's command within MAX_RPM_COMMAND_DIFF of its measured
+        // speed. The allowance goes to the turn first and the rest to forward
+        // speed. Limiting each wheel on its own put both commands on the same
+        // limit whenever the forward command was far ahead of the wheels, and
+        // the turn dropped out of what was sent.
+        const float turnError = clampTo((left - right) / 2.0f - measuredTurn, -MAX_RPM_COMMAND_DIFF, MAX_RPM_COMMAND_DIFF);
+        const float room = MAX_RPM_COMMAND_DIFF - std::fabs(turnError);
+        const float linearError = clampTo((left + right) / 2.0f - measuredLinear, -room, room);
+        left = measuredLinear + linearError + measuredTurn + turnError;
+        right = measuredLinear + linearError - measuredTurn - turnError;
+        // A VESC in speed mode releases the motor when the command is under
+        // its minimum ERPM. If the command gets there while the wheel is
+        // still well above it (the wheel lags a braking command), the chair
+        // would coast from that speed. Hold the command at the edge until the
+        // wheel has come down, so the VESC keeps braking.
+        const auto keepBraking = [](float command, float wheel) {
+            return std::fabs(command) < STOP_HANDOFF_RPM && std::fabs(wheel) > STOP_HANDOFF_RPM + 10.0f
+                       ? std::copysign(STOP_HANDOFF_RPM, wheel)
+                       : command;
+        };
+        left = keepBraking(left, in.leftRPM);
+        right = keepBraking(right, in.rightRPM);
     }
     commands_ = {linearTargetRPM + turnTargetRPM, linearTargetRPM - turnTargetRPM, left, right};
     sentLeftRPM_ = left;
     sentRightRPM_ = right;
+    if (fresh)
+        watchLowSpeed(in, left, right);
     return {MotorCommand::Kind::RPM, left, right};
+}
+
+// Diagnostic only. A VESC in speed mode ignores commands below its minimum
+// ERPM (VESC Tool default 900 = 15.5 wheel RPM): a small lean does nothing,
+// then the chair starts at walking pace all at once. The firmware cannot
+// change that setting, but it can notice a wheel that sits still under a
+// steady low command and say so once.
+void DriveController::watchLowSpeed(const TickInput &in, float left, float right)
+{
+    const auto ignored = [](float command, float measured) {
+        return std::fabs(command) >= 4.0f && std::fabs(command) < STOP_HANDOFF_RPM && std::fabs(measured) < 1.0f;
+    };
+    if (!ignored(left, in.leftRPM) && !ignored(right, in.rightRPM))
+    {
+        lowSpeedIgnored_ = false;
+        return;
+    }
+    if (!lowSpeedIgnored_)
+    {
+        lowSpeedIgnored_ = true;
+        lowSpeedSince_ = in.now;
+    }
+    if (!lowSpeedReported_ && in.now - lowSpeedSince_ >= 1500)
+    {
+        lowSpeedReported_ = true;
+        telemetry::Telemetry::logf("Hint: a wheel is not following a low speed command (under %.0f RPM). If a small lean does "
+                                   "nothing and then the chair lurches, lower s_pid_min_erpm in VESC Tool (default 900).\n",
+                                   STOP_HANDOFF_RPM);
+    }
 }
 
 void DriveController::saveCalibration()

@@ -76,6 +76,34 @@ static void smootherTests()
         }
         assert(std::fabs(previous) < 1.0f);
     }
+    { // unwind(): a command that ran ahead of the wheels drops to their speed
+      // when the rider asks for less than the chair is doing; otherwise it is left alone.
+        MotionSmoother motion(RPMSetpointPID::defaultTuning());
+        motion.seed(110.0f, 90.0f);              // command: 100 forward, 10 turn
+        motion.unwind(60.0f, 4.0f, 150.0f, 20.0f); // wheels lag, rider still wants more: no change
+        assert(near(motion.linearRPM(), 100.0f) && near(motion.turnRPM(), 10.0f));
+        motion.unwind(60.0f, 4.0f, 0.0f, 20.0f);   // forward released: that axis only
+        assert(near(motion.linearRPM(), 60.0f) && near(motion.turnRPM(), 10.0f));
+        motion.unwind(60.0f, 4.0f, 0.0f, 0.0f);    // turn released too
+        assert(near(motion.turnRPM(), 4.0f));
+        // Inside the margin (ordinary tracking error) nothing happens.
+        motion.seed(64.0f, 56.0f);
+        motion.unwind(60.0f - MotionSmoother::LinearUnwindRPM + 5.5f, 4.0f - MotionSmoother::TurnUnwindRPM + 2.5f, 0.0f, 0.0f);
+        assert(near(motion.linearRPM(), 60.0f) && near(motion.turnRPM(), 4.0f));
+        // Mirror: the command fell below the wheels and the rider asks for more.
+        motion.seed(10.0f, 10.0f);
+        motion.unwind(40.0f, 0.0f, 80.0f, 0.0f);
+        assert(near(motion.linearRPM(), 40.0f));
+        // Reverse, and a target between command and wheels (no reason to jump).
+        motion.seed(-100.0f, -100.0f);
+        motion.unwind(-50.0f, 0.0f, 0.0f, 0.0f);
+        assert(near(motion.linearRPM(), -50.0f));
+        motion.seed(100.0f, 100.0f);
+        motion.unwind(60.0f, 0.0f, 80.0f, 0.0f);
+        assert(near(motion.linearRPM(), 100.0f));
+        motion.unwind(NAN, 0.0f, 0.0f, 0.0f);
+        assert(near(motion.linearRPM(), 100.0f));
+    }
     { // Bad numbers stop the chair instead of reaching the wheels.
         MotionSmoother motion(RPMSetpointPID::defaultTuning());
         motion.seed(50.0f, 50.0f);

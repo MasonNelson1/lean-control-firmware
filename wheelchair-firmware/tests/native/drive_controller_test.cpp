@@ -20,6 +20,9 @@ struct Sim
     float left = 0, right = 0; // the wheels, RPM
     bool leftAlive = true, rightAlive = true;
     float knobMS = knobs::speedLimitMS(1); // speed-knob position 2, where the team drives
+    // The simulated VESC speed loop: wheel acceleration is followGain x the
+    // speed error, up to followRPMS (the motor's torque limit).
+    float followRPMS = 300.0f, followGain = 60.0f;
     bool calHeld = false;
     ModeStateMachine::Inputs pending;
     DriveController::MotorCommand last{Kind::Current, 0, 0};
@@ -34,12 +37,12 @@ struct Sim
     // A VESC in speed mode follows the command, but lets go of the motor below
     // its minimum ERPM (15.5 wheel RPM). Brake current slows the wheel. Zero
     // current coasts against a little friction; assist current accelerates.
-    static void wheel(float &rpm, Kind kind, float value)
+    void wheel(float &rpm, Kind kind, float value) const
     {
         const float dt = TickS;
         const auto slow = [&](float rate) { rpm -= std::copysign(std::fmin(rate * dt, std::fabs(rpm)), rpm); };
         if (kind == Kind::RPM && std::fabs(value) >= 15.5f)
-            rpm += std::fmin(300.0f * dt, std::fmax(-300.0f * dt, value - rpm));
+            rpm += std::fmin(followRPMS, std::fmax(-followRPMS, followGain * (value - rpm))) * dt;
         else if (kind == Kind::Brake)
             slow(100.0f);
         else
@@ -609,6 +612,150 @@ int main()
             previous = sim.last.left;
         }
         assert(near(sim.last.left, knobs::speedLimitMS(0) * LINEAR_TO_RPM, 0.5f));
+    }
+    { // A heavy chair that accelerates slower than the command asks. The command
+      // runs ahead of the wheels; none of what follows may make that worse.
+        const auto sluggish = [](Sim &sim) {
+            sim.knobMS = knobs::speedLimitMS(3);
+            sim.followRPMS = 40.0f; // about 1.3 m/s^2, a third of what is commanded
+            sim.rideLean();
+        };
+        { // Releasing the lean slows the chair at once: it does not carry on speeding up.
+            Sim sim;
+            sluggish(sim);
+            lean(600, 0);
+            sim.run(1500);
+            assert(sim.last.left > sim.left + 40.0f); // the command is well ahead of the wheel
+            const float atRelease = sim.left;
+            lean(0, 0);
+            float peak = atRelease;
+            for (int k = 0; k < 400; ++k)
+            {
+                sim.tick();
+                peak = std::fmax(peak, sim.left);
+            }
+            // Only the lean filter's 25 ms and one tick of reaction: under 2 RPM more.
+            assert(peak < atRelease + 2.0f);
+            assert(sim.left < atRelease / 2);
+        }
+        { // The command never drops into the VESC's dead zone while the wheel is still fast
+          // (the simulated VESC, like the real one, lets go of the motor below 15.5 RPM).
+            Sim sim;
+            sluggish(sim);
+            lean(600, 0);
+            sim.run(4000);
+            assert(sim.left > 100.0f);
+            lean(0, 0);
+            for (int k = 0; k < 1200 && sim.left > STOP_HANDOFF_RPM + 10.0f; ++k)
+            {
+                const float before = sim.left;
+                sim.tick();
+                assert(sim.last.kind == Kind::RPM && sim.last.left >= STOP_HANDOFF_RPM);
+                assert(sim.left < before); // braked all the way down, never coasting
+            }
+            assert(sim.left <= STOP_HANDOFF_RPM + 10.0f);
+            sim.run(500);
+            assert(std::fabs(sim.last.left) < 1.0f); // then the command goes to zero as before
+        }
+        { // The same for a turn: straightening up stops the rotation building.
+            Sim sim;
+            sluggish(sim);
+            lean(0, 500);
+            sim.run(400);
+            const float atRelease = sim.left - sim.right;
+            assert(atRelease > 10.0f && (sim.last.left - sim.last.right) > atRelease + 4.0f);
+            lean(0, 0);
+            float peak = atRelease;
+            for (int k = 0; k < 200; ++k)
+            {
+                sim.tick();
+                peak = std::fmax(peak, sim.left - sim.right);
+            }
+            assert(peak < atRelease + 1.5f);
+        }
+        { // Steering still gets through while the forward command is far ahead.
+          // Here the wheels answer in proportion to the speed error (a motor
+          // that is not yet at its torque limit).
+            Sim sim;
+            sim.knobMS = knobs::speedLimitMS(3);
+            sim.followGain = 1.0f;
+            sim.rideLean();
+            lean(600, 0);
+            sim.run(1000);
+            lean(600, 500);
+            sim.run(300);
+            assert((sim.last.left + sim.last.right) / 2 >= (sim.left + sim.right) / 2 + 30.0f); // still accelerating hard
+            // ...and turning: about 47 deg/s here (the sideways-acceleration cap at this
+            // speed), a 15 RPM difference between the commands. Limiting each wheel on
+            // its own put both commands on the same limit: no difference at all.
+            assert(sim.last.left - sim.last.right > 10.0f);
+            assert(sim.left - sim.right > 2.0f);
+            assert(std::fabs(sim.last.left - sim.left) <= MAX_RPM_COMMAND_DIFF + 0.01f);
+            assert(std::fabs(sim.last.right - sim.right) <= MAX_RPM_COMMAND_DIFF + 0.01f);
+        }
+        { // A stop that begins mid-acceleration never speeds the chair up first.
+            Sim sim;
+            sluggish(sim);
+            lean(600, 0);
+            sim.run(1500);
+            const float atStop = sim.left;
+            sim.press(DISARM);
+            float peak = atStop;
+            for (int k = 0; k < 600; ++k)
+            {
+                sim.tick();
+                peak = std::fmax(peak, sim.left);
+                if (sim.last.kind == Kind::RPM)
+                    assert(sim.last.left <= sim.left + 0.01f); // never commanded above the wheel
+            }
+            assert(peak <= atStop + 0.5f); // the three ticks it takes the press to register
+            assert(std::fabs(sim.left) < STOP_DONE_RPM && !sim.drive.stopping());
+        }
+        { // The mirror: braking hard, then asking for speed again, picks up from the real speed.
+            Sim sim;
+            sluggish(sim);
+            lean(600, 0);
+            sim.run(5000);
+            lean(0, 0);
+            sim.run(600);
+            assert(sim.last.left < sim.left - 20.0f); // the command fell faster than the wheels
+            const float atLean = sim.left;
+            lean(600, 0);
+            float low = atLean;
+            for (int k = 0; k < 200; ++k)
+            {
+                sim.tick();
+                low = std::fmin(low, sim.left);
+            }
+            // It keeps slowing only until the lean (25 ms filter) asks for more than the
+            // chair's real speed, about 80 ms here. Without the unwind it kept braking
+            // for the half second the command needed to climb back up.
+            assert(low > atLean - 5.0f);
+        }
+    }
+    { // A wheel that ignores a low speed command (VESC minimum ERPM) is pointed out, once.
+        Sim sim;
+        sim.rideLean();
+        messages.clear();
+        lean(120, 0); // a small lean: about 9 RPM on speed-knob position 2
+        sim.run(1000);
+        assert(sim.last.kind == Kind::RPM && sim.last.left > 4.0f && sim.last.left < 15.0f);
+        assert(sim.left == 0 && !logged("Hint:")); // the simulated VESC lets go below 15.5 RPM
+        sim.run(1500);
+        assert(logged("lower s_pid_min_erpm"));
+        messages.clear();
+        sim.run(3000);
+        assert(!logged("Hint:")); // not repeated
+        // Not raised by normal driving, a standstill, or a wheel that does follow.
+        Sim normal;
+        normal.rideLean();
+        messages.clear();
+        normal.run(3000);
+        lean(600, 0);
+        normal.run(4000);
+        lean(0, 0);
+        normal.run(3000);
+        assert(!logged("Hint:"));
     }
     { // Loading a profile needs a new calibration and starts from rest.
         Sim sim;

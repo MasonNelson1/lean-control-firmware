@@ -194,6 +194,15 @@ int main()
     rig.sample();
     assert(!rig.mode.sensorAtRail()); // not latched here: the disarm is what sticks
 
+    // Outside LEAN nothing asks for a command: telemetry shows zero, not the
+    // last command from when LEAN was driving.
+    lean(300, 250);
+    command = rig.settle();
+    assert(rig.mode.getTelemetry().speed > 0 && rig.mode.getTelemetry().turn > 0 && !rig.mode.getTelemetry().stopped);
+    rig.sample();
+    assert(rig.mode.getTelemetry().speed == 0 && rig.mode.getTelemetry().turn == 0 && rig.mode.getTelemetry().stopped);
+    assert(rig.mode.getTelemetry().front == NeutralF + 300); // sensor loads stay live
+
     // reset() forgets neutral: no drive until the next calibration.
     lean(300, 0);
     rig.mode.reset();

@@ -70,11 +70,11 @@ void LeanDriveMode::sample(float dt)
     telemetry.back = static_cast<int>(lroundf(load[1]));
     telemetry.left = static_cast<int>(lroundf(load[2]));
     telemetry.right = static_cast<int>(lroundf(load[3]));
-    if (!neutralValid || calibrationActive())
-    {
-        telemetry.speed = telemetry.turn = 0.0f;
-        telemetry.stopped = true;
-    }
+    // No lean command exists until command() computes one from this sample
+    // (LEAN only). In every other mode the telemetry shows zero, not the last
+    // command from when LEAN was active.
+    telemetry.speed = telemetry.turn = 0.0f;
+    telemetry.stopped = true;
 }
 
 void LeanDriveMode::reset()
@@ -86,11 +86,7 @@ void LeanDriveMode::reset()
 LeanDriveMode::Command LeanDriveMode::command()
 {
     if (!neutralValid || calibrationActive())
-    {
-        telemetry.speed = telemetry.turn = 0.0f;
-        telemetry.stopped = true;
         return {0.0f, 0.0f, true};
-    }
 
     const float y = leanY - neutralY, x = leanX - neutralX;
     const float rangeY = static_cast<float>(y >= 0.0f ? settings::rangeForward.get() : settings::rangeBack.get());

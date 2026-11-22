@@ -72,6 +72,7 @@ private:
     MotorCommand stopOrRelease(const TickInput &input);
     MotorCommand driveRPM(const TickInput &input, float linearTargetRPM, float turnTargetRPM);
     void saveCalibration();
+    void watchLowSpeed(const TickInput &input, float left, float right);
 
     ModeStateMachine modeState_;
     LeanDriveMode lean_;
@@ -87,6 +88,9 @@ private:
     bool driving_ = false;
     float sentLeftRPM_ = 0.0f, sentRightRPM_ = 0.0f;
     float speedLimitMS_ = 0.0f;
+    // Low-speed diagnostic (watchLowSpeed).
+    bool lowSpeedIgnored_ = false, lowSpeedReported_ = false;
+    uint32_t lowSpeedSince_ = 0;
     telemetry::MotorCommands commands_{};
     MotorTargets assistCurrent_{};
 };

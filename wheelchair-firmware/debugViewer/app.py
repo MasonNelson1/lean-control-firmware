@@ -106,8 +106,29 @@ async def line_received(line):
         console.append(line); await emit({'console':line})
 async def note(s):
     await line_received(s)
+async def follow_tap(path):
+    # Live view without taking the HC-06 (it allows one connection, and the tap
+    # holds it): tail the tap's log. Each tap line is "HH:MM:SS.mmm,<firmware line>".
+    pos = None; buf = b''
+    while True:
+        try:
+            size = os.path.getsize(path)
+            if pos is None: pos = size
+            if size < pos: pos = 0; buf = b''  # the tap started a new file
+            if size > pos:
+                with open(path, 'rb') as f:
+                    f.seek(pos); buf += f.read(size - pos); pos = size
+                *lines, buf = buf.split(b'\n')
+                for raw in lines:
+                    m = re.match(r'^\d\d:\d\d:\d\d\.\d+,(.*)$', raw.decode('utf-8', 'replace').rstrip('\r'))
+                    if m and connected: await line_received(m.group(1))
+        except FileNotFoundError:
+            pass
+        await asyncio.sleep(0.05)
 async def acquire():
     global proc, dynamic_gains
+    if args.follow:
+        await follow_tap(args.follow); return
     if args.replay:
         while True:
             dynamic_gains = None
@@ -297,6 +318,6 @@ async def socket(ws:WebSocket):
         pass
     finally: clients.discard(ws)
 if __name__=='__main__':
-    p=argparse.ArgumentParser(); p.add_argument('--replay'); p.add_argument('--port'); p.add_argument('--baud',type=int,default=115200); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--http-port',type=int,default=8000); args=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument('--replay'); p.add_argument('--follow', help="tail the Bluetooth tap's log (logs/live/current.csv) instead of opening a port"); p.add_argument('--port'); p.add_argument('--baud',type=int,default=115200); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--http-port',type=int,default=8000); args=p.parse_args()
     import uvicorn
     uvicorn.run(app,host=args.host,port=args.http_port)

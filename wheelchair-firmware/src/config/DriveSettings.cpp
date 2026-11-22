@@ -188,10 +188,10 @@ namespace settings
     // The VESCs' own setting, repeated here so the firmware knows where their
     // speed mode stops working. It is the main cause of "nothing, then
     // everything": with the default, a wheel command under 15.5 RPM (0.49 m/s)
-    // is ignored. Lower s_pid_min_erpm in VESC Tool on both VESCs, check on the
-    // bench that a 5 RPM command is followed, then set this to match.
+    // is not driven. Lower s_pid_min_erpm in VESC Tool on both VESCs, check on
+    // the bench that a 5 RPM command is followed, then set this to match.
     ConfigField<float> vescMinSpeed(registry(), 64,
-                                    {motor, "VESC minimum speed", "Wheel speed below which the VESCs ignore a speed command: their s_pid_min_erpm setting divided by 58.2. Keep it equal to what VESC Tool says. Stops switch to brake current just above it.", "RPM", false, true},
+                                    {motor, "VESC minimum speed", "Wheel speed below which the VESCs will not drive in speed mode: their s_pid_min_erpm setting divided by 58.2. Keep it equal to what VESC Tool says. Stops switch to brake current just above it.", "RPM", false, true},
                                     15.5f, 1.0f, 30.0f);
 
     PidProfile::PidProfile(Group &group, uint16_t firstId)

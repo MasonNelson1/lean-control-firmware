@@ -32,10 +32,14 @@ constexpr float STOP_DECEL = MAX_ACCEL; // m/s^2
 // (0.38 g at once pitches the rider forward). It adds half this to a stop.
 constexpr float STOP_ONSET_S = 0.1f;
 
-// A VESC in speed mode lets go of the motor below s_pid_min_erpm (VESC Tool
-// default 900 ERPM = 15.5 wheel RPM), so the last part of a stop would coast.
-// Below this wheel speed the stop switches from an RPM command to brake
-// current. It is the "VESC minimum speed" setting plus this margin, refreshed
+// A VESC in speed mode stops running its speed loop when the command is under
+// s_pid_min_erpm (VESC Tool default 900 ERPM = 15.5 wheel RPM). What it does
+// instead depends on its firmware: current versions short the motor phases,
+// which brakes ("Brake when set ERPM is below min ERPM" in bldc's
+// mcpwm_foc.c); older ones release the motor, which coasts. A stop must not
+// depend on which, so below this wheel speed it switches from an RPM command
+// to brake current. Brake-current mode never drives in reverse and, near a
+// standstill, shorts the phases (same source file). It is the "VESC minimum speed" setting plus this margin, refreshed
 // when settings change: 18 RPM (1047 ERPM) with the VESC default.
 constexpr float STOP_HANDOFF_MARGIN_RPM = 2.5f;
 inline float STOP_HANDOFF_RPM = 15.5f + STOP_HANDOFF_MARGIN_RPM;

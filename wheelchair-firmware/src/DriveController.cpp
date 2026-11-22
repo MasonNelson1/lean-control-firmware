@@ -235,11 +235,12 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         const float linearError = clampTo((left + right) / 2.0f - measuredLinear, -room, room);
         left = measuredLinear + linearError + measuredTurn + turnError;
         right = measuredLinear + linearError - measuredTurn - turnError;
-        // A VESC in speed mode releases the motor when the command is under
-        // its minimum ERPM. If the command gets there while the wheel is
-        // still well above it (the wheel lags a braking command), the chair
-        // would coast from that speed. Hold the command at the edge until the
-        // wheel has come down, so the VESC keeps braking.
+        // A VESC in speed mode stops regulating when the command is under its
+        // minimum ERPM (older VESC firmware then releases the motor). If the
+        // command gets there while the wheel is still well above it (the
+        // wheel lags a braking command), the chair could coast from that
+        // speed. Hold the command at the edge until the wheel has come down,
+        // so the speed loop keeps braking.
         const auto keepBraking = [](float command, float wheel) {
             return std::fabs(command) < STOP_HANDOFF_RPM && std::fabs(wheel) > STOP_HANDOFF_RPM + 4.0f
                        ? std::copysign(STOP_HANDOFF_RPM, wheel)
@@ -258,7 +259,7 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
     return {MotorCommand::Kind::RPM, left, right};
 }
 
-// Diagnostic only. A VESC in speed mode ignores commands below its minimum
+// Diagnostic only. A VESC in speed mode does not drive below its minimum
 // ERPM (VESC Tool default 900 = 15.5 wheel RPM): a small lean does nothing,
 // then the chair starts at walking pace all at once. The firmware cannot
 // change that setting, but it can notice a wheel that sits still under a

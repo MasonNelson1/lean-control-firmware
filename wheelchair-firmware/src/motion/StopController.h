@@ -14,9 +14,10 @@
 //          the chair stops along the curve it was on. The command starts
 //          falling on the first tick and is at the full rate after
 //          STOP_ONSET_S.
-//   Brake  Below STOP_HANDOFF_RPM the VESC's speed mode lets go of the motor
-//          (its minimum-ERPM setting), so the rest of the stop uses brake
-//          current, which works down to a standstill and cannot reverse.
+//   Brake  Below STOP_HANDOFF_RPM the VESC's speed mode stops regulating
+//          (its minimum-ERPM setting; see drive_constants.h), so the rest of
+//          the stop uses brake current, which works down to a standstill and
+//          cannot reverse.
 // Then the motors are released (zero current) and the chair rolls freely.
 //
 // Neither phase needs VESC feedback, so the same sequence runs when a VESC has
@@ -83,7 +84,7 @@ public:
       elapsed_ += dt;
       const float onset = fminf(elapsed_ / STOP_ONSET_S, 1.0f);
       scale_ -= STOP_DECEL * onset * LINEAR_TO_RPM * dt / peak;
-      // Never command below the handoff speed: the VESC would release the motor.
+      // Never command below the handoff speed: the VESC's speed loop stops there.
       const float floor = STOP_HANDOFF_RPM / peak;
       if (scale_ <= floor)
       {

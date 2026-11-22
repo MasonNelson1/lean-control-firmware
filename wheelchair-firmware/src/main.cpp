@@ -491,6 +491,11 @@ static void publishTelemetry()
     // Lean samples on each control tick; other modes sample for display only.
     if (modeState.current() != LEAN)
         leanMode.sampleSensors();
+    {
+        // 20 Hz raw ADC counts (front/back/left/right) for lean-transition analysis.
+        const auto &raw = leanMode.getRawReadings();
+        telemetry::Telemetry::logf("DBG R %lu %d %d %d %d\n", static_cast<unsigned long>(now), raw[0], raw[1], raw[2], raw[3]);
+    }
     telemetry::TelemetryFrame frame;
     frame.timeMs = now;
     frame.mode = modeState.current();

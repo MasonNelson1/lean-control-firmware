@@ -55,6 +55,7 @@ public:
     void publishDynamicGains() const;
     // Once-a-second debug lines: raw ADC counts and calibration state.
     void publishSensorStatus() const;
+    const std::array<int, 4> &getRawReadings() const { return rawReadings; }
     const std::array<float, 4> &getDynamicGains() const { return dynamicGains; }
     void updateResponseCurve();
     const telemetry::SensorTelemetry &getTelemetry() const { return telemetry; }

@@ -12,6 +12,7 @@ Tables (SQLite, in memory, rebuilt on every call):
   msg    firmware text lines: s, host_time, kind (first word; CORRUPT = row damaged on the radio link), text
   sens   parsed 'DBG SENSORS' lines: s, rawF, rawB, rawL, rawR, floorF..floorR,
          W, seatLoad, seated, calibrated, calActive
+  raw    20 Hz 'DBG R' lines: s, host_time, time_ms, F, B, L, R (raw ADC counts; zero force ≈ 372)
   vesc   parsed 'DBG VESC' lines: s, id, age, frames, erpm, current, duty, fetC, vin
 Output is capped at 80 rows; aggregate with GROUP BY CAST(s/N AS INT) for trends.
 """
@@ -26,6 +27,7 @@ import sqlite3
 LIVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "live", "current.csv")
 SENS = re.compile(r"DBG SENSORS raw=(-?\d+)/(-?\d+)/(-?\d+)/(-?\d+) floors=(-?\d+)/(-?\d+)/(-?\d+)/(-?\d+) "
                   r"W=(-?\d+) seatLoad=(-?\d+) seated=(\d) calibrated=(\d) calActive=(\d)(?: railed=(\d))?")
+RAWR = re.compile(r"^DBG R (\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+)$")
 VESC = re.compile(r"DBG VESC id=(\d+) age=(\d+) frames=(\d+) erpm=(-?\d+) current=(\S+) duty=(\S+) fetC=(\S+) vin=(\S+)")
 TREND = """SELECT CAST(s/{n} AS INT)*{n} AS s0, MIN(host_time) AS at, mode,
   ROUND(AVG(F),1) F, ROUND(AVG(B),1) B, ROUND(AVG(L),1) L, ROUND(AVG(R),1) R,
@@ -57,6 +59,7 @@ def load(path):
         db.execute("CREATE TABLE msg (s, host_time, kind, text)")
         db.execute("CREATE TABLE sens (s, host_time, rawF, rawB, rawL, rawR, floorF, floorB, floorL, floorR, "
                    "W, seatLoad, seated, calibrated, calActive, railed)")
+        db.execute("CREATE TABLE raw (s, host_time, time_ms, F, B, L, R)")
         db.execute("CREATE TABLE vesc (s, host_time, id, age, frames, erpm, current, duty, fetC, vin)")
         t0 = None
         for r in reader:
@@ -70,6 +73,10 @@ def load(path):
                            [s, r[0]] + [num(x) for x in r[1:]])
                 continue
             text = ",".join(r[1:]).strip()
+            m = RAWR.match(text)
+            if m:
+                db.execute("INSERT INTO raw VALUES (?,?,?,?,?,?,?)", [s, r[0]] + [int(g) for g in m.groups()])
+                continue
             db.execute("INSERT INTO msg VALUES (?,?,?,?)", (s, r[0], "CORRUPT" if text[:1].isdigit() else text.split(" ")[0], text))
             m = SENS.search(text)
             if m:

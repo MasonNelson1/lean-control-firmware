@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lean Sensitivity Sweep</title>
+<style>
+:root{--s1:var(--chart-1,#2a78d6);--s2:var(--chart-2,#eb6834);--s3:var(--chart-3,#1baf7a);--s4:var(--chart-4,#eda100);--ink:var(--foreground,#0b0b0b);--ink2:var(--muted-foreground,#52514e);--line:var(--border,#e6e5e1);--box:var(--card,#f0efec);--pop:var(--popover,#fcfcfb)}
+body{margin:0;font-size:14px;line-height:1.45;color:var(--ink)}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:18px 0 2px}p{margin:0 0 8px;color:var(--ink2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink2);margin:6px 0}.key{display:inline-flex;align-items:center;gap:6px}.sw{width:16px;height:3px;border-radius:2px;display:inline-block}
+.wrap{position:relative}svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--pop);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:none;white-space:nowrap;color:var(--ink)}
+.take{background:var(--box);border-radius:var(--radius,8px);padding:16px;margin:10px 0}.take li{margin:3px 0}
+</style></head><body>
+<h1>S1: how the lean signal grows through a slow lean</h1>
+<p>Mason, config F5 B2 L5 R5, 2026-11-21 22:40–22:41. One slow 5-count lean per direction, from active neutral to full (back = back-touch). Signal = how far the centre of pressure has moved from neutral, computed from the 20 Hz raw sensors.</p>
+<div class="take"><b>What it shows</b><ul>
+<li><b>No dead zone at the start</b> in any direction. With centre-of-pressure math the sensors respond from the first moment of the lean. The "lean, lean, nothing, then everything" feel comes from the current firmware math, not the sensors.</li>
+<li><b>Back is the weak axis:</b> it rises, then goes flat from about 20% to 60% of the lean before climbing again, and it has the smallest total range.</li>
+<li><b>Left/right</b> give the most range and the steadiest growth. <b>Forward</b> is in between.</li>
+<li>Resolution (bottom chart): how many steps between neutral and full lean the chair could tell apart, given sensor noise. Back ≈ 6 steps vs ≈ 22 for left/right.</li></ul></div>
+<div class="legend"><span class="key"><span class="sw" style="background:var(--s1)"></span>Forward</span><span class="key"><span class="sw" style="background:var(--s2)"></span>Back</span><span class="key"><span class="sw" style="background:var(--s3)"></span>Left</span><span class="key"><span class="sw" style="background:var(--s4)"></span>Right</span></div>
+<h2>Signal vs how far into the lean</h2><div class="wrap" id="curve"></div>
+<h2>Distinguishable steps, neutral to full lean</h2><p>Total signal range ÷ (2 × sensor noise at rest). More steps means finer control.</p><div class="wrap" id="steps"></div>
+<script>
+const D={"curves":{"forward":[-0.001,0.03,0.051,0.079,0.121,0.134,0.144,0.154,0.174,0.182,0.192],"back":[0.0,0.01,0.037,0.032,0.027,0.032,0.044,0.071,0.102,0.109,0.113],"right":[0.0,0.013,0.043,0.068,0.076,0.125,0.158,0.178,0.195,0.203,0.219],"left":[0.0,0.008,0.024,0.099,0.119,0.127,0.146,0.171,0.193,0.202,0.218]},"steps":{"forward":9.7,"back":5.7,"right":22.2,"left":22.1}};
+const K=['forward','back','left','right'],C={forward:'--s1',back:'--s2',left:'--s3',right:'--s4'};
+(function(){const W=700,H=300,M={l:46,r:60,t:12,b:34},max=0.25,x=i=>M.l+i/10*(W-M.l-M.r),y=v=>M.t+(1-v/max)*(H-M.t-M.b);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lean signal vs progress through the lean">`;
+ for(let v=0;v<=max+1e-9;v+=0.05){s+=`<line x1="${M.l}" x2="${W-M.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${M.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${v.toFixed(2)}</text>`}
+ for(let i=0;i<=10;i+=2)s+=`<text x="${x(i)}" y="${H-M.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${i*10}%</text>`;
+ s+=`<text x="${(M.l+W-M.r)/2}" y="${H-2}" text-anchor="middle" font-size="12" fill="var(--ink2)">how far into the lean (neutral → full)</text>`;
+ const lab={forward:0,back:0,left:-9,right:9};
+ K.forEach(k=>{const v=D.curves[k];s+=`<path d="${v.map((q,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(Math.max(q,0)).toFixed(1)).join(' ')}" fill="none" stroke="var(${C[k]})" stroke-width="2" stroke-linejoin="round"/>`;
+  s+=`<text x="${x(10)+6}" y="${y(v[10])+4+lab[k]}" font-size="12" fill="var(--ink)">${k}</text>`;});
+ s+=`<line class="cx" y1="${M.t}" y2="${H-M.b}" stroke="var(--ink2)" visibility="hidden"/><rect class="hit" x="${M.l}" y="${M.t}" width="${W-M.l-M.r}" height="${H-M.t-M.b}" fill="transparent"/></svg><div class="tip"></div>`;
+ const el=document.getElementById('curve');el.innerHTML=s;const svg=el.querySelector('svg'),tip=el.querySelector('.tip'),cx=svg.querySelector('.cx');
+ svg.querySelector('.hit').addEventListener('pointermove',e=>{const r=svg.getBoundingClientRect(),sx=(e.clientX-r.left)*W/r.width,i=Math.max(0,Math.min(10,Math.round((sx-M.l)/(W-M.l-M.r)*10)));
+  cx.setAttribute('x1',x(i));cx.setAttribute('x2',x(i));cx.setAttribute('visibility','visible');tip.style.display='block';
+  tip.innerHTML=`<b>${i*10}% into the lean</b><br>`+K.map(k=>`${k}: ${D.curves[k][i].toFixed(3)}`).join('<br>');tip.style.left=Math.min(x(i)*r.width/W+12,r.width-150)+'px';tip.style.top='20px'});
+ svg.querySelector('.hit').addEventListener('pointerleave',()=>{tip.style.display='none';cx.setAttribute('visibility','hidden')})})();
+(function(){const W=700,rowH=34,M={l:80,r:50,t:4},H=M.t+rowH*4+20,max=25,x=v=>M.l+v/max*(W-M.l-M.r);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distinguishable steps per direction">`;
+ for(let v=0;v<=max;v+=5)s+=`<line x1="${x(v)}" x2="${x(v)}" y1="${M.t}" y2="${M.t+rowH*4}" stroke="var(--line)"/><text x="${x(v)}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--ink2)">${v}</text>`;
+ K.forEach((k,i)=>{const v=D.steps[k],yy=M.t+i*rowH+8,h=rowH-16;s+=`<text x="${M.l-8}" y="${yy+h/2+4}" text-anchor="end" font-size="12" fill="var(--ink)">${k}</text><path d="M${x(0)} ${yy} H${x(v)-4} Q${x(v)} ${yy} ${x(v)} ${yy+4} V${yy+h-4} Q${x(v)} ${yy+h} ${x(v)-4} ${yy+h} H${x(0)} Z" fill="var(${C[k]})"/><text x="${x(v)+6}" y="${yy+h/2+4}" font-size="12" fill="var(--ink2)">${v}</text>`});
+ s+=`</svg>`;document.getElementById('steps').innerHTML=s})();
+</script></body></html>

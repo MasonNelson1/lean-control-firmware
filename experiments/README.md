@@ -204,3 +204,30 @@ Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans
 - Show all four directions on one chart, with a sensitivity strip under each.
 
 **Better ground truth, later:** strap a phone to the rider's chest running a sensor-logging app (e.g. phyphox) to record torso angle, then plot signal vs actual lean angle instead of time.
+
+## S1: sensitivity sweep, Mason (2026-11-21, 22:40:10–22:41:21)
+**Setup:** as E4, with the firmware's 20 Hz `DBG R` raw line. Data: `data/2026-11-21-S1-sweep.csv`; chart `S1-sweep-sensitivity.html`; analysis `tools/sweep_analysis.py`.
+
+**Protocol:** active-neutral, then one slow 5-count lean per direction to full and back. The protocol called for two; Mason did one. Full forward = chest almost to knees. Back = back-touch.
+- Transcript times run about 6 s ahead of the data, so segment boundaries were taken from the signal (wall time).
+- Forward: 22:40:23.4–22:40:28.4, hold to 22:40:37.
+- Back: 22:40:41.4–22:40:49.4.
+- Right: 22:40:59.4–22:41:03.5.
+- Left: 22:41:11.4–22:41:15.4.
+- Neutral hold for the noise estimate: 22:41:21.4–22:41:26.4.
+
+**Results:** centre of pressure (raw − 372, divided by the live total). Change from neutral at full lean, and how many steps the chair could tell apart:
+| Direction | Range | Steps (range / 2σ noise) | Shape |
+|---|---|---|---|
+| forward | +0.19 in y | ≈10 | steady, slightly front-loaded |
+| back | −0.11 in y | ≈6 | rises, flat from 20–60 %, then climbs |
+| right | +0.22 in x | ≈22 | steady |
+| left | −0.22 in x | ≈22 | steady |
+
+Noise at rest: σx 0.005, σy 0.010.
+
+**Interpretation:**
+1. **No dead zone at the start** in any direction with centre-of-pressure math. The "nothing, then everything" feel is from the current firmware math (deadband, exponent curve, unequal gains), not the sensors. More support for #13.
+2. **Back is the weak axis:** smallest range, a mid-lean plateau, and only ~6 steps of resolution. It's the first thing a sensor-position change (B5, or the side line moved back) should improve.
+3. After the back lean, CoP y didn't return to neutral (−0.42 vs −0.33) until the next lean. Posture or hysteresis; watch for it in later sweeps.
+4. Mason leans a lot (his preference). Charles thinks ideal is about half that. With ~22 steps on left/right, a half lean still leaves ~11 steps; back would have only ~3.

@@ -87,7 +87,8 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
         // to Assist. A press that stops LEAN or REMOTE stays a stop however
         // long it is held (people hold a stop button down), and leaving
         // Assist needs a fresh press before it can be entered again.
-        assistHoldPending_ = selectedMode_ == DISARM && currentMode_ == DISARM;
+        assistHoldPending_ = selectedMode_ == DISARM && currentMode_ == DISARM &&
+                             !(leftDriveMode_ && now - disarmedAt_ < AssistArmDelayMs);
         selectedMode_ = DISARM;
     }
     else if (leanPressed && !profilePress && selectedMode_ != LEAN)
@@ -113,8 +114,18 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
 ModeStateMachine::Transition ModeStateMachine::applySeat(bool seated, uint32_t now)
 {
     const bool seatDisarm = requiresSeat() && !seated;
+    // LEAN comes back by itself when the rider sits down again (it will not
+    // move until it is calibrated). Assist does not: a person getting into
+    // the chair pushes on it, and Assist answers a push with motor current.
+    if (seatDisarm && selectedMode_ == ASSIST)
+        selectedMode_ = DISARM;
     const mode next = seatDisarm ? DISARM : selectedMode_;
     if (next == currentMode_) return {};
+    if (next == DISARM)
+    {
+        leftDriveMode_ = true;
+        disarmedAt_ = now;
+    }
     currentMode_ = next;
     if (next == ASSIST) assistEnteredAt_ = now;
     return {true, seatDisarm, next == LEAN};

@@ -8,6 +8,9 @@ class ModeStateMachine
 {
 public:
     static constexpr int NoProfile = -1;
+    // After a drive mode is stopped, a DISARM press cannot start the Assist
+    // hold for this long: a second press in a panic is still only a stop.
+    static constexpr uint32_t AssistArmDelayMs = 1000;
     struct Button
     {
         bool edge = false;
@@ -53,5 +56,8 @@ private:
     bool leanPending_ = false, remotePending_ = false, disarmPending_ = false;
     bool assistHoldPending_ = false, calibrationPending_ = false;
     uint32_t disarmPressedAt_ = 0, profilePressedAt_ = 0, assistEnteredAt_ = 0;
+    // When a drive mode was last left for DISARM (valid while leftDriveMode_).
+    uint32_t disarmedAt_ = 0;
+    bool leftDriveMode_ = false;
     int confirmingProfile_ = NoProfile;
 };

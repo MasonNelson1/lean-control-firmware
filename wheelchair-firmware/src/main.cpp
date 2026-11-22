@@ -185,7 +185,7 @@ void setup()
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
 
     settings::persistence.load();
-    drive.begin(settings::defaultMode.get(), watchdogReset);
+    drive.begin(watchdogReset);
     applyRuntimeSettings();
 
     // user input
@@ -302,21 +302,22 @@ static void updateDrive()
     input.calButtonHeld = calibrateButton.getState() == LOW;
 
     const auto command = drive.tick(input);
-    switch (command.kind)
-    {
-    case DriveController::MotorCommand::Kind::RPM:
-        vescSetWheelRPM(can1, motors.leftId, command.left);
-        vescSetWheelRPM(can1, motors.rightId, command.right);
-        break;
-    case DriveController::MotorCommand::Kind::Brake:
-        vescSetBrakeCurrent(can1, motors.leftId, command.left);
-        vescSetBrakeCurrent(can1, motors.rightId, command.right);
-        break;
-    default:
-        vescSetCurrent(can1, motors.leftId, command.left);
-        vescSetCurrent(can1, motors.rightId, command.right);
-        break;
-    }
+    const auto send = [](uint8_t id, const DriveController::MotorCommand::Wheel &wheel) {
+        switch (wheel.kind)
+        {
+        case DriveController::MotorCommand::Kind::RPM:
+            vescSetWheelRPM(can1, id, wheel.value);
+            break;
+        case DriveController::MotorCommand::Kind::Brake:
+            vescSetBrakeCurrent(can1, id, wheel.value);
+            break;
+        default:
+            vescSetCurrent(can1, id, wheel.value);
+            break;
+        }
+    };
+    send(motors.leftId, command.left);
+    send(motors.rightId, command.right);
 }
 
 static void replyToConfiguration()

@@ -104,6 +104,16 @@ public:
     // back lean means "brake" (still rolling forward) or "reverse".
     Command command(float travel = 0.0f);
 
+    // Call while the chair stands still with no lean command. Neutral moves
+    // slowly toward the present loads, so sensor drift (the empty-seat log
+    // shows tens of counts an hour) and a rider settling in the seat do not
+    // build up into a lean that starts the chair creeping. It can only act
+    // on what is already inside the deadband, and each sensor's neutral
+    // stays within TrimMaxFraction of its range of the calibrated value.
+    void trimNeutral(float dt);
+    static constexpr float TrimTauS = 10.0f;
+    static constexpr float TrimMaxFraction = 0.25f;
+
     // Calibration button, in LEAN. A short press captures neutral once the
     // rider has let go and sat still. Holding for RangeHoldMs also measures
     // the full-lean ranges: neutral first, then lean each way, then press
@@ -147,6 +157,7 @@ private:
 
     bool neutralValid = false;
     std::array<float, 4> neutralLoad{}; // each sensor's load with the rider neutral
+    std::array<float, 4> calibratedLoad{}; // neutralLoad as captured, before any trim
     float neutralTotal = 0.0f;
 
     float speedResponseExponent = 2.0f; // default initializer for response curve, should be overwritten before its ever used.

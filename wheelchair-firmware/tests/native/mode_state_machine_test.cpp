@@ -120,6 +120,41 @@ int main()
         early.update(press(DISARM), 30); // current mode is still REMOTE
         assert(!early.update(seated(), 1000).resetAssist && early.selected() == DISARM);
     }
+    { // After a drive mode is stopped, a second DISARM press within a second cannot start Assist.
+        for (uint32_t secondPress : {400u, 105u + SM::AssistArmDelayMs - 1, 105u + SM::AssistArmDelayMs})
+        {
+            SM sm;
+            sm.begin(LEAN);
+            sm.applySeat(true, 0);
+            sm.update(press(DISARM), 100);
+            sm.applySeat(true, 105); // the control tick applies the stop
+            auto in = seated();
+            in.disarm.released = true;
+            sm.update(in, 300);
+            sm.update(press(DISARM), secondPress); // pressed again and held
+            bool assist = false;
+            for (uint32_t t = secondPress + 5; t < secondPress + 4000; t += 5)
+                assist = assist || sm.update(seated(), t).resetAssist;
+            // Only a press that comes a full second after the stop can become Assist.
+            assert(assist == (secondPress >= 105 + SM::AssistArmDelayMs));
+            assert(sm.selected() == (assist ? ASSIST : DISARM));
+        }
+    }
+    { // An empty seat ends Assist for good: it does not come back when someone sits down.
+        SM sm;
+        sm.begin(DISARM);
+        sm.update(press(DISARM), 100);
+        assert(sm.update(seated(), 600).resetAssist);
+        sm.applySeat(true, 600);
+        assert(sm.current() == ASSIST);
+        const auto loss = sm.applySeat(false, 700);
+        assert(loss.changed && loss.seatDisarm && sm.current() == DISARM && sm.selected() == DISARM);
+        assert(!sm.applySeat(true, 800).changed && sm.current() == DISARM);
+        // LEAN keeps its intent, as before.
+        sm.begin(LEAN);
+        sm.applySeat(false, 900);
+        assert(sm.selected() == LEAN && sm.applySeat(true, 1000).resetLean);
+    }
     { // DISARM wins simultaneous presses; Assist requires the full 500 ms.
         SM sm;
         sm.begin(DISARM);

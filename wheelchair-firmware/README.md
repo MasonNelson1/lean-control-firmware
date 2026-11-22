@@ -31,9 +31,16 @@ tick before motor commands.
 
 ### Other panel behaviour
 
-- **DISARM** always stops the chair, however long it is held. Assist needs a
-  second press that starts with the chair already disarmed, held for half a
-  second.
+- The chair always powers on in DISARM. If it is rolling at power-on (a reset
+  while driving), it brakes to a stop first.
+- **DISARM** always stops the chair, from every mode, however long it is held.
+- **Assist** needs its own press: with the chair already disarmed for at least
+  a second, hold DISARM for half a second. It adds motor current for a moment
+  after each push on the rims (the wheel must speed up by itself first) and
+  gives nothing otherwise, so it cannot start or keep the chair moving. An
+  empty seat ends it; it has to be selected again.
+- In LEAN and REMOTE, a chair standing at neutral resists being rolled (the
+  motors brake). Press DISARM before pushing it by hand.
 - A fast-blinking DISARM LED means a fault disarmed the chair (failed seat
   sensor, silent VESC, watchdog restart). The dashboard's health badge names
   it. It clears when a mode is armed again.

@@ -55,7 +55,7 @@ int main() {
     });
     test("every exported declaration is discoverable under its own ID", [] {
         const std::vector<const Field *> exported = {
-            &settings::defaultMode, &settings::deadband,
+            &settings::deadband,
             &settings::rangeForward, &settings::rangeBack, &settings::rangeLeft, &settings::rangeRight,
             &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse,
             &settings::maxTurnRate, &settings::maxLateralAccel,
@@ -132,7 +132,7 @@ int main() {
         CHECK(settings::deadband.get() == deadband);
     });
     test("retired field and group IDs stay unused", [] {
-        for (uint16_t id : {10, 11, 12, 13, 20, 21, 22, 23, 36, 50, 51}) CHECK(!settings::registry().find(id));
+        for (uint16_t id : {1, 10, 11, 12, 13, 20, 21, 22, 23, 36, 50, 51}) CHECK(!settings::registry().find(id));
         CHECK(!settings::registry().findGroup(3) && !settings::registry().findGroup(4));
     });
     test("calibration fields are exactly the chair and rider measurements", [] {

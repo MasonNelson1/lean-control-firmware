@@ -133,6 +133,21 @@ LeanDriveMode::Command LeanDriveMode::command(float travel)
     return {speed, turn, false};
 }
 
+void LeanDriveMode::trimNeutral(float dt)
+{
+    if (!neutralValid || calibrationActive())
+        return;
+    const int range[4] = {settings::rangeForward.get(), settings::rangeBack.get(),
+                          settings::rangeLeft.get(), settings::rangeRight.get()};
+    const float alpha = dt / (TrimTauS + dt);
+    for (size_t i = 0; i < 4; ++i)
+    {
+        const float limit = TrimMaxFraction * range[i];
+        const float trimmed = neutralLoad[i] + alpha * (load[i] - neutralLoad[i]);
+        neutralLoad[i] = std::min(calibratedLoad[i] + limit, std::max(calibratedLoad[i] - limit, trimmed));
+    }
+}
+
 // ---- Still windows ---------------------------------------------------------
 
 void LeanDriveMode::startWindow(uint32_t now)
@@ -216,6 +231,7 @@ LeanDriveMode::Event LeanDriveMode::updateCalibration(uint32_t now, bool buttonH
 
         for (size_t i = 0; i < load.size(); ++i)
             neutralLoad[i] = sumLoad[i] / windowSamples;
+        calibratedLoad = neutralLoad;
         neutralTotal = neutralLoad[0] + neutralLoad[1] + neutralLoad[2] + neutralLoad[3];
         telemetry::Telemetry::logf("** Calibrated: neutral loads F=%.0f B=%.0f L=%.0f R=%.0f, total %.0f **\n",
                                    neutralLoad[0], neutralLoad[1], neutralLoad[2], neutralLoad[3], neutralTotal);

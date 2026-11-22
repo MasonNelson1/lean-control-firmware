@@ -251,6 +251,38 @@ int main()
     command = rig.settle();
     assert(near(command.speed, shaped(300.0f / fwd, deadband, speedKnee)));
 
+    // trimNeutral(): at rest, neutral follows slow drift, within a bound.
+    {
+        LeanRig trim;
+        lean(0, 0);
+        trim.sample(500);
+        trim.captureNeutral();
+        const auto drifted = [&](int back) {
+            loads(NeutralF, NeutralB + back, NeutralL, NeutralR);
+            return trim.settle();
+        };
+        assert(drifted(30).speed < 0); // 30 counts on the back sensor is past the 20-count deadband
+        for (int k = 0; k < 12000; ++k) // a minute standing still
+        {
+            trim.sample();
+            trim.mode.trimNeutral(TickS);
+        }
+        assert(trim.mode.command().speed == 0);   // absorbed
+        assert(drifted(0).speed == 0);            // and the old posture is not a lean the other way: lost load never counts
+        // The bound: a quarter of that direction's range (100 of the back range's 400 counts).
+        loads(NeutralF, NeutralB + 300, NeutralL, NeutralR);
+        for (int k = 0; k < 60000; ++k)
+        {
+            trim.sample();
+            trim.mode.trimNeutral(TickS);
+        }
+        assert(std::fabs(trim.mode.command().speed - shaped(-200.0f / back, deadband, speedKnee)) < 0.01f);
+        // Not while uncalibrated or calibrating.
+        trim.mode.reset();
+        trim.mode.trimNeutral(TickS);
+        assert(trim.mode.command().stopped);
+    }
+
     // Outside LEAN nothing asks for a command: telemetry shows zero, not the
     // last command from when LEAN was driving.
     lean(300, 250);

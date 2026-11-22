@@ -21,7 +21,6 @@ namespace settings
     // watchdog so a long save cannot reset the Teensy halfway through.
     extern void (*storageActivity)();
 
-    extern config::EnumField<common::mode, 4> defaultMode;
     extern config::ConfigField<float> deadband;
     // Bounds shared with the calibration code that writes these fields.
     constexpr int LeanRangeMin = 40, LeanRangeMax = 3000;

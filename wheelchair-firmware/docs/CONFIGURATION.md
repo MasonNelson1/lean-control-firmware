@@ -104,10 +104,11 @@ history. The transition profile is retained as a configurable profile for
 future integration, matching the original firmware's unused transition
 tuning declaration.
 
-The default startup selection is DISARM. A valid controller packet is required
-for remote propulsion. LEAN remains calibration-gated.
+The chair always powers on in DISARM. A centred stick followed by a valid
+controller packet is required for remote propulsion. LEAN remains
+calibration-gated.
 
-Retired IDs, never to be reused: fields 10-13 (per-sensor gains), 20-23
+Retired IDs, never to be reused: fields 1 (startup mode), 10-13 (per-sensor gains), 20-23
 (directional saturation), 36 (turn mix), 50 (calibration samples), 51 (shared
 sensor floor); groups 3 and 4. Older saved records for them are ignored on
 load.

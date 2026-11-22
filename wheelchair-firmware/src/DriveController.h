@@ -24,12 +24,18 @@ public:
     enum class Fault : uint8_t { None, SensorRail, VescSilent, WatchdogReset };
     static const char *faultName(Fault fault);
 
-    // What to send to both VESCs this tick.
+    // What to send to the VESCs this tick. Each wheel has its own kind of
+    // command: in normal driving one wheel can be braking while the other is
+    // under speed control.
     struct MotorCommand
     {
-        enum class Kind : uint8_t { Current, RPM, Brake } kind;
-        float left;  // amps, wheel RPM, or brake amps
-        float right;
+        enum class Kind : uint8_t { Current, RPM, Brake };
+        struct Wheel
+        {
+            Kind kind;
+            float value; // amps, wheel RPM, or brake amps
+        };
+        Wheel left, right;
     };
 
     struct TickInput
@@ -43,10 +49,11 @@ public:
         bool calButtonHeld = false; // raw level of the calibration button
     };
 
-    // afterWatchdogReset: the firmware hung and was restarted. The chair may
-    // still be rolling, so it starts disarmed and brakes as soon as the VESCs
-    // report (or blind, if they do not).
-    void begin(common::mode initial, bool afterWatchdogReset = false);
+    // The chair always starts in DISARM. It may be rolling (a reset or a
+    // brown-out while driving), so once the VESCs report it brakes to a stop
+    // if the wheels are turning, or brakes blind if they stay silent.
+    // afterWatchdogReset: the firmware hung and was restarted; shown as a fault.
+    void begin(bool afterWatchdogReset = false);
     // Derived settings changed (dashboard edit, profile load, startup).
     void applySettings();
     // A profile was loaded: start again from rest and require a new calibration.
@@ -74,6 +81,7 @@ private:
     void beginStop(const TickInput &input, bool fromMeasured);
     MotorCommand stopOrRelease(const TickInput &input);
     MotorCommand driveRPM(const TickInput &input, float linearTargetRPM, float turnTargetRPM);
+    static MotorCommand release() { return {{MotorCommand::Kind::Current, 0.0f}, {MotorCommand::Kind::Current, 0.0f}}; }
     void saveCalibration();
     void watchLowSpeed(const TickInput &input, float left, float right);
 
@@ -89,10 +97,12 @@ private:
     // True while wheel-speed commands from the smoother are being sent, so a
     // loss of drive knows there is motion to stop.
     bool driving_ = false;
-    // Set after a watchdog restart until the recovery stop has been decided.
-    bool recoverFromReset_ = false;
-    uint32_t recoverStartedAt_ = 0;
-    bool recoverTimed_ = false;
+    // Set at power-on until the boot recovery stop has been decided.
+    bool bootRecovery_ = false;
+    uint32_t bootStartedAt_ = 0;
+    bool bootTimed_ = false;
+    // How long the chair has stood still at neutral lean (for the neutral trim).
+    float restingS_ = 0.0f;
     float sentLeftRPM_ = 0.0f, sentRightRPM_ = 0.0f;
     float speedLimitMS_ = 0.0f;
     // Low-speed diagnostic (watchLowSpeed).

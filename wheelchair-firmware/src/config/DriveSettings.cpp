@@ -33,7 +33,6 @@ namespace settings
         Group normal(registry(), 10, "Normal operation", true, &pid);
         Group transition(registry(), 11, "Transitions (reserved)", true, &pid);
 
-        constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}, {common::ASSIST, "ASSIST"}};
         constexpr float DefaultForewardBackKnee[] = {0.21f, 0.09f};
         constexpr float DefaultAssistKnee[] = {0.44f, 0.61f};
         constexpr float DefaultLeftRightKnee[] = {0.35f, 0.20f};
@@ -60,9 +59,9 @@ namespace settings
     // field, and never reuse a retired ID. Add a declaration and consume its get()
     // value to expose a setting through discovery. Cached consumers also need their
     // derived values refreshed in main.cpp's applyRuntimeSettings().
-    EnumField<common::mode, 4> defaultMode(registry(), 1,
-                                           {drive, "Startup drive mode", "Drive mode selected at power-on. LEAN requires calibration and REMOTE requires a fresh controller command.", "", true},
-                                           common::DISARM, Modes);
+    // Field ID 1 (startup drive mode) is retired: the chair always powers on
+    // in DISARM. Starting in a powered mode meant a reset or a flick of the
+    // switch could put a rider in LEAN, REMOTE or Assist with no button pressed.
     ConfigField<float> deadband(registry(), 2,
                                 {drive, "Lean deadband", "Share of a full lean that is ignored around neutral. The response starts from zero at its edge."},
                                 0.05f, 0.01f, 0.5f);

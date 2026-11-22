@@ -27,11 +27,12 @@ const char *DriveController::faultName(Fault fault)
     }
 }
 
-void DriveController::begin(common::mode initial, bool afterWatchdogReset)
+void DriveController::begin(bool afterWatchdogReset)
 {
-    modeState_.begin(afterWatchdogReset ? DISARM : initial);
-    recoverFromReset_ = afterWatchdogReset;
-    recoverTimed_ = false;
+    modeState_.begin(DISARM);
+    bootRecovery_ = true;
+    bootTimed_ = false;
+    restingS_ = 0.0f;
     lean_.reset();
     remote_.reset();
     assist_.reset();
@@ -131,10 +132,11 @@ void DriveController::applySeat(const TickInput &in)
             if (driving_)
                 beginStop(in, /*fromMeasured=*/false);
         }
-        else if (previous == ASSIST && transition.seatDisarm)
+        else if (previous == ASSIST)
         {
-            // The rider left a moving chair. A DISARM press in Assist only
-            // releases the motors: the rider is propelling by hand.
+            // DISARM stops the chair from every mode, and so does an empty
+            // seat. Assist drives by current, so the stop starts from the
+            // measured wheel speeds.
             beginStop(in, /*fromMeasured=*/true);
         }
         driving_ = false;
@@ -158,7 +160,7 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
     commands_ = {};
     sentLeftRPM_ = sentRightRPM_ = 0.0f;
     if (!stop_.active())
-        return {MotorCommand::Kind::Current, 0.0f, 0.0f};
+        return release();
 
     const bool fresh = in.leftFresh && in.rightFresh;
     const auto out = stop_.update(in.dt, in.now, {in.leftRPM, in.rightRPM, fresh});
@@ -177,12 +179,12 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
         commands_ = {0.0f, 0.0f, left, right};
         sentLeftRPM_ = left;
         sentRightRPM_ = right;
-        return {MotorCommand::Kind::RPM, left, right};
+        return {{MotorCommand::Kind::RPM, left}, {MotorCommand::Kind::RPM, right}};
     }
     case StopController::Drive::Brake:
-        return {MotorCommand::Kind::Brake, out.left, out.right};
+        return {{MotorCommand::Kind::Brake, out.left}, {MotorCommand::Kind::Brake, out.right}};
     default:
-        return {MotorCommand::Kind::Current, 0.0f, 0.0f};
+        return release();
     }
 }
 
@@ -235,28 +237,40 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         const float linearError = clampTo((left + right) / 2.0f - measuredLinear, -room, room);
         left = measuredLinear + linearError + measuredTurn + turnError;
         right = measuredLinear + linearError - measuredTurn - turnError;
-        // A VESC in speed mode stops regulating when the command is under its
-        // minimum ERPM (older VESC firmware then releases the motor). If the
-        // command gets there while the wheel is still well above it (the
-        // wheel lags a braking command), the chair could coast from that
-        // speed. Hold the command at the edge until the wheel has come down,
-        // so the speed loop keeps braking.
-        const auto keepBraking = [](float command, float wheel) {
-            return std::fabs(command) < STOP_HANDOFF_RPM && std::fabs(wheel) > STOP_HANDOFF_RPM + 4.0f
-                       ? std::copysign(STOP_HANDOFF_RPM, wheel)
-                       : command;
-        };
-        left = keepBraking(left, in.leftRPM);
-        right = keepBraking(right, in.rightRPM);
         // The command itself may not run further ahead than what is sent.
         motion_.limitLead(measuredLinear, measuredTurn, MAX_RPM_COMMAND_DIFF);
     }
     commands_ = {linearTargetRPM + turnTargetRPM, linearTargetRPM - turnTargetRPM, left, right};
     sentLeftRPM_ = left;
     sentRightRPM_ = right;
-    if (fresh)
-        watchLowSpeed(in, left, right);
-    return {MotorCommand::Kind::RPM, left, right};
+    if (!fresh)
+        return {{MotorCommand::Kind::RPM, left}, {MotorCommand::Kind::RPM, right}};
+    watchLowSpeed(in, left, right);
+
+    // A VESC's speed loop does not run when the command is under its minimum
+    // ERPM (older VESC firmware then releases the motor; see
+    // drive_constants.h). So a wheel still turning faster than such a command
+    // would coast: after a turn the chair kept rotating, after a run it rolled
+    // on, and on a slope it rolled away at neutral. That wheel gets brake
+    // current instead, in proportion to how much too fast it is.
+    const auto wheelCommand = [](float command, float wheel) -> MotorCommand::Wheel {
+        if (std::fabs(command) >= STOP_HANDOFF_RPM)
+            return {MotorCommand::Kind::RPM, command};
+        // Wheel still well above the zone (it lags a braking command): hold
+        // the command at the edge, so the speed loop keeps braking it down.
+        if (std::fabs(wheel) > STOP_HANDOFF_RPM + 4.0f)
+            return {MotorCommand::Kind::RPM, std::copysign(STOP_HANDOFF_RPM, wheel)};
+        if (std::fabs(wheel) >= DEADZONE_REST_RPM)
+        {
+            // Too fast by: all of its speed if it turns the other way.
+            const float excess = command * wheel < 0.0f ? std::fabs(wheel) : std::fabs(wheel) - std::fabs(command);
+            if (excess > 0.0f)
+                return {MotorCommand::Kind::Brake,
+                        clampTo(DEADZONE_BRAKE_AMPS_PER_RPM * excess, DEADZONE_BRAKE_MIN_AMPS, STOP_BRAKE_AMPS)};
+        }
+        return {MotorCommand::Kind::RPM, command};
+    };
+    return {wheelCommand(left, in.leftRPM), wheelCommand(right, in.rightRPM)};
 }
 
 // Diagnostic only. A VESC in speed mode does not drive below its minimum
@@ -339,26 +353,27 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
             lean_.beginTare(in.now);
     }
 
-    // After a watchdog restart the chair may be rolling with nobody in
-    // control. Brake from the measured speed as soon as the VESCs report, or
-    // blind if they stay silent for half a second.
-    if (recoverFromReset_)
+    // At power-on the chair may be rolling with nobody in control (a reset or
+    // a brown-out while driving). Brake from the measured speed as soon as the
+    // VESCs report, or blind if they stay silent for half a second. A chair
+    // that is standing still is left alone.
+    if (bootRecovery_)
     {
-        if (!recoverTimed_)
+        if (!bootTimed_)
         {
-            recoverTimed_ = true;
-            recoverStartedAt_ = in.now;
+            bootTimed_ = true;
+            bootStartedAt_ = in.now;
         }
         if (fresh)
         {
             if (std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) >= STOP_DONE_RPM)
                 stop_.begin(in.leftRPM, in.rightRPM, in.now);
-            recoverFromReset_ = false;
+            bootRecovery_ = false;
         }
-        else if (in.now - recoverStartedAt_ >= 500)
+        else if (in.now - bootStartedAt_ >= 500)
         {
             stop_.beginBlind(in.now);
-            recoverFromReset_ = false;
+            bootRecovery_ = false;
         }
     }
 
@@ -389,6 +404,14 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         const auto command = lean_.command(maxRPM > 0.0f ? travelRPM / maxRPM : 0.0f);
         if (command.stopped)
             return stopOrRelease(in);
+
+        // Standing still at neutral for a while: let neutral follow the
+        // rider's posture and the sensors' slow drift (LeanDriveMode::trimNeutral).
+        const bool resting = command.speed == 0.0f && command.turn == 0.0f && fresh &&
+                             std::max(std::fabs(in.leftRPM), std::fabs(in.rightRPM)) < STOP_DONE_RPM;
+        restingS_ = resting ? restingS_ + in.dt : 0.0f;
+        if (restingS_ >= NEUTRAL_TRIM_AFTER_S)
+            lean_.trimNeutral(in.dt);
 
         const float linearTargetRPM = command.speed * speedLimitMS_ * LINEAR_TO_RPM;
         // Turn is a rate in deg/s, not a share of the speed knob. At speed it
@@ -425,7 +448,7 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         commands_ = {};
         sentLeftRPM_ = sentRightRPM_ = 0.0f;
         assistCurrent_ = assist_.getTargets(in.leftRPM, in.rightRPM, in.speedLimitMS * LINEAR_TO_RPM, in.now);
-        return {MotorCommand::Kind::Current, assistCurrent_.left, assistCurrent_.right};
+        return {{MotorCommand::Kind::Current, assistCurrent_.left}, {MotorCommand::Kind::Current, assistCurrent_.right}};
     }
 
     default: // DISARM

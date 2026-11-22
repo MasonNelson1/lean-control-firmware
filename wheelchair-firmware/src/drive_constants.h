@@ -46,6 +46,14 @@ inline float STOP_HANDOFF_RPM = 15.5f + STOP_HANDOFF_MARGIN_RPM;
 // Brake current per motor for that last part. The assist boost already runs up
 // to 30 A per motor, so 15 A is well inside what the VESCs are set up for.
 constexpr float STOP_BRAKE_AMPS = 15.0f;
+// In normal driving, a wheel that turns faster than a command inside the
+// VESC's minimum-speed zone is slowed with brake current in proportion to
+// the excess: this many amps per wheel RPM, between the two limits. 15 RPM too
+// fast is the full 15 A; close to rest it eases off to 3 A instead of
+// grabbing, and it lets go below DEADZONE_REST_RPM (0.03 m/s).
+constexpr float DEADZONE_BRAKE_AMPS_PER_RPM = 1.0f;
+constexpr float DEADZONE_BRAKE_MIN_AMPS = 3.0f;
+constexpr float DEADZONE_REST_RPM = 1.0f;
 // The wheels count as stopped below this speed, once held for STOP_SETTLE_MS.
 constexpr float STOP_DONE_RPM = 3.0f;
 constexpr uint32_t STOP_SETTLE_MS = 150;
@@ -55,20 +63,27 @@ constexpr uint32_t STOP_BRAKE_MAX_MS = 1500;
 // for at most this long after the ramp ends before going to brake current.
 constexpr uint32_t STOP_RAMP_OVERRUN_MS = 1000;
 
+// ---- Neutral trim (LeanDriveMode::trimNeutral) ------------------------------
+// The chair must have stood still at neutral lean for this long before neutral
+// starts to follow the sensors.
+constexpr float NEUTRAL_TRIM_AFTER_S = 2.0f;
+
 // ---- Motor controller health -----------------------------------------------
-// A VESC whose speed frames stop for this long is treated as silent. VESC Tool
-// sends status at 50 Hz by default (20 ms), so this is ten missed frames. The
-// HEALTH line reports the measured rate; if it shows 50 Hz this can come down
-// toward the 100 ms of CDR Spec B.
-constexpr uint32_t VESC_STALE_MS = 200;
+// A VESC whose speed frames stop for this long is treated as silent: the
+// 0.1 s of CDR Spec B. VESC Tool sends status at 50 Hz by default (20 ms), so
+// this is five missed frames. It needs the status rate to stay at 20 Hz or
+// more; the HEALTH line reports the measured rate (vescL / vescR).
+constexpr uint32_t VESC_STALE_MS = 100;
 
 // ---- Turning (MotionSmoother.h) --------------------------------------------
 // How fast the chair's turn rate may build up and die away, in deg/s per
 // second. Turning is smoothed on its own axis so it no longer waits behind the
 // forward acceleration limit. CDR Spec H asks for 200 deg/s within 0.5 s, i.e.
 // at least 400. Releasing a lean stops the rotation faster than it built up,
-// which is what lets the rider stop on an angle: from 100 deg/s the chair
-// turns a further 100^2 / (2 * 900) = 5.6 degrees.
+// which is what lets the rider stop on an angle: from 100 deg/s the command
+// turns a further 100^2 / (2 * 900) = 5.6 degrees. The chair itself takes a
+// little longer over the last part, where the wheels are slowed on brake
+// current (DEADZONE_BRAKE_* below).
 constexpr float TURN_ACCEL_DEG_S2 = 600.0f;
 constexpr float TURN_DECEL_DEG_S2 = 900.0f;
 

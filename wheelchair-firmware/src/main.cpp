@@ -373,9 +373,9 @@ static void updateDrive()
     const bool calibrationRequested = modeState.takeCalibrationRequest();
     if (modeState.requiresSeat())
         leanMode.sampleSensors();
-    // Off until riding data shows sensors never legitimately reach a rail (Charles, 2026-11-21).
-    // Rail hits are still reported in the DBG SENSORS line as railed=1.
-    constexpr bool SENSOR_RAIL_DISARM = false;
+    // On (Charles, 2026-11-21): normal readings peak far below the rails (max ~1300 of 4095).
+    // Rail hits are also reported in the DBG SENSORS line as railed=1 (issue #18).
+    constexpr bool SENSOR_RAIL_DISARM = true;
     if (SENSOR_RAIL_DISARM && modeState.current() == LEAN && leanMode.sensorAtRail())
     {
         telemetry::Telemetry::logf("Sensor reading at ADC rail; disarming.\n");

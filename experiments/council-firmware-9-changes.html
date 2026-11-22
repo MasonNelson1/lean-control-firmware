@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What the Review Loop Changed</title>
+<style>
+:root{
+  --bg:#faf9f6;--fg:#1b1b19;--mut:#64625c;--line:#e2e0da;--card:#ffffff;--soft:#f1efea;
+  --before:#d0542a;--after:#1d74db;--held:#15875a;--free:#a87b00;--bad:#c23a3a;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141413;--fg:#ecebe6;--mut:#a29f98;--line:#34332f;--card:#1c1c1a;--soft:#262523;
+  --before:#f07d4f;--after:#5ea6ff;--held:#3fc78c;--free:#e2b740;--bad:#f06a6a;
+}}
+:root[data-theme="dark"]{
+  --bg:#141413;--fg:#ecebe6;--mut:#a29f98;--line:#34332f;--card:#1c1c1a;--soft:#262523;
+  --before:#f07d4f;--after:#5ea6ff;--held:#3fc78c;--free:#e2b740;--bad:#f06a6a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:24px;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:18px;margin:36px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
+h2 .n{color:var(--mut);font-weight:500;margin-right:6px}
+h3{font-size:14px;margin:0 0 6px}
+p{margin:0 0 8px}
+.mut{color:var(--mut)}
+.small{font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mut);margin-left:4px;vertical-align:1px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.soft{background:var(--soft);border-radius:var(--r);padding:12px 14px}
+.cap{font-size:12.5px;margin-top:4px}
+.cap div{display:flex;gap:6px;align-items:baseline;margin-top:2px}
+.dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;transform:translateY(1px)}
+.b{background:var(--before)}.a{background:var(--after)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0 12px;font-size:12.5px;color:var(--mut)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:18px;height:3px;border-radius:2px;display:inline-block}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--mut);font-size:9px;font-family:inherit}
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px;margin:14px 0 4px}
+.stat{background:var(--soft);border-radius:var(--r);padding:10px 12px}
+.stat b{display:block;font-size:20px;line-height:1.2}
+.stat span{font-size:12px;color:var(--mut)}
+.callout{border-left:4px solid var(--after);background:var(--soft);border-radius:0 var(--r) var(--r) 0;padding:10px 14px;margin:12px 0}
+.callout.warn{border-color:var(--before)}
+.matrix{display:grid;grid-template-columns:auto repeat(2,1fr);gap:4px;font-size:12.5px}
+.matrix div{padding:7px 8px;border-radius:6px;text-align:center}
+.matrix .h{background:none;color:var(--mut);font-weight:600}
+.matrix .rh{text-align:left;font-weight:600;background:none}
+.H{background:color-mix(in srgb,var(--held) 20%,transparent);color:var(--held);font-weight:600}
+.F{background:color-mix(in srgb,var(--free) 20%,transparent);color:var(--free);font-weight:600}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}
+.step{background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:12.5px;white-space:nowrap}
+.step.go{border-color:var(--after);color:var(--after);font-weight:600}
+.step.save{border-color:var(--held);color:var(--held);font-weight:600}
+.arr{color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.chip{font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);background:var(--card)}
+.chip.rm{border-color:var(--before);color:var(--before);text-decoration:line-through}
+.chip.add{border-color:var(--held);color:var(--held)}
+.chip.chg{border-color:var(--free);color:var(--free)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:600}
+.yes{color:var(--held);font-weight:700}.no{color:var(--bad);font-weight:700}
+ol.check{padding-left:20px;margin:6px 0}ol.check li{margin:4px 0}
+ul.q{padding-left:18px;margin:6px 0}ul.q li{margin:5px 0}
+code{font-size:12px;background:var(--soft);padding:1px 4px;border-radius:4px}
+.kpi{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>What the review loop changed</h1>
+<p class="mut">Branch <code>council/firmware-9</code> compared with <code>charles/dev-setup</code>: 14 commits, firmware in <code>wheelchair-firmware/</code>. All charts use <b>illustrative</b> numbers unless they say "from code".</p>
+
+<div class="hero">
+  <div class="stat"><b>6.5 → 7.5</b><span>review score over 7 rounds</span></div>
+  <div class="stat"><b>Coast → Brake</b><span>when drive is lost or taken away</span></div>
+  <div class="stat"><b>12 / 12</b><span>host test suites pass (re-run on this branch)</span></div>
+  <div class="stat"><b>+6.7k / −1.2k</b><span>lines, about half of them tests</span></div>
+</div>
+
+<div class="legend">
+  <span><i class="sw" style="background:var(--before)"></i>Before (old code)</span>
+  <span><i class="sw" style="background:var(--after)"></i>After (this branch)</span>
+  <span><i class="sw" style="background:var(--held);height:5px"></i>Held: brakes if a wheel starts rolling</span>
+  <span><i class="sw" style="border-top:2px dotted var(--free);height:0;background:none"></i>Free: wheels roll</span>
+</div>
+
+<!-- ============================================================ 1 -->
+<h2><span class="n">1</span>Stopping and faults</h2>
+<p class="mut">Each chart: chair speed over 4 seconds. The dashed line is the moment something happens.</p>
+
+<div class="callout">
+  <h3>Stop leaning in LEAN: still no coasting, before or after</h3>
+  <div class="grid2" style="align-items:center">
+    <div id="c-neutral"></div>
+    <div class="small">
+      <p>Sitting up has <b>always</b> meant the motors slow the chair. The old code did it too.</p>
+      <p><span class="dot b" style="display:inline-block"></span> Before: the last walking-pace bit was up to the motor controller. Depending on its firmware, it let go or braked. Parked at neutral on a slope, the chair rolled.</p>
+      <p><span class="dot a" style="display:inline-block"></span> After: the last bit uses brake current, then the chair is <b>held</b>.</p>
+    </div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <h3>Wheelchair basketball coasts on purpose</h3>
+  <p class="small">On this branch, coasting happens in only two places: <b>Assist</b> (never brakes) and <b>DISARM with someone in the seat</b> (and only once the stop is over). Pressing DISARM at speed now brakes at about 0.38 g instead of letting go. If "sit up and glide" is wanted, it would be a new feature. See the open questions.</p>
+</div>
+
+<div class="grid" id="cases"></div>
+
+<h3 style="margin-top:22px">What a stop looks like now <span class="tag">speed-knob 2, illustrative</span></h3>
+<div class="card"><div id="c-anatomy"></div></div>
+
+<div class="grid2" style="margin-top:12px">
+  <div class="card">
+    <h3>How long until the speed command ends <span class="tag">from code comments</span></h3>
+    <div id="c-specb"></div>
+    <p class="cap mut">The design spec (CDR Spec B) asks for under 0.5 s. Only knob 1 makes it. Going faster would take about 8.7 m/s², more than the motors can deliver.</p>
+  </div>
+  <div class="card">
+    <h3>When is the chair held?</h3>
+    <div class="matrix">
+      <div class="h"></div><div class="h">Seat empty</div><div class="h">Rider seated</div>
+      <div class="rh">LEAN / REMOTE</div><div class="H">held</div><div class="H">held</div>
+      <div class="rh">DISARM</div><div class="H">held<br><span class="small" style="font-weight:400">tap DISARM → free</span></div><div class="F">free<br><span class="small" style="font-weight:400">held after a fault until DISARM</span></div>
+      <div class="rh">Assist</div><div class="F">(Assist ends)</div><div class="F">free</div>
+    </div>
+    <p class="cap mut">"Held" damps rolling. It is not a parking brake: on a slope the chair creeps. Before, every one of these boxes was free.</p>
+  </div>
+</div>
+
+<!-- ============================================================ 2 -->
+<h2><span class="n">2</span>Steering</h2>
+
+<div class="grid2">
+  <div class="card">
+    <h3>Full-lean turn rate at a standstill <span class="tag">from code defaults</span></h3>
+    <div id="c-knob"></div>
+    <p class="cap mut">Before, turning was a share of the speed knob, so knob 4 turned four times faster than knob 1. Now it is 160°/s on every knob. Assumes a 0.60 m track width, which is an estimate in the code; measure it on the chair.</p>
+  </div>
+  <div class="card">
+    <h3>Biggest turn allowed vs. speed <span class="tag">from code defaults</span></h3>
+    <div id="c-turnspeed"></div>
+    <p class="cap mut">Now capped by a 2.5 m/s² sideways-acceleration limit. Before, a full lean at speed asked for a spin (one wheel backwards). These are the speeds commanded, before smoothing.</p>
+  </div>
+  <div class="card">
+    <h3>Steering while speeding up <span class="tag">illustrative</span></h3>
+    <div id="c-accelturn"></div>
+    <p class="cap mut">Before, both wheels hit the same acceleration limit, so the turn vanished until the speed-up ended. Now speed and turn are smoothed separately. Releasing a turn stops it 3× faster than it built up (1800 vs 600 °/s²).</p>
+  </div>
+  <div class="card">
+    <h3>Reverse <span class="tag">illustrative</span></h3>
+    <div id="c-reverse"></div>
+    <p class="cap mut">A back lean that starts while rolling forward <b>only brakes</b> to a stop. To reverse, come back to neutral, then lean back again. Reverse tops out at <b>half</b> the knob speed (also in REMOTE).</p>
+  </div>
+  <div class="card">
+    <h3>Turn direction in reverse <span class="tag">from code</span></h3>
+    <div id="c-flip"></div>
+    <p class="cap mut">The team's −0.3 / −0.9 rule is kept, but it now fades instead of jumping, and it is off while the chair still rolls forward. Before, leaning back and right at speed steered <b>left</b>.</p>
+  </div>
+  <div class="card">
+    <h3>Remote (REMOTE mode)</h3>
+    <div class="flow"><span class="step">stick held over</span><span class="arr">→</span><span class="step">signal gap &gt; 0.5 s</span><span class="arr">→</span><span class="step go">ignored until the stick is centred</span></div>
+    <div class="flow"><span class="step">stop button</span><span class="arr">→</span><span class="step go">works in LEAN and Assist too</span></div>
+    <div class="flow"><span class="step">full stick</span><span class="arr">→</span><span class="step go">same turn and reverse limits as LEAN</span></div>
+    <p class="cap mut">Before, a held stick drove off again the moment the signal came back, and the stop button only worked in REMOTE.</p>
+  </div>
+</div>
+
+<!-- ============================================================ 3 -->
+<h2><span class="n">3</span>Calibration</h2>
+
+<div class="grid2">
+  <div class="card">
+    <h3>Neutral <span class="tag">LEAN, short press</span></h3>
+    <div class="flow"><span class="step">press</span><span class="arr">→</span><span class="step">let go</span><span class="arr">→</span><span class="step">0.3 s settle</span><span class="arr">→</span><span class="step">sit still 1 s (averaged)</span><span class="arr">→</span><span class="step go">ready</span></div>
+    <p class="cap mut">Before: a 40 ms snapshot taken <i>while your hand was on the button</i>, which froze everything else on the chair while it ran. Now it waits for you to sit still, and gives up after 6 s if you don't.</p>
+  </div>
+  <div class="card">
+    <h3>Range <span class="tag">LEAN, hold 1 s → fast blink</span></h3>
+    <div class="flow"><span class="step">let go</span><span class="arr">→</span><span class="step">neutral</span><span class="arr">→</span><span class="step">lean F, B, L, R fully</span><span class="arr">→</span><span class="step">press again</span><span class="arr">→</span><span class="step save">4 ranges saved</span></div>
+    <p class="cap mut">90% of your reach = full speed. A direction leaned less than 120 counts keeps its old range. The chair ends in DISARM.</p>
+  </div>
+  <div class="card">
+    <h3>Tare <span class="tag">DISARM, seat empty, hold 2 s</span></h3>
+    <div class="flow"><span class="step">empty seat</span><span class="arr">→</span><span class="step">hold 2 s</span><span class="arr">→</span><span class="step">1 s still</span><span class="arr">→</span><span class="step save">4 sensor zeros saved</span></div>
+    <p class="cap mut">Refused (or cancelled) if the seat reads occupied. Redo it after moving the cushion or the sensors.</p>
+  </div>
+  <div class="card">
+    <h3>What survives a power-off</h3>
+    <table>
+      <tr><th></th><th>Before</th><th>After</th></tr>
+      <tr><td>Sensor zeros</td><td class="no">✗ fixed 400</td><td class="yes">✓ tare</td></tr>
+      <tr><td>Full-lean ranges</td><td class="no">✗ (gains reset)</td><td class="yes">✓ range cal</td></tr>
+      <tr><td>Seat threshold</td><td class="no">✗ from last calibration</td><td class="yes">✓ setting (200)</td></tr>
+      <tr><td>Neutral</td><td class="no">✗</td><td class="no">✗ press every power-on</td></tr>
+      <tr><td>Survives a profile load</td><td class="no">✗</td><td class="yes">✓ zeros, ranges, IDs, wheel size</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3>The lean math</h3>
+    <div id="c-math"></div>
+    <p class="cap mut">Only load a sensor <b>gains</b> counts. These sensors use two wires, so a broken wire reads the same as "no load". Before, a broken front wire looked like a back lean. Now it just turns that direction off.</p>
+  </div>
+  <div class="card">
+    <h3>Am I seated? <span class="tag">illustrative</span></h3>
+    <div id="c-seat"></div>
+    <p class="cap mut">Now: seated above 200 counts after 0.3 s, and empty only below 120 counts for 0.08 s. Before: one threshold with no delay, tied to the last rider's calibration, so a hard lean could flicker it to "empty".</p>
+  </div>
+</div>
+<div class="soft small" style="margin-top:10px">Also new: while you sit still at neutral for 2 s or more, neutral slowly follows sensor drift (time constant 10 s, never more than 15% of the range). This stops the chair creeping after a long sit.</div>
+
+<!-- ============================================================ 4 -->
+<h2><span class="n">4</span>Tuning and dashboard</h2>
+<div class="grid2">
+  <div class="card">
+    <h3>Settings</h3>
+    <div class="small mut">Removed</div>
+    <div class="chips">
+      <span class="chip rm">Startup drive mode</span><span class="chip rm">Front / Rear / Left / Right gain</span>
+      <span class="chip rm">Lean turn mixing</span><span class="chip rm">Calibration samples</span><span class="chip rm">Default sensor floor</span>
+    </div>
+    <div class="small mut">Added</div>
+    <div class="chips">
+      <span class="chip add">Full-lean range ×4</span><span class="chip add">Sensor zero ×4</span><span class="chip add">Seat load threshold 200</span>
+      <span class="chip add">Full-lean turn rate 160°/s</span><span class="chip add">Sideways accel limit 2.5 m/s²</span>
+      <span class="chip add">Track width 0.60 m</span><span class="chip add">VESC minimum speed 15.5 RPM</span>
+    </div>
+    <div class="small mut">Tighter limits</div>
+    <div class="chips">
+      <span class="chip chg">Controller timeout ≤ 200 ms (was 500)</span><span class="chip chg">Lean deadband ≤ 0.5 (was 1.0)</span>
+      <span class="chip chg">Button debounce ≤ 100 ms (was 150)</span><span class="chip chg">Response curve exponent 1–4</span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Dashboard</h3>
+    <div class="chips">
+      <span class="chip add">Health badge: fault name</span><span class="chip add">VESC L/R frames per second</span>
+      <span class="chip add">Seated · Braking · Neutral calibrated</span><span class="chip add">Sensor tiles: "full 600" range</span>
+      <span class="chip rm">Sensor tiles: ×gain</span><span class="chip chg">"User weight" → "Seated load at calibration"</span>
+    </div>
+    <div class="small mut">When the dashboard can change settings</div>
+    <div class="flow"><span class="step">DISARM</span><span class="arr">+</span><span class="step">not braking</span><span class="arr">+</span><span class="step">wheels still</span><span class="arr">→</span><span class="step go">edits allowed</span></div>
+    <p class="cap mut">Before: DISARM was enough. Saving to memory pauses motor commands, so edits now wait until the chair is at rest. Profile loads no longer overwrite calibration.</p>
+  </div>
+</div>
+
+<!-- ============================================================ 5 -->
+<h2><span class="n">5</span>Assist, testing, open questions</h2>
+<div class="grid2">
+  <div class="card">
+    <h3>Assist: one push, one boost <span class="tag">illustrative</span></h3>
+    <div id="c-assist"></div>
+    <p class="cap mut">Before, the boost grew with speed, and speed grew with the boost, so a nudge could run the chair up to the limit by itself. Now the motor only helps after a real push: a short speed-up of at least 1 m/s² that ends within 1 s. The help fades out over 0.7 s. A long downhill roll never earns a boost.</p>
+  </div>
+  <div class="card">
+    <h3>Assist rules</h3>
+    <div class="flow"><span class="step">DISARM for 1 s already</span><span class="arr">→</span><span class="step">hold DISARM 0.5 s</span><span class="arr">→</span><span class="step go">Assist</span></div>
+    <div class="flow"><span class="step">DISARM held from LEAN</span><span class="arr">→</span><span class="step go">stays a stop</span></div>
+    <div class="flow"><span class="step">seat empties</span><span class="arr">→</span><span class="step go">Assist ends; pick it again</span></div>
+    <div class="flow"><span class="step">near the speed limit</span><span class="arr">→</span><span class="step go">boost fades to 0</span></div>
+    <div class="flow"><span class="step">sensor or VESC fault</span><span class="arr">→</span><span class="step">boost dropped, <b>no brake</b></span></div>
+    <div class="flow"><span class="step">remote stop button</span><span class="arr">→</span><span class="step go">brakes and holds</span></div>
+  </div>
+</div>
+
+<div class="grid2" style="margin-top:12px">
+  <div class="card">
+    <h3>Test wheels-off first</h3>
+    <ol class="check small">
+      <li><b>VESC Tool, both controllers:</b> Speed PID "Allow Braking" <b>ON</b>. Ramp ERPM/s at 25000 or more. CAN status at 50 Hz.</li>
+      <li><b>VESC Tool:</b> App Timeout <b>200 ms</b>, Timeout Brake Current <b>15 A</b>. These decide what a frozen Teensy does.</li>
+      <li>Write down <code>s_pid_min_erpm</code> and the VESC firmware version. Set the dashboard's "VESC minimum speed" to min ERPM ÷ 58.2.</li>
+      <li>Lean right: the <b>left</b> wheel must spin faster. If not, the VESC IDs are swapped.</li>
+      <li>Tare (empty seat), then neutral, then range. Check that the dashboard shows the four "full" numbers.</li>
+      <li>Sit up from a full lean: the wheels slow, stop, and resist a hand spin (held).</li>
+      <li>DISARM at each knob setting: the wheels stop, then spin freely (rider seated).</li>
+      <li>Unplug one VESC's CAN wire: "VESC silent", fast-blinking LED, both wheels braked until DISARM.</li>
+      <li>Unplug one seat sensor: that direction goes dead, and nothing moves on its own.</li>
+      <li>Remote: switch it off while driving → brakes. Switch it on with the stick held → nothing until you centre it. Stop button while in LEAN → brakes.</li>
+      <li>Lift off the seat while driving → brakes and holds.</li>
+      <li>Release a full turn: does it stop too sharply or too loosely? (Tune <code>TURN_DECEL_DEG_S2</code>.)</li>
+      <li>Assist: spin a wheel by hand. You should get one fading boost per push and no runaway.</li>
+      <li>Measure the track width at the floor and enter it.</li>
+    </ol>
+    <p class="cap mut">This branch changes motor behaviour: get Charles's OK before uploading it.</p>
+  </div>
+  <div class="card">
+    <h3>Open questions for the team</h3>
+    <ul class="q small">
+      <li><b>Coasting.</b> Should sitting up in LEAN glide, as in basketball, instead of brake? Should DISARM at speed let go instead of stopping at 0.38 g?</li>
+      <li><b>Spec B.</b> Stops meet 0.5 s only on knob 1. Should we brake harder, limit the top speed, or rewrite the spec?</li>
+      <li><b>Turn rate.</b> 160°/s vs. the spec's 200°/s. Is a 2.5 m/s² sideways limit right for a sports chair?</li>
+      <li><b>Reverse.</b> Is half speed, plus "back to neutral before reversing", right for Parker?</li>
+      <li><b>Neutral not saved.</b> Is pressing calibrate at every power-on OK?</li>
+      <li><b>Broken sensor wire.</b> It can't be detected with two-wire sensors. Add a resistor so an open wire reads at the rail and trips the fault?</li>
+      <li><b>Faults in Assist.</b> Only the boost drops and the chair isn't braked. OK?</li>
+      <li><b>Holding.</b> Is creep on a slope acceptable, or do we want a real parking brake?</li>
+    </ul>
+  </div>
+</div>
+
+<p class="small mut" style="margin-top:28px">Sources: <code>DriveController.cpp</code>, <code>motion/StopController.h</code>, <code>motion/MotionSmoother.h</code>, <code>driveModes/LeanDriveMode.cpp</code>, <code>PushAssist.h</code>, <code>RemoteDriveMode.cpp</code>, <code>drive_constants.h</code>, <code>watchdog.h</code>, <code>config/DriveSettings.cpp</code> on <code>council/firmware-9</code>, compared with <code>main.cpp</code> and the drive modes on <code>charles/dev-setup</code>. Host tests re-run on an exported copy of the branch: 12 of 12 suites passed.</p>
+</div>
+
+<script>
+(() => {
+const css = n => `var(--${n})`;
+const D = 3.7, HAND = 0.57, ROLL = 0.25, BR = 2.4; // m/s^2, m/s (illustrative)
+
+// ---------- tiny chart helper ----------
+function chart({w=300,h=130,x=[0,4],y=[0,2.4],xt=[0,1,2,3,4],xl=v=>v+'s',yt=[0,2],yl=v=>v===0?'0':v+' m/s',series=[],marks=[],tags=[],bands=[],ml=34,mb=18,mt=8,mr=40,extra=()=>''}) {
+  const X = v => ml + (v - x[0]) / (x[1] - x[0]) * (w - ml - mr);
+  const Y = v => mt + (1 - (v - y[0]) / (y[1] - y[0])) * (h - mt - mb);
+  let s = `<svg viewBox="0 0 ${w} ${h}" role="img">`;
+  for (const b of bands) s += `<rect x="${X(b.x0)}" y="${mt}" width="${X(b.x1)-X(b.x0)}" height="${h-mt-mb}" fill="${b.c}" opacity="${b.o??.12}"/>` + (b.t ? `<text x="${(X(b.x0)+X(b.x1))/2}" y="${mt+9}" text-anchor="middle">${b.t}</text>` : '');
+  for (const v of yt) s += `<line x1="${ml}" x2="${w-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${ml-4}" y="${Y(v)+3}" text-anchor="end">${yl(v)}</text>`;
+  for (const v of xt) s += `<text x="${X(v)}" y="${h-5}" text-anchor="middle">${xl(v)}</text>`;
+  for (const m of marks) s += `<line x1="${X(m.x)}" x2="${X(m.x)}" y1="${mt}" y2="${h-mb}" stroke="var(--mut)" stroke-dasharray="3 3"/>` + (m.t ? `<text x="${X(m.x)+3}" y="${h-mb-4}" style="fill:var(--fg)">${m.t}</text>` : '');
+  for (const se of series) {
+    const d = se.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(Math.max(y[0],Math.min(y[1],p[1]))).toFixed(1)).join(' ');
+    s += `<path d="${d}" fill="none" stroke="${se.c}" stroke-width="${se.wd??2}" ${se.dash?`stroke-dasharray="${se.dash}"`:''} stroke-linejoin="round" stroke-linecap="round" opacity="${se.o??1}"/>`;
+  }
+  for (const t of tags) s += `<text x="${t.x!=null?X(t.x):w-mr+4}" y="${Y(t.y)+3}" style="fill:${t.c};font-weight:700;font-size:${t.fs??9}px" ${t.a?`text-anchor="${t.a}"`:''}>${t.t}</text>`;
+  return s + extra(X,Y) + '</svg>';
+}
+// ---------- speed profiles ----------
+function sim(acc, v0=2, T=4, dt=.01) {
+  const pts=[]; let v=v0, st={};
+  for (let t=0; t<=T+1e-9; t+=dt) { pts.push([t,v]); const a=acc(t,v,st); v=v+a*dt; if (st.floor0 && v<0) v=0; }
+  return pts;
+}
+const coast = t0 => (t,v,s) => { s.floor0=1; return t<t0?0:(v>0?-ROLL:0); };
+const brake = t0 => (t,v,s) => { s.floor0=1; if(t<t0) return 0; const e=t-t0; return v>HAND ? -D*Math.min(1,e/.1) : (v>0?-BR:0); };
+const smooth = t0 => (t,v,s) => { s.floor0=1; if(t<t0) return 0; const e=t-t0; return v>HAND ? -D*Math.min(1,e/.35) : (v>0?-ROLL:0); };
+const smoothBrake = t0 => (t,v,s) => { s.floor0=1; if(t<t0) return 0; const e=t-t0; return v>HAND ? -D*Math.min(1,e/.35) : (v>0?-BR:0); };
+const keep = () => () => 0;
+const firstZero = pts => (pts.find(p=>p[1]<=0.001)||[4])[0];
+function heldLine(pts,end=4){ const z=firstZero(pts); return z<end ? [{pts:[[z,0],[end,0]],c:css('held'),wd:5,o:.85}] : []; }
+function freeLine(pts){ const z=firstZero(pts); return z<4 ? [{pts:[[z,0],[4,0]],c:css('free'),wd:2,dash:'1 4'}] : []; }
+
+// ---------- feature card: neutral ----------
+{
+  const t0=.6, b=sim(smooth(t0)), a=sim(smoothBrake(t0));
+  document.getElementById('c-neutral').innerHTML = chart({
+    series:[...freeLine(b),{pts:b,c:css('before')},...heldLine(a),{pts:a,c:css('after')}],
+    marks:[{x:t0,t:'sit up'}],
+    bands:[{x0:1.05,x1:3.2,c:css('before'),o:.07,t:'last bit: VESC decides'}],
+    tags:[{x:2.2,y:.75,t:'creeps / rolls',c:css('before')},{y:.2,t:'HELD',c:css('held')}]
+  });
+}
+
+// ---------- case cards ----------
+const T0=.5;
+const cases = [
+  {t:'Rider leaves the seat', m:'seat empty',
+   b:sim(coast(T0)), bEnd:'free', a:sim(brake(T0+.08)), aEnd:'held',
+   cb:'The motors just let go. The chair rolls on.', ca:'Noticed within 0.08 s. The chair brakes and stays put, so it can’t roll away empty.'},
+  {t:'DISARM pressed', m:'DISARM',
+   b:sim(coast(T0)), bEnd:'free', a:sim(brake(T0)), aEnd:'free',
+   cb:'The motors let go. The chair coasts.', ca:'Brakes to a stop, then lets go so the rider can push. Holding DISARM no longer slides into Assist.'},
+  {t:'Remote signal lost', m:'signal lost',
+   b:(()=>{const p=sim(smooth(T0+.1)); return p.map(([t,v])=>[t, t<2.6?v:Math.min(1.6,(t-2.6)*2.2)]);})(), bEnd:'free',
+   a:sim(brake(T0+.1)), aEnd:'held',
+   cb:'Slows down. When the signal comes back with the stick held, the chair drives off again.', ca:'Brakes and holds. Ignores the stick until it has been centred.', bNote:{x:2.65,y:1.75,t:'signal back'}},
+  {t:'A motor controller goes silent', m:'VESC silent',
+   b:sim(keep()), bEnd:'', a:sim(brake(T0+.08)), aEnd:'held',
+   cb:'Nobody notices. The other wheel keeps driving.', ca:'Fault within 0.08 s. Brakes without speed readings, and stays braked until DISARM is pressed.'},
+  {t:'Sensor wire shorts', m:'short',
+   b:sim(coast(T0)), bEnd:'free', a:sim(brake(T0+.02)), aEnd:'held',
+   cb:'In LEAN: motors let go, chair coasts. In Assist: not checked.', ca:'Fault within 4 readings (about 20 ms). Brakes and holds. In Assist, only the boost is dropped.'},
+  {t:'Sensor wire breaks', m:'wire breaks', y:[-1,1], v0:0, yt:[-.5,0,.5], yl:v=>v===0?'0':v,
+   b:(()=>sim((t,v)=>t<T0?0:(v>-.7?-1.2:0),0))(), bEnd:'', a:sim(keep(),0), aEnd:'',
+   cb:'A broken wire reads as “no load”, which looks like leaning the other way. The chair moves on its own.', ca:'Can’t be detected (two-wire sensors), but it can’t cause motion either. That direction just goes dead.'},
+  {t:'The Teensy freezes', m:'freeze',
+   b:(()=>sim((t,v,s)=>{s.floor0=1;return t<T0+1?0:-ROLL;}))(), bEnd:'', a:sim(brake(T0+.5)), aEnd:'held',
+   cb:'Frozen for good. The VESCs keep the last command for 1 s (their default), then coast.', ca:'The watchdog restarts the Teensy in 0.5 s. It comes up in DISARM, brakes, and holds. The first 0.5 s depends on VESC Tool settings.', bNote:{x:T0+1.05,y:2.2,t:'VESC timeout'}},
+  {t:'Power-on while rolling', m:'boot', v0:1.5,
+   b:sim(coast(T0),1.5), bEnd:'free', a:sim(brake(T0+.05),1.5), aEnd:'held',
+   cb:'Starts in whatever mode was saved. A rolling chair keeps rolling.', ca:'Always starts in DISARM. If the wheels are turning, it brakes.'},
+  {t:'Remote stop button, rider in LEAN', m:'stop btn',
+   b:sim(keep()), bEnd:'', a:sim(brake(T0)), aEnd:'held',
+   cb:'Ignored outside REMOTE mode.', ca:'Brakes and holds in every mode. No mode can be armed until the remote clears it.'},
+];
+const host = document.getElementById('cases');
+for (const c of cases) {
+  const y=c.y||[0,2.4], series=[];
+  if (c.bEnd==='free') series.push(...freeLine(c.b));
+  series.push({pts:c.b,c:css('before')});
+  if (c.aEnd==='held') series.push(...heldLine(c.a)); else if (c.aEnd==='free') series.push(...freeLine(c.a));
+  series.push({pts:c.a,c:css('after'),wd:2.2});
+  const tags=[];
+  const bl=c.b.at(-1)[1], al=c.a.at(-1)[1];
+  if (c.aEnd==='held') tags.push({y:Math.max(y[0],.12+y[0]*0)+(y[0]<0?.1:0),t:'HELD',c:css('held')});
+  else if (c.aEnd==='free') tags.push({y:.12,t:'free',c:css('free')});
+  if (Math.abs(bl-al)>.25 || !c.aEnd) tags.push({y:Math.min(y[1]-.1,bl+(bl<0?-.12:.12)),t:bl>.05?'rolling':bl<-.05?'moving':'',c:css('before')});
+  if (c.bNote) tags.push({x:c.bNote.x,y:c.bNote.y,t:c.bNote.t,c:css('before'),fs:8.5});
+  const div=document.createElement('div'); div.className='card';
+  div.innerHTML = `<h3>${c.t}</h3>` + chart({y, yt:c.yt||[0,2], yl:c.yl, series, marks:[{x:T0,t:c.m}], tags}) +
+    `<div class="cap"><div><i class="dot b"></i><span>${c.cb}</span></div><div><i class="dot a"></i><span>${c.ca}</span></div></div>`;
+  host.appendChild(div);
+}
+
+// ---------- stop anatomy ----------
+{
+  const v0=2.46, t0=.4, det=.08, a=sim(brake(t0+det),v0,3,.005);
+  const tRampEnd = (a.find(p=>p[0]>t0 && p[1]<=HAND)||[0])[0], tz=firstZero(a);
+  document.getElementById('c-anatomy').innerHTML = chart({w:640,h:190,x:[0,3],y:[0,2.7],xt:[0,.5,1,1.5,2,2.5,3],yt:[0,1,2],mr:20,ml:40,
+    bands:[{x0:t0,x1:t0+det,c:css('mut'),o:.18},{x0:t0+det,x1:t0+det+.1,c:css('after'),o:.12},
+           {x0:t0+det+.1,x1:tRampEnd,c:css('after'),o:.07},{x0:tRampEnd,x1:tz,c:css('before'),o:.12},
+           {x0:tz,x1:3,c:css('held'),o:.1,t:'held (or free if seated in DISARM)'}],
+    series:[...heldLine(a,3),{pts:a,c:css('after'),wd:2.5},{pts:[[0,HAND],[3,HAND]],c:css('mut'),wd:1,dash:'2 3',o:.6}],
+    marks:[{x:t0,t:''}],
+    extra:(X,Y)=>`<text x="${X(t0)-3}" y="${Y(2.0)}" text-anchor="end" style="fill:var(--fg)">event →</text>
+      <text x="${X(t0+det/2)}" y="${Y(.15)}" text-anchor="middle">detect</text>
+      <text x="${X(t0+det+.12)}" y="${Y(2.62)}" text-anchor="start">ease in 0.1 s</text>
+      <text x="${X(1.05)}" y="${Y(1.75)}" text-anchor="start" style="fill:var(--after)">speed ramp 3.7 m/s²</text>
+      <text x="${X((tRampEnd+tz)/2)}" y="${Y(.85)}" text-anchor="middle" style="fill:var(--before)">brake 15 A</text>
+      <text x="${X(2.98)}" y="${Y(HAND)-4}" text-anchor="end">0.57 m/s: below this the VESC's speed control stops working</text>`
+  });
+}
+
+// ---------- spec B bars ----------
+{
+  const vals=[.23,.56,.89,1.22], w=300,h=120,ml=44,mr=14,bw=18;
+  const X=v=>ml+v/1.4*(w-ml-mr);
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img">`;
+  vals.forEach((v,i)=>{const y=10+i*24; s+=`<text x="${ml-6}" y="${y+12}" text-anchor="end">knob ${i+1}</text><rect x="${ml}" y="${y}" width="${X(v)-ml}" height="${bw}" rx="3" fill="${v<=.5?'var(--held)':'var(--before)'}"/><text x="${X(v)+4}" y="${y+12}" style="fill:var(--fg)">${v} s</text>`;});
+  s+=`<line x1="${X(.5)}" x2="${X(.5)}" y1="4" y2="${h-12}" stroke="var(--fg)" stroke-dasharray="3 3"/><text x="${X(.5)}" y="${h-2}" text-anchor="middle" style="fill:var(--fg)">spec 0.5 s</text></svg>`;
+  document.getElementById('c-specb').innerHTML=s;
+}
+
+// ---------- steering ----------
+const TRACK=.6, MAXS=4.91744, knobV=k=>[.25,.5,.75,1][k]*MAXS;
+function oldTurn(v,Vk){ const s=v/Vk; if(s>1) return null;
+  const g = s<.293 ? .3388+(s/.293)*(.6447-.3388) : .6447+((s-.293)/.707)*(1.0458-.6447);
+  const L=Math.min(1,s+g), R=Math.max(-1,s-g); return (L-R)/2*Vk/(TRACK/2)*180/Math.PI; }
+const newTurn = v => Math.min(160, v>0 ? 2.5/v*180/Math.PI : 160);
+{
+  const w=300,h=150,ml=34,mb=20,mt=10,mr=10, Y=v=>mt+(1-v/340)*(h-mt-mb), gw=(w-ml-mr)/4;
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img">`;
+  [0,100,200,300].forEach(v=>s+=`<line x1="${ml}" x2="${w-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${ml-4}" y="${Y(v)+3}" text-anchor="end">${v}°/s</text>`);
+  for(let k=0;k<4;k++){ const o=oldTurn(0,knobV(k)), x0=ml+k*gw+gw*.18, bw=gw*.3;
+    s+=`<rect x="${x0}" y="${Y(o)}" width="${bw}" height="${Y(0)-Y(o)}" rx="2" fill="var(--before)"/><text x="${x0+bw/2}" y="${Y(o)-3}" text-anchor="middle">${Math.round(o)}</text>`;
+    s+=`<rect x="${x0+bw+2}" y="${Y(160)}" width="${bw}" height="${Y(0)-Y(160)}" rx="2" fill="var(--after)"/><text x="${x0+bw*1.5+2}" y="${Y(160)-3}" text-anchor="middle">160</text>`;
+    s+=`<text x="${ml+k*gw+gw/2}" y="${h-5}" text-anchor="middle">knob ${k+1}</text>`; }
+  document.getElementById('c-knob').innerHTML=s+'</svg>';
+}
+{
+  const pts=(f,a,b)=>{const r=[];for(let v=a;v<=b+1e-9;v+=.02){const q=f(v);if(q!=null)r.push([v,q]);}return r;};
+  const o2=pts(v=>oldTurn(v,knobV(1)),0,knobV(1)), o4=pts(v=>oldTurn(v,knobV(3)),0,knobV(3)), n=pts(newTurn,0,MAXS);
+  document.getElementById('c-turnspeed').innerHTML=chart({h:150,x:[0,5],y:[0,700],xt:[0,1,2,3,4,5],xl:v=>v+(v===5?' m/s':''),yt:[0,200,400,600],yl:v=>v+'°/s',mr:52,
+    series:[{pts:o4,c:css('before'),o:.55},{pts:o2,c:css('before')},{pts:n,c:css('after'),wd:2.5}],
+    tags:[{x:1.15,y:665,t:'old, knob 4',c:css('before')},{x:2.5,y:200,t:'old, knob 2',c:css('before')},{x:2.6,y:90,t:'new, any knob',c:css('after')}]});
+}
+{
+  const o=[],n=[];for(let t=0;t<=2;t+=.01){o.push([t,t<1.1?0:Math.min(160,(t-1.1)*500)]);n.push([t,t<.3?0:Math.min(160,(t-.3)*600)]);}
+  document.getElementById('c-accelturn').innerHTML=chart({x:[0,2],y:[0,180],xt:[0,.5,1,1.5,2],yt:[0,80,160],yl:v=>v+'°/s',
+    bands:[{x0:.3,x1:1.1,c:css('mut'),o:.12,t:'speeding up'}],marks:[{x:.3,t:'lean fwd + right'}],
+    series:[{pts:o,c:css('before')},{pts:n,c:css('after'),wd:2.2}],tags:[{y:150,t:'turn',c:css('after')}]});
+}
+{
+  // lean: fwd 0-1, back 1-2.6 (held), neutral 2.6-3, back 3-4.5
+  const o=[],n=[]; let vo=0,vn=0;
+  for(let t=0;t<=4.5;t+=.01){o.push([t,vo]);n.push([t,vn]);
+    const step=(v,tgt)=>v+Math.max(-D*.01,Math.min(D*.01*.6,tgt-v));
+    const lean=t<1?1:t<2.6?-1:t<3?0:-1;
+    vo=step(vo, lean>0?2:lean<0?-2:0);
+    vn=step(vn, lean>0?2:t<2.6?0:lean<0?-1:0);}
+  document.getElementById('c-reverse').innerHTML=chart({x:[0,4.5],y:[-2.2,2.4],xt:[0,1,2,3,4],yt:[-2,-1,0,1,2],yl:v=>v===0?'0':v,
+    bands:[{x0:0,x1:1,c:css('after'),o:.08,t:'fwd'},{x0:1,x1:2.6,c:css('before'),o:.08,t:'lean back (held)'},{x0:2.6,x1:3,c:css('mut'),o:.1},{x0:3,x1:4.5,c:css('before'),o:.08,t:'back'}],
+    series:[{pts:o,c:css('before')},{pts:n,c:css('after'),wd:2.2}],
+    tags:[{x:1.9,y:-2.15,t:'old: full reverse',c:css('before')},{x:3.2,y:-.75,t:'½ speed',c:css('after')},{x:1.6,y:.25,t:'stops',c:css('after')}]});
+}
+{
+  const o=[],n=[];for(let s=0;s>=-1.0001;s-=.005){const ob=s<-.9?0:s<-.3?-1:1;o.push([s,ob]);
+    const rb=Math.max(-1,Math.min(1,(s+.3)/.1)), hf=Math.max(0,Math.min(1,(s+.9)/.1)); n.push([s,rb*hf]);}
+  document.getElementById('c-flip').innerHTML=chart({x:[-1,0],y:[-1.2,1.2],xt:[-1,-.9,-.3,0],xl:v=>v,yt:[-1,0,1],yl:v=>v===1?'same':v===-1?'flipped':'off',ml:42,
+    series:[{pts:o,c:css('before')},{pts:n,c:css('after'),wd:2.2}],extra:(X,Y)=>`<text x="${X(-.5)}" y="${Y(-1.2)+14}" text-anchor="middle">back-lean speed command →</text>`,mb:26});
+}
+
+// ---------- lean math diagram ----------
+{
+  const w=420,h=150;
+  let s=`<svg viewBox="0 0 ${w} ${h}" role="img">`;
+  const box=(x,y,t,c)=>`<rect x="${x}" y="${y}" width="58" height="30" rx="6" fill="var(--soft)" stroke="${c||'var(--line)'}"/><text x="${x+29}" y="${y+19}" text-anchor="middle" style="fill:var(--fg);font-size:10px">${t}</text>`;
+  s+=`<text x="4" y="12" style="fill:var(--before);font-weight:700">BEFORE</text>`;
+  s+=box(4,18,'F × gain')+`<text x="68" y="37">−</text>`+box(78,18,'B × gain')+`<text x="142" y="37">÷</text>`+box(152,18,'avg reading')+`<text x="216" y="37">=</text>`+box(226,18,'speed','var(--before)');
+  s+=`<text x="290" y="30" style="font-size:9px">gains turned a heavier seat</text><text x="290" y="41" style="font-size:9px">into motion</text>`;
+  s+=`<text x="4" y="82" style="fill:var(--after);font-weight:700">AFTER</text>`;
+  s+=box(4,88,'F gained')+`<text x="68" y="107">−</text>`+box(78,88,'B gained')+`<text x="142" y="107">÷</text>`+box(152,88,'your range','var(--held)')+`<text x="216" y="107">=</text>`+box(226,88,'speed','var(--after)');
+  s+=`<text x="290" y="100" style="font-size:9px">gained = load above neutral,</text><text x="290" y="111" style="font-size:9px">never below 0</text>`;
+  s+=`<text x="4" y="140" style="font-size:9px">same for turning (right − left); then deadband, then the response curve</text>`;
+  document.getElementById('c-math').innerHTML=s+'</svg>';
+}
+
+// ---------- seat hysteresis ----------
+{
+  const p=[];for(let t=0;t<=6;t+=.02){let v=t<1?20:t<1.3?20+(t-1)/.3*310:330; if(t>2.4&&t<2.9) v=330-170*Math.sin((t-2.4)/.5*Math.PI); if(t>3.6&&t<3.85) v=330-180*Math.sin((t-3.6)/.25*Math.PI); if(t>5) v=Math.max(20,330-(t-5)*900); v+=8*Math.sin(t*17); p.push([t,v]);}
+  document.getElementById('c-seat').innerHTML=chart({x:[0,6],y:[0,380],xt:[0,2,4,6],yt:[0,120,200,330],yl:v=>v,
+    bands:[{x0:2.55,x1:2.75,c:css('before'),o:.25},{x0:3.67,x1:3.78,c:css('before'),o:.25}],
+    series:[{pts:p,c:css('fg'),wd:1.6},{pts:[[0,200],[6,200]],c:css('after'),wd:1.2,dash:'4 3'},{pts:[[0,120],[6,120]],c:css('after'),wd:1.2,dash:'1 3'}],
+    tags:[{y:205,t:'on 200',c:css('after')},{y:118,t:'off 120',c:css('after')},{x:2.65,y:360,t:'old: "empty!"',c:css('before'),a:'middle'}]});
+}
+
+// ---------- assist ----------
+{
+  const o=[],n=[],bo=[];let vo=0,vn=0;
+  for(let t=0;t<=5;t+=.01){o.push([t,vo]);n.push([t,vn]);
+    const push=(t>.5&&t<.8)||(t>2.6&&t<2.9);
+    vo+= (push?2:0)*.01 + (vo>.05? Math.min(1.1*vo,2.46-vo>0?1.1*vo:0)*.01 - ROLL*.01:0); vo=Math.min(vo,2.46);
+    const boost=(t>.9&&t<1.6)?(1-(t-.9)/.7)*1.0:(t>3&&t<3.7)?(1-(t-3)/.7)*1.0:0; bo.push([t,boost*.5]);
+    vn+= (push?2:0)*.01 + boost*.01 - (vn>0?ROLL*.01:0); vn=Math.max(0,vn);}
+  document.getElementById('c-assist').innerHTML=chart({x:[0,5],y:[0,2.6],xt:[0,1,2,3,4,5],yt:[0,1,2],
+    bands:[{x0:.5,x1:.8,c:css('mut'),o:.18},{x0:2.6,x1:2.9,c:css('mut'),o:.18},{x0:.9,x1:1.6,c:css('held'),o:.12},{x0:3,x1:3.7,c:css('held'),o:.12}],
+    series:[{pts:o,c:css('before')},{pts:n,c:css('after'),wd:2.2}],
+    tags:[{x:.4,y:2.4,t:'push',c:css('mut')},{x:1.0,y:.25,t:'boost',c:css('held')},{y:2.3,t:'runs away',c:css('before')},{y:.5,t:'coasts',c:css('after')}]});
+}
+})();
+</script>
+</body>
+</html>

@@ -18,6 +18,7 @@ const uint32_t VESC_CAN_BAUD = 500000;
 const uint8_t VESC_SET_DUTY = 0;    // int32 duty * 100000
 const uint8_t VESC_SET_ERPM = 3;    // int32 erpm, unscaled.
 const uint8_t VESC_SET_CURRENT = 1; // int32 amps * 1000
+const uint8_t VESC_SET_CURRENT_BRAKE = 2; // int32 amps * 1000; brakes toward zero speed, never reverses
 constexpr float VESC_ERPM_PER_WHEEL_RPM = 14.5454f * 4.0f;
 
 inline void vescBegin(VescBus &bus)
@@ -61,6 +62,11 @@ inline void vescSetWheelRPM(VescBus &bus, uint8_t id, int32_t rpm)
   // 14 is the gear and belt reduction and 8 is because its an 8 pole motor and for some reason you need to do half that
   //  and the vesc takes erpm so you have to account for that.
   vescSend(bus, id, VESC_SET_ERPM, (int32_t)lroundf(rpm * VESC_ERPM_PER_WHEEL_RPM));
+}
+
+inline void vescSetBrakeCurrent(VescBus &bus, uint8_t id, float amps)
+{
+  vescSend(bus, id, VESC_SET_CURRENT_BRAKE, (int32_t)lroundf(fabsf(amps) * 1000.0f));
 }
 
 inline void vescSetCurrent(VescBus &bus, uint8_t id, float amps)

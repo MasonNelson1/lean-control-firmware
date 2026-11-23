@@ -19,6 +19,30 @@
 
 using namespace common;
 
+// Safety brake (Charles, court 2026-11-22): an AUTOMATIC disarm (sensor fault,
+// CoP jump, empty seat) used to send zero current, so a moving chair coasted while
+// the rider thought he was still in LEAN. Now an automatic disarm latches this
+// brake: the DISARM LED blinks and both VESCs get brake current (which slows the
+// wheel toward zero and can't reverse it) until the rider presses DISARM (then the
+// wheels are free, as before) or selects another mode.
+static bool safetyBrake = false;
+constexpr float SAFETY_BRAKE_MOVING_A = 15.0f; // VESC braking current limit is 20 A
+constexpr float SAFETY_BRAKE_HOLD_A = 5.0f;    // once both wheels are below SAFETY_BRAKE_STILL_RPM
+constexpr float SAFETY_BRAKE_STILL_RPM = 3.0f;
+static void latchSafetyBrake(const char *why)
+{
+    if (!safetyBrake)
+        telemetry::Telemetry::logf("DBG EVT %lu brake-latch on why=%s\n", static_cast<unsigned long>(millis()), why);
+    safetyBrake = true;
+}
+static void releaseSafetyBrake(const char *why)
+{
+    if (safetyBrake)
+        telemetry::Telemetry::logf("DBG EVT %lu brake-latch off why=%s\n", static_cast<unsigned long>(millis()), why);
+    safetyBrake = false;
+}
+
+
 // Runtime knob selections, set by updateKnobs(). Start at the gentlest
 // position until the knobs are read in setup().
 knobs::RotarySwitch speedKnob;
@@ -321,6 +345,8 @@ static void updateModeInputs()
     input.remote.released = remoteModeButton.isReleased();
     input.disarm.pressed = disarmModeButton.isPressed();
     input.disarm.released = disarmModeButton.isReleased();
+    if (input.disarm.pressed && modeState.current() == DISARM)
+        releaseSafetyBrake("disarm-press");
     input.calibrate.pressed = calibrateButton.isPressed();
     if (input.calibrate.pressed)
         calibrationPressedAt = millis();
@@ -371,7 +397,8 @@ static void updateModeLEDs()
         break;
     case DISARM:
         digitalWrite(common::PIN_LEAN_LED, LOW);
-        digitalWrite(common::PIN_DISARM_LED, HIGH);
+        // Blinking = the safety brake is holding the wheels; steady = wheels free.
+        digitalWrite(common::PIN_DISARM_LED, safetyBrake ? ((millis() / 200) % 2 ? HIGH : LOW) : HIGH);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
         digitalWrite(common::PIN_CAL_LED, LOW);
         break;
@@ -402,6 +429,10 @@ static void applySeatedLatch()
     }
     if (transition.resetLean)
         leanMode.reset();
+    if (transition.seatDisarm)
+        latchSafetyBrake("seat-empty");
+    if (modeState.current() != DISARM)
+        releaseSafetyBrake("mode");
     telemetry::Telemetry::logf("Mode: %s\n", modeName(modeState.current()));
     telemetry::Telemetry::logf("DBG EVT %lu mode %s sel=%s why=%s\n", static_cast<unsigned long>(millis()),
                                modeName(modeState.current()), modeName(modeState.selected()),
@@ -434,6 +465,7 @@ static void updateDrive()
         const auto &raw = leanMode.getRawReadings();
         telemetry::Telemetry::logf("DBG EVT %lu rail-disarm raw=%d/%d/%d/%d\n", static_cast<unsigned long>(now),
                                    raw[0], raw[1], raw[2], raw[3]);
+        latchSafetyBrake("rail");
         modeState.requestDisarm();
     }
     applySeatedLatch();
@@ -481,6 +513,7 @@ static void updateDrive()
             const auto &raw = leanMode.getRawReadings();
             telemetry::Telemetry::logf("DBG EVT %lu cop-jump raw=%d/%d/%d/%d\n", static_cast<unsigned long>(now),
                                        raw[0], raw[1], raw[2], raw[3]);
+            latchSafetyBrake("cop-jump");
             modeState.requestDisarm();
         }
         break;
@@ -506,6 +539,14 @@ static void updateDrive()
     if (modeState.current() == LEAN || modeState.current() == REMOTE)
     {
         setMotorPower(targets.left, targets.right, dt);
+    }
+    else if (modeState.current() == DISARM && safetyBrake)
+    {
+        const bool still = fabsf(measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM) < SAFETY_BRAKE_STILL_RPM &&
+                           fabsf(measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM) < SAFETY_BRAKE_STILL_RPM;
+        const float amps = still ? SAFETY_BRAKE_HOLD_A : SAFETY_BRAKE_MOVING_A;
+        vescSetBrakeCurrent(can1, motors.leftId, amps);
+        vescSetBrakeCurrent(can1, motors.rightId, amps);
     }
     else if (modeState.current() == DISARM)
     {

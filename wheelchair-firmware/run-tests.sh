@@ -62,6 +62,12 @@ run_native() {
     # vesc_stubs supplies Arduino.h (millis, Serial1) and FlexCAN_T4.h (records frames).
     native vesc_monitor        -I tests/native/vesc_stubs -I tests/native -I src tests/native/vesc_monitor_test.cpp \
                                src/telemetry/Telemetry.cpp src/telemetry/TelemetryFrame.cpp
+    native vesc_protocol       -I src tests/native/vesc_protocol_test.cpp
+    native motion              -I src tests/native/motion_test.cpp
+    native drive_controller    "${LEAN_INC[@]}" tests/native/drive_controller_test.cpp \
+                               src/DriveController.cpp src/ModeStateMachine.cpp \
+                               "${LEAN_SRC[@]}" src/driveModes/RemoteDriveMode.cpp \
+                               "${SETTINGS_SRC[@]}"
 }
 
 run_viewer() {

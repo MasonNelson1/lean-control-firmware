@@ -2,6 +2,7 @@
 // LeanDriveMode on the corner layout, and switching between layouts.
 // Compiles the actual LeanDriveMode, lean_layout and config sources; no motors.
 #include "driveModes/LeanDriveMode.h"
+#include "lean_targets.h"
 #include "driveModes/lean_layout.h"
 #include "config/DriveSettings.h"
 #include "telemetry/Telemetry.h"
@@ -203,7 +204,7 @@ namespace
             for (size_t i = 0; i < lean::Channels; ++i)
                 now[i] = from[i] + (raw[i] - from[i]) * step / Steps;
             sensors(now);
-            out = mode.getTargets();
+            out = getTargets(mode);
             assert(!mode.centreOfPressureJumped());
         }
         lastRaw = raw;
@@ -222,7 +223,7 @@ namespace
         MotorTargets t;
 
         sensors(ActiveNeutral);
-        assert(mode.getTargets().left == 0 && mode.getTelemetry().stopped); // calibration gate
+        assert(getTargets(mode).left == 0 && mode.getTelemetry().stopped); // calibration gate
         mode.calibrate();
         assert(mode.getNeutral().valid);
         assert(near(mode.getNeutral().at.x, -0.2976f) && near(mode.getNeutral().at.y, -1.6349f));
@@ -235,14 +236,18 @@ namespace
         assert(mode.getTelemetry().front == 647 && mode.getTelemetry().back == 458);
         assert(mode.getTelemetry().left == 230 && mode.getTelemetry().right == 390);
 
+        // council-corner: cmd (speed, turn) is unchanged and still matches
+        // replay_cop.py. t is now speed ± turn with no "Lean turn mixing" curve
+        // (DriveController turns turn into a rate), so the wheel shares differ
+        // from dev-setup's.
         cmd = drive(mode, Forward, &t);
-        assert(near(cmd.speed, 1) && near(cmd.turn, 0.06865f) && near(t.left, 1) && near(t.right, 0.92820f));
+        assert(near(cmd.speed, 1) && near(cmd.turn, 0.06865f) && near(t.left, 1) && near(t.right, 0.93135f));
         cmd = drive(mode, BackTouch, &t);
         assert(near(cmd.speed, -0.99062f) && cmd.turn == 0 && near(t.left, -0.99062f) && near(t.right, -0.99062f));
         cmd = drive(mode, Right, &t);
-        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, 1) && near(t.left, 0.34146f) && near(t.right, -0.46236f));
+        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, 1) && near(t.left, 0.93955f) && near(t.right, -1));
         cmd = drive(mode, Left, &t);
-        assert(cmd.speed == 0 && near(cmd.turn, -1) && near(t.left, -0.33880f) && near(t.right, 0.33880f));
+        assert(cmd.speed == 0 && near(cmd.turn, -1) && near(t.left, -1) && near(t.right, 1));
         // Relaxing into passive neutral is 0.74" forward of active neutral: a slow creep.
         cmd = drive(mode, PassiveNeutral, &t);
         assert(near(cmd.speed, 0.13933f) && cmd.turn == 0);
@@ -347,7 +352,7 @@ namespace
         for (const auto &raw : {Right, Forward, Left, BackTouch, ActiveNeutral})
             step(raw, 1400);
         assert(mode.getTelemetry().stopped);
-        assert(mode.getTargetsFromSample().left == 0);
+        assert(getTargetsFromSample(mode).left == 0);
         assert(step(ActiveNeutral, 1500, false));
         const auto reach = mode.activeReach();
         // Each direction's furthest travel from neutral (CoP at hold averages).

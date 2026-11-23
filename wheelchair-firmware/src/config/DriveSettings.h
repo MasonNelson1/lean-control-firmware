@@ -18,8 +18,10 @@ namespace settings
     config::Registry &registry();
     extern config::Persistence persistence;
     extern config::Protocol protocol;
+    // Called before each EEPROM byte is written. main.cpp points it at the
+    // watchdog so a long save cannot reset the Teensy halfway through.
+    extern void (*storageActivity)();
 
-    extern config::EnumField<common::mode, 4> defaultMode;
     extern config::ConfigField<float> deadband;
     extern config::ConfigField<float> frontGain, rearGain, leftGain, rightGain; // plus layout only
 
@@ -30,10 +32,12 @@ namespace settings
     // Corner layout: per-channel empty-plate baseline (raw counts) and force gain.
     extern config::ConfigField<uint16_t> emptyPlateF, emptyPlateB, emptyPlateL, emptyPlateR;
     extern config::ConfigField<float> cornerGainF, cornerGainB, cornerGainL, cornerGainR;
+    // Allowed exponents of the two lean response curves: 1 is a straight line.
+    constexpr float LeanCurveExponentMin = 1.0f, LeanCurveExponentMax = 4.0f;
+    extern config::ConfigField<float> maxTurnRate, maxLateralAccel, trackWidth, vescMinSpeed;
     extern config::ProfileField<2> leanForewardBackResponse;
     extern config::ProfileField<2> leanSideToSideResponse;
     extern config::ProfileField<2> assistResponse;
-    extern config::ProfileField<6> leanTurnMix;
     extern config::ConfigField<float> assistMaxBoostAmps, assistSlowdownRPM, assistSlowdownBoostFraction;
 
     extern config::ConfigField<unsigned long> controllerTimeout, buttonDebounce;

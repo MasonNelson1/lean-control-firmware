@@ -281,67 +281,57 @@ If clipping actually changes the candidate RPM, the method clears acceleration, 
 
 When a lower speed selection is below the existing output speed, this final clip may produce an immediate output change larger than the normal acceleration/jerk limits. The speed cap has priority. Likewise, resets and invalid-input returns bypass the smoothing limits. Normal requests can overshoot their target within the absolute output speed bounds because the stored acceleration takes time to reverse.
 
-## Sensor-to-motor pipeline in `simple_drive.cpp`
+## Where the smoother sits in the firmware
 
-The controller receives a wheel target after the following processing:
+`RPMSetpointPID` smooths one number: the chair's forward wheel speed (the mean
+of the two wheels). `src/motion/MotionSmoother.h` owns one instance for that
+and limits rotation (half the difference between the wheels) on a separate
+axis, then turns the pair back into left and right wheel RPM. Smoothing each
+wheel on its own, as the firmware used to, made steering disappear while the
+chair accelerated.
 
-1. Read F/B/L/R sensors, subtract calibrated floors and clamp negatives to zero.
-2. Apply the configured sensor gains without per-sensor saturation caps.
-3. Normalize `F ? B` to speed and `R ? L` to turn by dividing both differences by `userWeightEstimate`, then clamp each to `[-1, 1]`. A nonpositive weight estimate produces zero normalized input.
-4. Set a component to zero when its magnitude is strictly less than `DEADBAND = 0.05`.
-5. On the scheduled update, apply the power response separately to speed and turn.
-6. Mix shaped components into left/right normalized demands, clip each demand and convert to wheel RPM.
-7. Update each wheel's independent PID and send the resulting command to its VESC.
+Each control tick, `DriveController::tick()` (`src/DriveController.cpp`):
 
-### Input response curve
+1. Samples the four seat sensors (`LeanDriveMode::sample`), checks for a failed
+   sensor or a silent VESC, and applies the seat latch.
+2. Gets a command from the active mode. LEAN gives a shaped speed and turn,
+   each -1 to 1 (`LeanDriveMode.h` explains the lean math). REMOTE gives two
+   wheel shares.
+3. Converts it to a forward target and a turn target in wheel RPM. LEAN turn
+   is a rate: full lean is the "Full-lean turn rate" setting in deg/s on every
+   speed-knob position, reduced at speed by the sideways-acceleration limit.
+4. Runs `MotionSmoother::update` and keeps each wheel command within
+   `MAX_RPM_COMMAND_DIFF` of that wheel's measured speed.
 
-The configurable knee is currently `(0.5, 0.25)`:
+The speed limit passed to the smoother rises at once when the speed knob is
+turned up and falls no faster than `MAX_ACCEL`, so turning the knob down while
+moving never triggers the smoother's immediate speed-limit clip.
 
-```text
-p = log(INPUT_RESPONSE_KNEE_OUTPUT) / log(INPUT_RESPONSE_KNEE_INPUT)
-shaped(x) = sign(x) × abs(x)^p
-```
+One rule was added to the smoother itself: when the command is moving away
+from the request (the rider asked for less while it was still speeding up),
+that motion ends on the next update instead of fading out under the jerk
+limit. The jerk limit still shapes how acceleration and braking build up.
 
-The exponent is calculated once outside the loop. The current exponent is 2. The mapping is odd-symmetric, keeps zero and full scale, and gives ±0.25 output at ±0.5 input. Both speed and turn use the same knee.
+### Engaging and stopping
 
-Compile-time assertions require `0 < kneeInput < 1` and `0 < kneeOutput <= kneeInput`. Equal coordinates give a linear response; output below input reduces small-input sensitivity.
+Engaging drive while the chair rolls seeds the smoother with the measured
+wheel speeds (`seed()`), so the command does not restart at zero.
 
-The deadband is not remapped to a new zero-to-one interval. For example, an input just below 0.05 becomes zero; an input exactly 0.05 survives the strict deadband check and maps to 0.0025 with the default curve. Changing the response curve changes the target shape, not the PID dynamics.
-
-### Wheel mixing and current runtime selections
-
-```cpp
-speedLimitMS = knobs::slewDown(speedLimitMS, userMaxSpeedMS, MAX_ACCEL, dt);
-leftTargetRPM  = constrain(left,  -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
-
-leftRpms  = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
-rightRpms = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, userMaxAccelMS2);
-```
-
-Positive speed requests both wheels forward. Positive turn increases the left target relative to the right. The components are normalized translation/turn commands, not physical velocity and yaw-rate measurements.
-
-`userMaxSpeedMS` and `userMaxAccelMS2` come from the speed and acceleration knobs (`src/drive_knobs.h`, sampled every 20 ms in `main.cpp`): 25/50/75/100 % of `MAX_SPEED` / `MAX_ACCEL`, slowest on a knob fault. Targets are rescaled, so full input always means the selected top speed. The speed limit passed to the smoother rises immediately but falls no faster than `MAX_ACCEL`, so turning the speed knob down while moving never triggers the controller's immediate speed-limit clip.
-
-`maxAccelMS2` limits only speeding up (|RPM| increasing). Braking toward zero always uses the tuned limits capped at `MAX_ACCEL`, so a gentle acceleration setting never lengthens a stop.
-
-The controller itself leaves `requestedRPM` unclipped. The caller's normalized `speed ± turn` clipping is a separate wheel-mixing operation.
+When drive is taken away (DISARM, empty seat, sensor fault, silent VESC, lost
+remote, calibration started while moving) the smoother is bypassed.
+`src/motion/StopController.h` ramps both wheel commands to zero at
+`STOP_DECEL`, finishes on brake current, then releases the motors. The
+constants and the reasoning behind them are in `src/drive_constants.h`.
 
 ### Timing
 
-The caller uses `millis()` and a 5 ms minimum interval before the PID and CAN section. It then passes the fixed shared `dt = 0.005` seconds. The gate does not guarantee exactly 5 ms between calls: blocking work or scheduling delays can make an interval longer. The PID does not detect that discrepancy. If a future caller supplies measured intervals, they must be in seconds; the derivative history supports varying intervals.
+`main.cpp` runs the tick once per control period and passes the measured time
+since the previous tick as `dt`, capped at four periods.
 
-### Stop behavior
+### VESC units
 
-When `stopped` is true, `simple_drive.cpp` sets both output RPMs to zero, resets both controller instances and sends zero to both VESCs. It bypasses the normal smoothing calculation. On restart, the next valid PID update starts from zero.
-
-The current condition is `if (stopped /*|| !seated*/)`: the calculated `seated` value is not part of the active stop condition. The PID helper does not implement occupancy, CAN freshness or other application-level interlocks.
-
-### VESC units and logging
-
-`vescSetWheelRPM` currently accepts an `int32_t` wheel RPM argument. Passing the controller's float output therefore truncates fractional wheel RPM before conversion to electrical RPM. The helper then multiplies by `14.5454 × 4` and rounds the electrical RPM for the CAN payload. This conversion belongs to the VESC helper, not the PID.
-
-The current serial printout reports wheel RPM commands rounded to whole RPM and separately prints VESC status ERPM. Those values use different units; neither serial rounding nor the CAN helper's integer input should be mistaken for extra PID filtering. The printout occurs every 20 scheduled passes, approximately every 100 ms at the nominal update rate. The input speed/turn values printed are the values after the response curve.
+`vescSetWheelRPM` takes a float wheel RPM, multiplies by `14.5454 x 4` and
+rounds the electrical RPM for the CAN payload.
 
 ## Tuning interpretation
 

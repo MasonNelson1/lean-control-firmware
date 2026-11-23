@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <initializer_list>
 
 using namespace common;
 using SM = ModeStateMachine;
@@ -45,9 +46,7 @@ int main()
         assert(sm.selected() == REMOTE);
         in.lean.pressed = false;
         in.lean.edge = true;
-        assert(sm.needsSeatSample(in));
         sm.update(in, 20);
-        assert(sm.needsSeatSample(seated()));
         sm.update(press(LEAN), 40);
         assert(sm.selected() == LEAN && sm.current() == REMOTE);
         const auto t = sm.applySeat(true, 40);
@@ -91,8 +90,94 @@ int main()
         sm.begin(REMOTE);
         assert(!sm.requiresSeat() && !sm.applySeat(false, 100).changed);
     }
+    { // A DISARM press that stops a drive mode never becomes Assist, however long it is held.
+        for (mode driving : {LEAN, REMOTE})
+        {
+            SM sm;
+            sm.begin(driving);
+            sm.applySeat(true, 0);
+            sm.update(press(DISARM), 100);
+            assert(sm.selected() == DISARM);
+            sm.applySeat(true, 105);
+            for (uint32_t t = 110; t < 5000; t += 5)
+                assert(!sm.update(seated(), t).resetAssist);
+            assert(sm.selected() == DISARM && sm.current() == DISARM);
+            // Let go and press again, now from DISARM: this hold does reach Assist.
+            auto in = seated();
+            in.disarm.released = true;
+            sm.update(in, 5000);
+            sm.update(press(DISARM), 5100);
+            assert(!sm.update(seated(), 5599).resetAssist);
+            assert(sm.update(seated(), 5600).resetAssist && sm.selected() == ASSIST);
+        }
+        // Selected DISARM but the control tick has not applied it yet: still not an Assist press.
+        SM early;
+        early.begin(REMOTE);
+        early.update(press(DISARM), 10);
+        auto in = seated();
+        in.disarm.released = true;
+        early.update(in, 20);
+        early.update(press(DISARM), 30); // current mode is still REMOTE
+        assert(!early.update(seated(), 1000).resetAssist && early.selected() == DISARM);
+    }
+    { // After a drive mode is stopped, a second DISARM press within a second cannot start Assist.
+        for (uint32_t secondPress : {400u, 105u + SM::AssistArmDelayMs - 1, 105u + SM::AssistArmDelayMs})
+        {
+            SM sm;
+            sm.begin(LEAN);
+            sm.applySeat(true, 0);
+            sm.update(press(DISARM), 100);
+            sm.applySeat(true, 105); // the control tick applies the stop
+            auto in = seated();
+            in.disarm.released = true;
+            sm.update(in, 300);
+            sm.update(press(DISARM), secondPress); // pressed again and held
+            bool assist = false;
+            for (uint32_t t = secondPress + 5; t < secondPress + 4000; t += 5)
+                assist = assist || sm.update(seated(), t).resetAssist;
+            // Only a press that comes a full second after the stop can become Assist.
+            assert(assist == (secondPress >= 105 + SM::AssistArmDelayMs));
+            assert(sm.selected() == (assist ? ASSIST : DISARM));
+        }
+    }
+    { // A DISARM tap while disarmed with nobody seated is the free-wheel gesture, and only then.
+        SM sm;
+        sm.begin(DISARM);
+        SM::Inputs in; // unseated
+        in.disarm.edge = true;
+        assert(!sm.update(in, 10).toggleFreewheel);
+        in = {};
+        in.disarm.pressed = true;
+        assert(sm.update(in, 60).toggleFreewheel);
+        assert(!sm.update({}, 70).toggleFreewheel && sm.selected() == DISARM);
+        assert(!sm.update({}, 2000).resetAssist); // and never Assist with an empty seat
+        // Seated: not the gesture (that press is the Assist hold).
+        sm.begin(DISARM);
+        assert(!sm.update(press(DISARM), 100).toggleFreewheel);
+        // The press that disarms REMOTE with an empty seat is a stop, not the gesture.
+        sm.begin(REMOTE);
+        in = {};
+        in.disarm.edge = in.disarm.pressed = true;
+        assert(!sm.update(in, 100).toggleFreewheel && sm.selected() == DISARM);
+    }
+    { // An empty seat ends Assist for good: it does not come back when someone sits down.
+        SM sm;
+        sm.begin(DISARM);
+        sm.update(press(DISARM), 100);
+        assert(sm.update(seated(), 600).resetAssist);
+        sm.applySeat(true, 600);
+        assert(sm.current() == ASSIST);
+        const auto loss = sm.applySeat(false, 700);
+        assert(loss.changed && loss.seatDisarm && sm.current() == DISARM && sm.selected() == DISARM);
+        assert(!sm.applySeat(true, 800).changed && sm.current() == DISARM);
+        // LEAN keeps its intent, as before.
+        sm.begin(LEAN);
+        sm.applySeat(false, 900);
+        assert(sm.selected() == LEAN && sm.applySeat(true, 1000).resetLean);
+    }
     { // DISARM wins simultaneous presses; Assist requires the full 500 ms.
         SM sm;
+        sm.begin(DISARM);
         auto in = press(DISARM);
         in.lean = in.remote = in.disarm;
         sm.update(in, 100);
@@ -110,6 +195,7 @@ int main()
     }
     { // Releasing DISARM or losing the seat cancels Assist hold.
         SM sm;
+        sm.begin(DISARM);
         sm.update(press(DISARM), 100);
         auto in = seated();
         in.disarm.released = true;
@@ -175,6 +261,7 @@ int main()
     }
     { // Assist and profile hold arithmetic survives millis() rollover.
         SM sm;
+        sm.begin(DISARM);
         const uint32_t start = UINT32_MAX - 100;
         sm.update(press(DISARM), start);
         assert(!sm.update(seated(), start + 499).resetAssist);
@@ -195,9 +282,8 @@ int main()
         in.lean.pressed = true;
         sm.update(in, 30);
         assert(sm.selected() == REMOTE);
-        assert(!sm.needsSeatSample(seated()));
     }
-    { // Calibration discards even partly debounced mode presses and profile holds.
+    { // Calibration discards even partly debounced Lean/Remote presses and profile holds.
         SM sm;
         sm.begin(LEAN);
         auto in = seated();
@@ -210,15 +296,34 @@ int main()
         in.remote.pressed = true;
         sm.update(in, 60);
         assert(sm.selected() == LEAN);
-        in = press(DISARM);
-        in.calibrationActive = true;
-        sm.update(in, 70);
-        sm.update(seated(), 1000);
-        assert(sm.selected() == LEAN);
         const auto seatLoss = sm.applySeat(false, 1001);
         assert(seatLoss.changed && seatLoss.seatDisarm);
         sm.update(press(REMOTE), 1100);
         assert(sm.selected() == REMOTE);
+    }
+    { // DISARM works during calibration, and never starts the Assist hold from there.
+        SM sm;
+        sm.begin(LEAN);
+        sm.applySeat(true, 0);
+        auto in = seated();
+        in.calibrationActive = true;
+        in.disarm.edge = true; // ISR edge first, debounced press on a later loop
+        sm.update(in, 10);
+        assert(sm.selected() == LEAN);
+        in = seated();
+        in.calibrationActive = true;
+        in.disarm.pressed = true;
+        sm.update(in, 60);
+        assert(sm.selected() == DISARM);
+        assert(sm.applySeat(true, 60).changed && sm.current() == DISARM);
+        assert(!sm.update(seated(), 1000).resetAssist && sm.selected() == DISARM);
+        // A debounced press with no ISR edge behind it still cannot switch.
+        sm.begin(LEAN);
+        in = seated();
+        in.calibrationActive = true;
+        in.disarm.pressed = true;
+        sm.update(in, 2000);
+        assert(sm.selected() == LEAN);
     }
     { // A completed dynamic calibration disarms until a fresh mode selection.
         SM sm;
@@ -237,6 +342,7 @@ int main()
     }
     { // A programmatic disarm clears an earlier Assist hold.
         SM sm;
+        sm.begin(DISARM);
         sm.update(press(DISARM), 10);
         sm.requestDisarm();
         assert(!sm.update(seated(), 1000).resetAssist);

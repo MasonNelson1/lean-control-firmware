@@ -3,6 +3,7 @@
 // rail thresholds, calibration averaging and the automatic empty-seat zero.
 // Compiles the actual LeanDriveMode, lean_layout and config sources; no motors.
 #include "driveModes/LeanDriveMode.h"
+#include "lean_targets.h"
 #include "driveModes/lean_layout.h"
 #include "config/DriveSettings.h"
 #include "telemetry/Telemetry.h"
@@ -87,7 +88,7 @@ namespace
             for (size_t i = 0; i < lean::Channels; ++i)
                 now[i] = from[i] + (raw[i] - from[i]) * step / 40;
             sensors(now);
-            out = mode.getTargets();
+            out = getTargets(mode);
             assert(!mode.centreOfPressureJumped());
         }
         lastRaw = raw;
@@ -285,7 +286,7 @@ namespace
             assert(logged(lean::CornerNames[dead]));
             assert(mode.calibrationLEDOn(5000)); // LED says "not calibrated"
             sensors(Forward);
-            const auto t = mode.getTargets();
+            const auto t = getTargets(mode);
             assert(t.left == 0 && t.right == 0 && mode.getTelemetry().stopped);
         }
         // A merely light corner is fine: E9 neutral's lightest carries 230 of 1,725.
@@ -311,11 +312,11 @@ namespace
             raw[lean::F] = AmpOffset; // back-left
             raw[lean::B] = AmpOffset; // back-right
             sensors(raw);
-            const auto t = mode.getTargets();
+            const auto t = getTargets(mode);
             assert(mode.centreOfPressureJumped());
             assert(t.left == 0 && t.right == 0 && mode.getTelemetry().stopped);
             // The flag is per tick; the disarm in main.cpp is what sticks.
-            mode.getTargets();
+            getTargets(mode);
             assert(!mode.centreOfPressureJumped());
         }
         // Known limit now: a single dead channel steps the CoP 0.22-1.96", under the
@@ -326,7 +327,7 @@ namespace
         lean::Counts raw = ActiveNeutral;
         raw[lean::L] = AmpOffset;
         sensors(raw);
-        mode.getTargets();
+        getTargets(mode);
         assert(!mode.centreOfPressureJumped());
 
         // A brisk healthy lean (neutral to full forward in 100 ms, ≈20 in/s, twice
@@ -339,7 +340,7 @@ namespace
             for (size_t i = 0; i < lean::Channels; ++i)
                 now[i] = ActiveNeutral[i] + (Forward[i] - ActiveNeutral[i]) * step / 20;
             sensors(now);
-            mode.getTargets();
+            getTargets(mode);
             assert(!mode.centreOfPressureJumped());
         }
         // A calibration press restarts the comparison: the rider may have moved
@@ -349,7 +350,7 @@ namespace
         drive(mode, ActiveNeutral);
         shortPress(mode, Forward, 30000);
         sensors(Forward);
-        mode.getTargets();
+        getTargets(mode);
         assert(!mode.centreOfPressureJumped());
     }
 

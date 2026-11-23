@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <cstdint>
 #include <algorithm>
 constexpr uint8_t A0 = 14, A1 = 15, A15 = 39, A17 = 41, A14 = 38, A16 = 40;

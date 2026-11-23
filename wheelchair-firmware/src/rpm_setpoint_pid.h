@@ -131,6 +131,14 @@ public:
     const float requestedAccel = error / tau + tuning_.ki * integral_ -
                                  tuning_.kd * filteredRate_;
     const float boundedAccel = clip(requestedAccel, lowerLimit, upperLimit);
+    // The jerk limit shapes how acceleration builds up. It must not keep the
+    // chair speeding up after the rider has asked for less: with it, sitting
+    // up in the middle of a full-lean start went on accelerating for a
+    // quarter of a second (about half a metre per second more). So when the
+    // command is moving away from the request, that motion ends at once;
+    // braking toward the request then builds up under the jerk limit as usual.
+    if (acceleration_ * error < 0.0f)
+      acceleration_ = 0.0f;
     const float jerkStep = tuning_.maxJerkRPMPerS2 * dt;
     acceleration_ += clip(boundedAccel - acceleration_, -jerkStep, jerkStep);
     // A lower user-selected acceleration cap applies on this update, even if
@@ -188,12 +196,28 @@ public:
     havePreviousRPM_ = false;
   }
 
+  /**
+   * Start from a wheel that is already turning, e.g. when drive is engaged
+   * while the chair rolls. Without this the command restarts at zero and the
+   * VESC brakes hard toward it. Acceleration and history start from rest.
+   */
+  void seed(float rpm)
+  {
+    reset();
+    if (isfinite(rpm))
+    {
+      rpm_ = rpm;
+      previousRPM_ = rpm;
+    }
+  }
+
+  /** The command RPM returned by the last smoothRPM() call (or seed()). */
+  float rpm() const { return rpm_; }
+
   /** Return whether the constructor's tuning values are valid. */
   bool isValid() const { return valid_; }
 
-  // Read-only internals for telemetry (DBG M). rpm() is this smoother's own
-  // output before main.cpp clamps it to the measured RPM ± MAX_RPM_COMMAND_DIFF.
-  float rpm() const { return rpm_; }
+  // Read-only internals for telemetry (DBG M), with rpm() above.
   float acceleration() const { return acceleration_; } // RPM/s
   float integral() const { return integral_; }         // RPM·s
   float filteredRate() const { return filteredRate_; } // RPM/s, the D term's input

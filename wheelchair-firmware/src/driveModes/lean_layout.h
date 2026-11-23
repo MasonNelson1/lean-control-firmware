@@ -259,6 +259,25 @@ namespace lean
     // deadband is in normalised units; pass 0 to skip it.
     Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent, float reverseFlipAt = -0.3f);
 
+    // shapeCommand without the reverse-turn flip: deadband and response curves only.
+    Command shapeAxes(Command command, float deadband, float speedExponent, float turnExponent);
+
+    // The reverse-turn rule the drive pipeline uses (DriveController, via
+    // LeanDriveMode::command()). At a standstill or reversing it is exactly
+    // shapeCommand's step rule: flip below reverseFlipAt (CornerReverseFlipAt on
+    // the corner layout), no turn below -0.9. Two council/firmware-9 safety
+    // rules sit on top, and only matter while the chair rolls forward:
+    //   - neither step rule applies while the chair rolls forward faster than
+    //     15% of the speed limit (travel > 0.15), fading in down to 5%: a back
+    //     lean then is braking, and flipping steered the chair the wrong way;
+    //   - reverseLocked (this back lean began while rolling forward, so it only
+    //     brakes): no flip at all, the turn dies away with forward travel.
+    // (The council's version also faded the flip itself over +-0.1 around the
+    // threshold. Not here: centred on -0.1 it cut a hard right lean at speed
+    // -0.06 (E9 "Right" hold) to 40% turn.)
+    // travel: chair speed as a share of the speed limit, forward positive.
+    float reverseTurn(float speed, float turn, float travel, bool reverseLocked, float reverseFlipAt);
+
     const char *layoutName(SensorLayout layout);
 
 } // namespace lean

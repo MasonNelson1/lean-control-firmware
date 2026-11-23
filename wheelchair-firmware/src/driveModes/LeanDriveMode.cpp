@@ -153,31 +153,26 @@ void LeanDriveMode::sampleCorner()
                  0.0f, 0.0f, !readyToDrive()};
 }
 
-MotorTargets LeanDriveMode::getTargets()
-{
-    sampleSensors();
-    return getTargetsFromSample();
-}
-
-MotorTargets LeanDriveMode::getTargetsFromSample()
+LeanDriveMode::Command LeanDriveMode::command(float travel, bool reverseLocked)
 {
     copJumped = false;
     if (!readyToDrive())
     {
         lastDrivenCop = {}; // the jump check only compares consecutive driving ticks
-        return {0, 0};
+        return {0.0f, 0.0f, true};
     }
 
     const int f = telemetry.front, b = telemetry.back;
     const int l = telemetry.left, r = telemetry.right;
 
-    // Each layout produces speed and turn from -1 to 1; shapeCommand then applies
-    // the shared deadband, response curves and reverse-turn flip.
+    // Each layout produces speed and turn from -1 to 1; shapeAxes then applies
+    // the deadband and response curves, and reverseTurn the reverse-turn rule.
     lean::Command command;
+    float flipAt;
     if (calibratedLayout == lean::SensorLayout::Corner)
     {
         // A sensor dropping out moves the CoP further in one tick than a body
-        // can (lean::MaxCopStep). main.cpp disarms on copJumped.
+        // can (lean::MaxCopStep). DriveController faults (COP_JUMP) on copJumped.
         copJumped = cop.valid && lastDrivenCop.valid &&
                     hypotf(cop.at.x - lastDrivenCop.at.x, cop.at.y - lastDrivenCop.at.y) > lean::MaxCopStep;
         lastDrivenCop = cop;
@@ -185,29 +180,25 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
         {
             telemetry.speed = telemetry.turn = 0.0f;
             telemetry.stopped = true;
-            return {0, 0};
+            return {0.0f, 0.0f, true};
         }
         // The corner deadzone is in inches inside cornerCommand, with the output
         // ramping from its edge, so the normalised deadband is skipped (0).
-        command = lean::shapeCommand(lean::cornerCommand(cop.at, neutralZone(), activeReach()),
-                                     0.0f, speedResponseExponent, turnResponseExponent, lean::CornerReverseFlipAt);
+        command = lean::shapeAxes(lean::cornerCommand(cop.at, neutralZone(), activeReach()),
+                                  0.0f, speedResponseExponent, turnResponseExponent);
+        flipAt = lean::CornerReverseFlipAt;
     }
     else
     {
-        command = lean::shapeCommand(lean::plusCommand(f - b, r - l, userWeightEstimate),
-                                     settings::deadband.get(), speedResponseExponent, turnResponseExponent);
+        command = lean::shapeAxes(lean::plusCommand(f - b, r - l, userWeightEstimate),
+                                  settings::deadband.get(), speedResponseExponent, turnResponseExponent);
+        flipAt = -0.3f; // shapeCommand's plus-layout default
     }
-    const float speed = command.speed, turn = command.turn;
+    const float speed = command.speed;
+    const float turn = lean::reverseTurn(command.speed, command.turn, travel, reverseLocked, flipAt);
 
     telemetry = {f, b, l, r, speed, turn, false};
-    const auto &mix = settings::leanTurnMix.get();
-    const float speedMagnitude = fabsf(speed);
-    const int segment = speedMagnitude < mix[2] ? 0 : 2;
-    const float ratio = (speedMagnitude - mix[segment]) / (mix[segment + 2] - mix[segment]);
-    const float turnGain = mix[segment + 1] + ratio * (mix[segment + 3] - mix[segment + 1]);
-    const float mixedTurn = turnGain * turn;
-    return {constrain(speed + mixedTurn, -1.0f, 1.0f),
-            constrain(speed - mixedTurn, -1.0f, 1.0f)};
+    return {speed, turn, false};
 }
 
 void LeanDriveMode::calibrate()

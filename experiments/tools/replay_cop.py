@@ -81,7 +81,9 @@ def firmware_constants():
         "min_total": scalar(layout, "MinCopTotal"),
         "speed_exp": math.log(speed_knee[1]) / math.log(speed_knee[0]),
         "turn_exp": math.log(turn_knee[1]) / math.log(turn_knee[0]),
-        "mix": array(settings, "DefaultTurnMix"),
+        # council-corner and later: no turn mix (turn is a rate in DriveController);
+        # left/right are then plain speed ± turn.
+        "mix": array(settings, "DefaultTurnMix") if "DefaultTurnMix" in settings else None,
     }
 
 
@@ -116,6 +118,9 @@ def shape(speed, turn, c):  # shapeCommand with deadband 0
 
 def mix(speed, turn, c):  # LeanDriveMode::getTargetsFromSample turn mixing
     m = c["mix"]
+    clamp = lambda v: max(-1.0, min(1.0, v))
+    if m is None:  # firmware without the turn-mix curve
+        return clamp(speed + turn), clamp(speed - turn)
     mag = abs(speed)
     seg = 0 if mag < m[2] else 2
     gain = m[seg + 1] + (mag - m[seg]) / (m[seg + 2] - m[seg]) * (m[seg + 3] - m[seg + 1])

@@ -104,43 +104,59 @@ history. The transition profile is retained as a configurable profile for
 future integration, matching the original firmware's unused transition
 tuning declaration.
 
-The default startup selection is REMOTE. A valid controller packet is required
-for remote propulsion. LEAN remains calibration-gated. The default sensor
-floor is the pre-calibration telemetry baseline and the seat-load reference on
-both sensor layouts.
+The chair always powers on in DISARM. A centred stick followed by a valid
+controller packet is required for remote propulsion. LEAN remains
+calibration-gated. The default sensor floor (ID 51) is the pre-calibration
+telemetry baseline and the seat-load reference on both sensor layouts.
 
 The sensor layout (ID 90) selects the lean math; see
 `src/driveModes/lean_layout.h`. On the PLUS layout, after subtracting floors and
 applying sensor gains (IDs 10-13), forward/back and right/left differences are
 each divided by the calibrated user weight estimate and clamped to [-1, 1].
-Individual sensor values are not saturation-capped. On the CORNER layout
-(default since 2026-11-22), each channel's force is its count above the
-empty-plate baseline (IDs 100-103) times its gain (IDs 104-107), the centre of
-pressure is located in plate inches, and its offset from the neutral captured at
-calibration is mapped to speed and turn with the deadzone and per-direction
-full-lean reach (IDs 91-95). A second calibrate press within 10 s, made relaxed,
-records the rider's relaxed posture: speed then stays zero from upright to
-relaxed plus the relaxed-posture margin (ID 96), and forward reach is measured
-from the relaxed point. The relaxed posture, a hold-calibrated reach and the
-automatic empty-seat zero of the baselines live in RAM only. Sensor positions
-are compile-time constants in `lean_layout.h`. A layout change takes effect at
-the next calibration; until then LEAN stays stopped. The corner fields use 109
-of each profile's 415 bytes, leaving about 7 bytes free on the host build (15 on
-the Teensy), as the "every setting fits one saved profile" test checks. The
-next batch of settings needs a storage-format change. The former directional saturation fields
-(IDs 20-23) and their group (ID 4) are retired; those IDs must not be reused.
-Older saved records for these fields are ignored when loading configuration.
+On the CORNER layout (default since 2026-11-22), each channel's force is its
+count above the empty-plate baseline (IDs 100-103) times its gain (IDs
+104-107), the centre of pressure is located in plate inches, and its offset
+from the neutral captured at calibration is mapped to speed and turn with the
+deadzone and per-direction full-lean reach (IDs 91-95). A second calibrate
+press within 10 s, made relaxed, records the rider's relaxed posture: speed
+then stays zero from upright to relaxed plus the relaxed-posture margin (ID
+96), and forward reach is measured from the relaxed point. The relaxed
+posture, a hold-calibrated reach and the automatic empty-seat zero of the
+baselines live in RAM only. A layout change takes effect at the next
+calibration; until then LEAN stays stopped.
+
+Speed and turn from either layout go to `DriveController`: speed as a share
+of the speed knob, turn as a share of the full-lean turn rate (ID 37, deg/s),
+limited at speed by the sideways-acceleration limit (ID 38) and converted to
+wheel speeds with the track width (ID 63).
+
+Profile storage is nearly full: the "every setting fits one saved profile"
+test checks it. The next batch of settings needs a storage-format change.
+
+Retired IDs, never to be reused: fields 1 (startup mode), 20-23 (directional
+saturation), 36 (turn mix); group 4. Older saved records for them are ignored
+on load. IDs 14-17 and 52-56 belonged to council/firmware-9's lean ranges,
+sensor zeros and seat threshold, which are not in this build: do not reuse
+them either.
 
 Selecting a profile (the profile knob) first resets every field to its default,
 then applies the profile's records, the same as loading the active bank. A
 profile saved by older firmware therefore gets defaults for fields it lacks,
-not whatever the previously active profile held.
+not whatever the previously active profile held. The exception is the
+calibration fields below, which keep their current values.
 
-The watchdog can only be shortened from its 100 ms default, the control
-period stays within 4–10 ms, and configurable jerk cannot exceed the original
-400 RPM/s² limit. The hard speed restriction remains 45% of the 11 mph design
-speed, and the hard acceleration cap remains 2.85 m/s². RPM and RPM/s limits
-use the shared `LINEAR_TO_RPM` value. Loading or applying configuration assigns
+### Calibration fields
+
+A field declared with `calibration = true` (the last `FieldInfo` member)
+describes this chair, not a driving feel: the VESC IDs, the wheel
+circumference, the track width and the VESC minimum speed. Loading a profile,
+from the dashboard or the profile knob, leaves these fields as they are.
+`Persistence::saveCalibration` writes only these fields; nothing in this build
+calls it (the corner reach calibration is RAM-only).
+
+The hard speed and acceleration limits are in `src/drive_constants.h`. RPM and
+RPM/s limits use the shared `LINEAR_TO_RPM` value. Loading or applying
+configuration assigns
 `LINEAR_TO_RPM = 60.0f / settings::wheelCircumference.get()` directly in
 `applyRuntimeSettings()`. All motor and PID conversions read that same value.
 The default circumference, propulsion limits, and configurable field ranges can

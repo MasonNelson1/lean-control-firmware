@@ -156,6 +156,10 @@ struct FieldInfo {
     const char *description;
     const char *units = "";
     bool restart = false; // UI hint. The consumer controls when the value is used.
+    // Belongs to this chair and its sensors, not to a driving feel: loading a
+    // profile leaves it alone, and the firmware saves it by itself after a
+    // calibration (Persistence::saveSelected).
+    bool calibration = false;
 };
 
 /**
@@ -250,6 +254,18 @@ public:
     }
 
     void reset() override { current_ = default_; }
+
+    // Firmware-side write (e.g. a calibration result). Same checks as update().
+    bool set(T candidate) {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (!std::isfinite(candidate)) return false;
+        }
+        if (!(candidate >= min_ && candidate <= max_)) return false;
+        current_ = candidate;
+        return true;
+    }
+    T minimum() const { return min_; }
+    T maximum() const { return max_; }
 
 private:
     static void put(Writer &out, T value) {

@@ -1,5 +1,6 @@
 // Compile with the lean/config host stubs and the actual LeanDriveMode/config sources.
 #include "driveModes/LeanDriveMode.h"
+#include "lean_targets.h"
 #include "config/DriveSettings.h"
 #include "telemetry/Telemetry.h"
 #include <Arduino.h>
@@ -78,7 +79,7 @@ int main()
     sensors(1000, 1000, 1000, 1800);
     sample(mode, 1600);
     assert(mode.getTelemetry().stopped);
-    const auto stopped = mode.getTargetsFromSample();
+    const auto stopped = getTargetsFromSample(mode);
     assert(stopped.left == 0 && stopped.right == 0);
     // A sample taken after release must not contribute to the peaks.
     sensors(4095, 4095, 4095, 4095);

@@ -1,5 +1,6 @@
 // Compiles the actual LeanDriveMode with simulated ADC readings; no motors.
 #include "driveModes/LeanDriveMode.h"
+#include "lean_targets.h"
 #include "config/DriveSettings.h"
 #include "telemetry/Telemetry.h"
 #include <Arduino.h>
@@ -32,11 +33,11 @@ int main() {
     mode.updateResponseCurve();
     mode.resetDynamicGains();
     sensors(1000, 1000, 1000, 1000);
-    auto targets = mode.getTargets();
+    auto targets = getTargets(mode);
     assert(targets.left == 0 && targets.right == 0); // calibration gate
     mode.calibrate();
     assert(mode.getUserWeightEstimate() == 1000);
-    targets = mode.getTargets();
+    targets = getTargets(mode);
     assert(targets.left == 0 && targets.right == 0);
 
     const auto &speedKnee = settings::leanForewardBackResponse.get();
@@ -44,31 +45,31 @@ int main() {
     const float halfSpeed = std::pow(0.5f, std::log(speedKnee[1]) / std::log(speedKnee[0]));
     const float halfTurn = std::pow(0.5f, std::log(turnKnee[1]) / std::log(turnKnee[0]));
     sensors(1500, 1000, 1000, 1000);
-    mode.getTargets();
+    getTargets(mode);
     assert(near(mode.getTelemetry().speed, halfSpeed));
     sensors(1000, 1500, 1000, 1000);
-    mode.getTargets();
+    getTargets(mode);
     assert(near(mode.getTelemetry().speed, -halfSpeed));
     sensors(1000, 1000, 1000, 1500);
-    mode.getTargets();
+    getTargets(mode);
     assert(near(mode.getTelemetry().turn, halfTurn));
     sensors(1000, 1000, 1500, 1000);
-    mode.getTargets();
+    getTargets(mode);
     assert(near(mode.getTelemetry().turn, -halfTurn));
 
     // Both readings exceed the former per-sensor cap: preserve their difference.
     sensors(3000, 2000, 2000, 3000);
-    targets = mode.getTargets();
+    targets = getTargets(mode);
     const auto sample = mode.getTelemetry();
     assert(sample.front == 2000 && sample.back == 1000);
     assert(sample.left == 1000 && sample.right == 2000);
     assert(near(sample.speed, 1) && near(sample.turn, 1));
     assert(std::fabs(targets.left) <= 1 && std::fabs(targets.right) <= 1);
     sensors(4095, 1000, 1000, 1000);
-    mode.getTargets();
+    getTargets(mode);
     assert(near(mode.getTelemetry().speed, 1)); // normalized output still clamped
     sensors(1000, 4095, 1000, 1000);
-    mode.getTargets();
+    getTargets(mode);
     assert(near(mode.getTelemetry().speed, -1));
 
     // A raw reading at either ADC rail on any one sensor is flagged; resting readings are not.
@@ -91,7 +92,7 @@ int main() {
     sensors(0, 0, 0, 0);
     mode.calibrate();
     sensors(2000, 0, 0, 2000);
-    targets = mode.getTargets();
+    targets = getTargets(mode);
     assert(targets.left == 0 && targets.right == 0);
     assert(mode.getTelemetry().speed == 0 && mode.getTelemetry().turn == 0);
     for (uint16_t id = 20; id <= 23; ++id) assert(!settings::registry().find(id));

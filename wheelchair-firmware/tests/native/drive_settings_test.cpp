@@ -1,5 +1,7 @@
 // g++ -std=c++17 -Wall -Wextra -Werror -I tests/native/config_stubs -I src tests/native/drive_settings_test.cpp src/config/DriveSettings.cpp src/config/Registry.cpp src/config/Persistence.cpp src/config/Protocol.cpp -o .pio/drive_settings_test.exe
 #include "config/DriveSettings.h"
+#include <EEPROM.h>
+#include <cmath>
 #include <functional>
 #include <iostream>
 #include <set>
@@ -53,13 +55,15 @@ int main() {
     });
     test("every exported declaration is discoverable under its own ID", [] {
         const std::vector<const Field *> exported = {
-            &settings::defaultMode, &settings::deadband,
+            &settings::deadband,
             &settings::frontGain, &settings::rearGain, &settings::leftGain, &settings::rightGain,
-            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse, &settings::leanTurnMix,
+            &settings::leanForewardBackResponse, &settings::leanSideToSideResponse, &settings::assistResponse,
+            &settings::maxTurnRate, &settings::maxLateralAccel,
             &settings::assistMaxBoostAmps, &settings::assistSlowdownRPM, &settings::assistSlowdownBoostFraction,
-            &settings::controllerTimeout, &settings::buttonDebounce,
-            &settings::controlPeriod, &settings::calibrationSamples, &settings::defaultFloor,
-            &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference,
+            &settings::controllerTimeout, &settings::buttonDebounce, &settings::controlPeriod,
+            &settings::calibrationSamples, &settings::defaultFloor,
+            &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference, &settings::trackWidth,
+            &settings::vescMinSpeed,
             &settings::normalPid.lowTau, &settings::normalPid.highTau, &settings::normalPid.ki,
             &settings::normalPid.kd, &settings::normalPid.filter, &settings::normalPid.maxJerk,
             &settings::transitionPid.lowTau, &settings::transitionPid.highTau, &settings::transitionPid.ki,
@@ -99,19 +103,19 @@ int main() {
         CHECK(speed.id != turn.id);
         const float originalTurnInput = turn.get()[0], originalTurnOutput = turn.get()[1];
         uint8_t speedRaw[9]; Writer speedOut(speedRaw, sizeof(speedRaw));
-        speedOut.put(uint8_t{1}); speedOut.put(.25f); speedOut.put(.75f);
+        speedOut.put(uint8_t{1}); speedOut.put(.25f); speedOut.put(.15f);
         CHECK(request(Command::Set, speed.id, speedRaw, sizeof(speedRaw)) == Status::Ok);
-        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .15f);
         CHECK(turn.get()[0] == originalTurnInput && turn.get()[1] == originalTurnOutput);
         uint8_t turnRaw[9]; Writer turnOut(turnRaw, sizeof(turnRaw));
         turnOut.put(uint8_t{1}); turnOut.put(.4f); turnOut.put(.2f);
         CHECK(request(Command::Set, turn.id, turnRaw, sizeof(turnRaw)) == Status::Ok);
-        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .15f);
         CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
         CHECK(settings::persistence.save());
         speed.reset(); turn.reset();
         settings::persistence.load();
-        CHECK(speed.get()[0] == .25f && speed.get()[1] == .75f);
+        CHECK(speed.get()[0] == .25f && speed.get()[1] == .15f);
         CHECK(turn.get()[0] == .4f && turn.get()[1] == .2f);
         CHECK(!settings::persistence.dirty());
     });
@@ -170,6 +174,176 @@ int main() {
         settings::persistence.load();
         CHECK(settings::leftVesc.get() != settings::rightVesc.get());
         CHECK(settings::deadband.get() == deadband);
+    });
+    test("retired field and group IDs stay unused", [] {
+        // council-corner: 10-13 (plus gains), 50 and 51 stay (the corner/plus lean
+        // input uses them). 14-17 and 52-56 were council/firmware-9's lean ranges,
+        // sensor zeros and seat threshold: not in this build, never reuse them.
+        for (uint16_t id : {1, 14, 15, 16, 17, 20, 21, 22, 23, 36, 52, 53, 54, 55, 56}) CHECK(!settings::registry().find(id));
+        CHECK(!settings::registry().findGroup(4));
+    });
+    test("calibration fields are exactly the chair and rider measurements", [] {
+        const std::set<const Field *> expected = {
+            &settings::trackWidth,
+            &settings::leftVesc, &settings::rightVesc, &settings::wheelCircumference, &settings::vescMinSpeed};
+        for (auto *f = settings::registry().fields(); f; f = f->next())
+            CHECK(f->info.calibration == (expected.count(f) == 1));
+    });
+    test("typed set() enforces the same bounds as a dashboard write", [] {
+        CHECK(!settings::trackWidth.set(0.29f));
+        CHECK(!settings::trackWidth.set(1.21f));
+        CHECK(settings::trackWidth.set(0.30f) && settings::trackWidth.get() == 0.30f);
+        CHECK(!settings::maxTurnRate.set(NAN) && !settings::maxTurnRate.set(1000.0f));
+        settings::trackWidth.reset();
+    });
+    test("a calibration save keeps other unsaved edits unsaved", [] {
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+        CHECK(settings::persistence.save());
+        // An unsaved dashboard edit, then a calibration.
+        const float edited = .2f;
+        CHECK(request(Command::Set, settings::deadband.id, reinterpret_cast<const uint8_t *>(&edited), sizeof(edited)) == Status::Ok);
+        CHECK(settings::persistence.dirty());
+        CHECK(settings::trackWidth.set(0.7f) && settings::vescMinSpeed.set(5.2f));
+        CHECK(settings::persistence.saveCalibration());
+        // RAM keeps everything; the edit is still reported as unsaved.
+        CHECK(settings::deadband.get() == edited && settings::trackWidth.get() == 0.7f);
+        CHECK(settings::persistence.dirty());
+        // After a power cycle: the calibration is there, the unsaved edit is not.
+        settings::persistence.load();
+        CHECK(settings::trackWidth.get() == 0.7f && settings::vescMinSpeed.get() == 5.2f);
+        CHECK(settings::deadband.get() == .05f);
+        CHECK(!settings::persistence.dirty());
+        // With nothing else pending, the bank and RAM agree afterwards.
+        CHECK(settings::wheelCircumference.set(1.9f));
+        CHECK(settings::persistence.saveCalibration() && !settings::persistence.dirty());
+    });
+    test("a calibration save works on a blank EEPROM and keeps saved values of other fields", [] {
+        for (auto &byte : EEPROM.bytes) byte = 0xff;
+        settings::persistence.load();
+        CHECK(settings::trackWidth.get() == common::TRACK_WIDTH_ESTIMATE_M);
+        CHECK(settings::vescMinSpeed.set(4.0f));
+        CHECK(settings::persistence.saveCalibration());
+        settings::persistence.load();
+        CHECK(settings::vescMinSpeed.get() == 4.0f && !settings::persistence.dirty());
+        // A saved non-calibration value survives a later calibration save.
+        const float edited = .3f;
+        CHECK(request(Command::Set, settings::deadband.id, reinterpret_cast<const uint8_t *>(&edited), sizeof(edited)) == Status::Ok);
+        CHECK(settings::persistence.save());
+        CHECK(settings::vescMinSpeed.set(6.0f) && settings::persistence.saveCalibration());
+        settings::persistence.load();
+        CHECK(settings::deadband.get() == edited && settings::vescMinSpeed.get() == 6.0f);
+    });
+    test("a lost settings bank is reported, not silently replaced by defaults", [] {
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+        CHECK(settings::trackWidth.set(0.75f) && settings::persistence.saveCalibration());
+        settings::persistence.load();
+        CHECK(settings::persistence.loadedSaved() && settings::trackWidth.get() == 0.75f);
+        // Power lost during a save: the commit byte was cleared and never rewritten.
+        EEPROM.bytes[0] = 0;
+        settings::persistence.load();
+        CHECK(!settings::persistence.loadedSaved());
+        CHECK(settings::trackWidth.get() == common::TRACK_WIDTH_ESTIMATE_M); // defaults, and the firmware knows it
+        // The next successful save clears the condition.
+        CHECK(settings::persistence.saveCalibration() && settings::persistence.loadedSaved());
+        for (auto &byte : EEPROM.bytes) byte = 0xff; // a new board
+        settings::persistence.load();
+        CHECK(!settings::persistence.loadedSaved());
+        CHECK(settings::persistence.save() && settings::persistence.loadedSaved());
+    });
+    test("a failed EEPROM write is reported and leaves RAM intact", [] {
+        CHECK(settings::vescMinSpeed.set(7.0f));
+        EEPROM.failWrites = true;
+        const bool saved = settings::persistence.saveCalibration();
+        EEPROM.failWrites = false;
+        CHECK(!saved && settings::vescMinSpeed.get() == 7.0f);
+        CHECK(settings::persistence.saveCalibration());
+    });
+    test("loading a profile leaves calibration fields alone", [] {
+        settings::registry().defaults();
+        // The profile was saved with other chair measurements and a different feel.
+        CHECK(settings::trackWidth.set(0.9f) && settings::vescMinSpeed.set(9.0f));
+        const float feel = .25f, rate = 90.0f;
+        CHECK(settings::deadband.set(feel) && settings::maxTurnRate.set(rate));
+        uint8_t payload[Persistence::ProfileCapacity], name[Persistence::ProfileNameSize] = "feel";
+        const size_t length = snapshot(settings::registry(), payload, sizeof(payload));
+        CHECK(length && settings::persistence.writeProfile(2, name, payload, length));
+        // Now the chair has been measured again.
+        settings::registry().defaults();
+        CHECK(settings::trackWidth.set(0.7f) && settings::vescMinSpeed.set(5.2f));
+        CHECK(settings::protocol.selectProfile(2));
+        CHECK(settings::deadband.get() == feel && settings::maxTurnRate.get() == rate); // the feel loads
+        CHECK(settings::trackWidth.get() == 0.7f && settings::vescMinSpeed.get() == 5.2f); // the chair's values stay
+        settings::registry().defaults();
+    });
+    test("a profile cannot swap the VESC IDs or change the wheel size", [] {
+        settings::registry().defaults();
+        // A profile saved while the IDs were the other way round.
+        const uint8_t temporary = 99, left = 26, right = 2;
+        const float circumference = 1.85f;
+        CHECK(settings::leftVesc.set(temporary) && settings::rightVesc.set(right) && settings::leftVesc.set(left));
+        CHECK(settings::wheelCircumference.set(circumference));
+        uint8_t payload[Persistence::ProfileCapacity], name[Persistence::ProfileNameSize] = "swapped";
+        const size_t length = snapshot(settings::registry(), payload, sizeof(payload));
+        CHECK(length && settings::persistence.writeProfile(3, name, payload, length));
+        settings::registry().defaults();
+        CHECK(settings::protocol.selectProfile(3));
+        CHECK(settings::leftVesc.get() == 2 && settings::rightVesc.get() == 26); // steering not mirrored
+        CHECK(settings::wheelCircumference.get() == common::WHEEL_CIRCUMFERENCE_M);
+    });
+    test("lean response curves stay between a straight line and a strong curve", [] {
+        settings::registry().defaults();
+        const auto set = [](config::ProfileField<2> &field, float input, float output) {
+            uint8_t raw[9]; Writer out(raw, sizeof(raw));
+            out.put(uint8_t{1}); out.put(input); out.put(output);
+            return request(Command::Set, field.id, raw, sizeof(raw));
+        };
+        for (auto *field : {&settings::leanForewardBackResponse, &settings::leanSideToSideResponse}) {
+            const float input = field->get()[0], output = field->get()[1];
+            // Knee above the straight line: steepest at neutral. Far above it, any lean is full speed.
+            CHECK(set(*field, .5f, .999f) == Status::Invalid);
+            CHECK(set(*field, .5f, .51f) == Status::Invalid);
+            // So flat that nothing happens until the very end of the lean.
+            CHECK(set(*field, .9f, .001f) == Status::Invalid);
+            CHECK(field->get()[0] == input && field->get()[1] == output); // rolled back
+            CHECK(set(*field, .5f, .5f) == Status::Ok);    // a straight line
+            CHECK(set(*field, .5f, .0625f) == Status::Ok); // exponent 4
+        }
+        // The assist curve is a different thing and keeps its own freedom.
+        CHECK(set(settings::assistResponse, .44f, .61f) == Status::Ok);
+        // A saved curve from before this rule is put back to the default on load.
+        const float steep[] = {.5f, .9f};
+        uint8_t raw[9]; Writer out(raw, sizeof(raw));
+        out.put(uint8_t{1}); out.bytes(steep, sizeof(steep));
+        CHECK(settings::leanSideToSideResponse.update(raw, sizeof(raw)));
+        settings::persistence.refreshDirty();
+        CHECK(settings::persistence.save());
+        settings::persistence.load();
+        CHECK(settings::leanSideToSideResponse.get()[0] == .35f && settings::leanSideToSideResponse.get()[1] == .20f);
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+        CHECK(settings::persistence.save());
+    });
+    test("every EEPROM byte written reports activity for the watchdog", [] {
+        static int calls;
+        calls = 0;
+        settings::storageActivity = [] { ++calls; };
+        CHECK(settings::trackWidth.set(0.8f) && settings::persistence.saveCalibration());
+        settings::storageActivity = nullptr;
+        CHECK(calls > 100);
+        settings::registry().defaults();
+        settings::persistence.refreshDirty();
+    });
+    test("bounds keep settings inside what the firmware can use", [] {
+        const float tooWide = 0.6f;
+        CHECK(request(Command::Set, settings::deadband.id, reinterpret_cast<const uint8_t *>(&tooWide), sizeof(tooWide)) == Status::Invalid);
+        const unsigned long slow = 201, debounce = 101;
+        CHECK(request(Command::Set, settings::controllerTimeout.id, reinterpret_cast<const uint8_t *>(&slow), sizeof(slow)) == Status::Invalid);
+        CHECK(request(Command::Set, settings::buttonDebounce.id, reinterpret_cast<const uint8_t *>(&debounce), sizeof(debounce)) == Status::Invalid);
+        const float tipping = 6.5f;
+        CHECK(request(Command::Set, settings::maxLateralAccel.id, reinterpret_cast<const uint8_t *>(&tipping), sizeof(tipping)) == Status::Invalid);
+        CHECK(settings::maxLateralAccel.get() == 2.5f);
     });
     std::cout << "TOTAL " << passed + failed << " / PASS " << passed << " / FAIL " << failed << '\n';
     return failed ? 1 : 0;

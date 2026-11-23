@@ -17,7 +17,9 @@
 
 namespace vescapply
 {
-constexpr bool VESC_APPLY_ENABLED = true;
+// council-corner build: off. The VESC settings were already written on
+// 2026-11-22; this build must not write them again.
+constexpr bool VESC_APPLY_ENABLED = false;
 constexpr uint8_t COMM_SET_MCCONF = 13;
 constexpr uint8_t COMM_SET_APPCONF = 16;
 constexpr uint32_t REPLY_TIMEOUT_MS = 3000; // flash write on SET can take a moment

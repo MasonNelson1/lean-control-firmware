@@ -140,7 +140,7 @@ namespace lean
                 normalizeSensorPair(rightMinusLeft, userWeightEstimate)};
     }
 
-    Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent, float reverseFlipAt)
+    Command shapeAxes(Command command, float deadband, float speedExponent, float turnExponent)
     {
         float speed = command.speed, turn = command.turn;
 
@@ -153,6 +153,14 @@ namespace lean
         // Shape speed and turn separately before wheel mixing and PID smoothing.
         speed = copysignf(powf(fabsf(speed), speedExponent), speed);
         turn = copysignf(powf(fabsf(turn), turnExponent), turn);
+        return {speed, turn};
+    }
+
+    Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent, float reverseFlipAt)
+    {
+        const Command shaped = shapeAxes(command, deadband, speedExponent, turnExponent);
+        const float speed = shaped.speed;
+        float turn = shaped.turn;
         // Reversing: flip turn so leaning back-left still swings the chair left the way
         // it feels natural. Threshold -0.3, not 0, was picked by feel on the chair; at 0
         // turning near a standstill felt wrong. Below -0.9 (hard reverse) turning is off.
@@ -160,6 +168,7 @@ namespace lean
         // The plus layout keeps -0.3 (default argument). The corner layout passes
         // CornerReverseFlipAt: on the court (2026-11-22) slow reversing rarely got past
         // -0.3, so back-left spun the chair the wrong way.
+        // (The drive pipeline uses reverseTurn() below, centred on the same threshold.)
         if (speed < reverseFlipAt)
         {
             turn *= -1;
@@ -169,6 +178,17 @@ namespace lean
             turn = 0;
         }
         return {speed, turn};
+    }
+
+    float reverseTurn(float speed, float turn, float travel, bool reverseLocked, float reverseFlipAt)
+    {
+        const float forwardTravel = fminf(1.0f, fmaxf(0.0f, (travel - 0.05f) / 0.10f));
+        if (reverseLocked && speed < 0.0f)
+            return turn * forwardTravel;
+        // shapeCommand's step rule: -1 (flipped), 0 (cut off) or 1.
+        const float rule = speed < -0.9f ? 0.0f : speed < reverseFlipAt ? -1.0f : 1.0f;
+        // Rolling forward: the rule fades out toward "turn as leaned".
+        return turn * (rule + (1.0f - rule) * forwardTravel);
     }
 
     const char *layoutName(SensorLayout layout)

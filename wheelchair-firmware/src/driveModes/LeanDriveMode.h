@@ -17,10 +17,17 @@
 //   reach in each direction. The empty-plate baseline re-zeroes itself while
 //   the chair is disarmed and the seat is empty.
 //
-// Both layouts share everything after that: the response curves, reverse-turn
-// flip and turn mixing here, then the mode state machine, RPM PID and clamps
-// in main.cpp. Seat detection (Σ raw − default floor vs W) is layout-independent.
-class LeanDriveMode : public DriveMode
+// Both layouts share everything after that: the response curves and the
+// reverse-turn rule here (command()), then DriveController: turn as a rate,
+// MotionSmoother, StopController. Seat detection (Σ raw − default floor vs W)
+// is layout-independent.
+//
+// council-corner build: this is charles/dev-setup's lean input, unchanged in
+// its math. command() is the seam to council/firmware-9's DriveController; it
+// returns shaped speed and turn (-1..1) separately. The old per-wheel mixing
+// (getTargetsFromSample, the "Lean turn mixing" curve) is gone: turn is now a
+// rate in deg/s, scaled in DriveController::turnLimitRPM().
+class LeanDriveMode
 {
 public:
     // Raw 12-bit counts outside [SensorRailLow, SensorRailHigh] mean a shorted,
@@ -80,7 +87,6 @@ private:
     void sampleCorner();
     void capturePassive();
     bool readyToDrive() const;
-    bool calibrated() const;
     bool reachFromCalibration() const;
     bool cornerCalibrated() const;
     bool relaxedPressDue(uint32_t pressedAt) const;
@@ -88,13 +94,29 @@ private:
     lean::CentreOfPressure cornerCop(const lean::Counts &raw) const;
 
 public:
+    // What DriveController drives from.
+    struct Command
+    {
+        float speed;  // forward +, shaped, -1..1
+        float turn;   // right +, shaped, -1..1 (a share of the full-lean turn rate)
+        bool stopped; // no usable lean input: not calibrated, calibrating, or a CoP jump
+    };
+
     void reset() { initiallyCalibrated = false; passiveWindowOpen = false; cancelCalibration(); }
-    MotorTargets getTargets() override;
-    MotorTargets getTargetsFromSample();
+    // Read the sensors (seat and lean). DriveController calls this every control tick.
+    void sample(float /*dt*/) { sampleSensors(); }
+    // Lean command from the last sample. travel: chair speed as a share of the
+    // speed limit, forward +. reverseLocked: this back lean began while rolling
+    // forward and only brakes. Both only feed lean::reverseTurn().
+    Command command(float travel = 0.0f, bool reverseLocked = false);
+    // Calibrated for the live layout (and, on the corner layout, a usable neutral).
+    bool calibrated() const;
+    // Σ(raw − default floor): the seat load isSeated() compares with W.
+    int totalLoad() const { return seatLoad; }
     bool isSeated() const { return 2 * seatLoad > userWeightEstimate; }
     // True when the last sample had any raw reading at an ADC rail (shorted or open sensor).
     bool sensorAtRail() const { return railed; }
-    // Corner layout: true when the last getTargetsFromSample() saw the centre of
+    // Corner layout: true when the last command() saw the centre of
     // pressure move further than lean::MaxCopStep since the previous driving tick.
     bool centreOfPressureJumped() const { return copJumped; }
     // Refresh the seat reading and optionally refresh lean telemetry.

@@ -11,7 +11,10 @@ size_t snapshot(const Registry &registry, uint8_t *data, size_t capacity);
 bool validTlvs(const uint8_t *data, size_t size);
 // Applies compatible records to the current RAM values. Unknown IDs and values
 // rejected by field validation are skipped. load() supplies defaults beforehand.
-void applyTlvs(Registry &registry, const uint8_t *data, size_t size);
+// With keepCalibration, records for calibration fields are skipped as well.
+void applyTlvs(Registry &registry, const uint8_t *data, size_t size, bool keepCalibration = false);
+// Applies only the records of calibration (chair-owned) fields.
+void applyCalibrationTlvs(Registry &registry, const uint8_t *data, size_t size);
 
 // Byte storage adapter. Firmware uses EEPROM, and host tests supply a memory
 // implementation that can simulate interrupted writes.
@@ -52,8 +55,15 @@ public:
 
     void load(); // Loads the newest valid bank and establishes the dirty baseline.
     bool save(); // Synchronous explicit save. Returns false if writing or verification fails.
+    // Saves the current RAM value of every calibration field and nothing else:
+    // other fields keep what was last saved, so unsaved dashboard edits stay
+    // unsaved. Used after a calibration so its result survives a power cycle.
+    bool saveCalibration();
     void refreshDirty(); // Call after changing RAM values, before deciding whether to save.
     bool dirty() const { return dirty_; }
+    // False when the last load() found no valid saved bank (a new board, or a
+    // save cut short by power loss) and the values are the firmware defaults.
+    bool loadedSaved() const { return loadedSaved_; }
 
 private:
     struct Slot {
@@ -62,12 +72,14 @@ private:
     };
 
     Slot inspect(uint8_t *payload) const;
+    bool write(uint8_t *payload, uint16_t length);
 
     Registry &registry_;
     Storage &storage_;
     void (*repair_)();
     uint32_t savedSignature_ = 0;
     bool dirty_ = false;
+    bool loadedSaved_ = false;
 };
 
 } // namespace config

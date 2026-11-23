@@ -154,10 +154,13 @@ bool Protocol::selectProfile(uint8_t slot) {
     const size_t oldLength = snapshot(registry_, old, sizeof(old));
     if (!oldLength) return false;
     // Like Persistence::load(): a profile saved by older firmware lacks newer
-    // fields, and those must take their defaults rather than whatever the
-    // previously active profile held. Incompatible records also stay at default.
+    // fields, and those take their defaults, never the previous profile's value.
+    // The exception is the chair-owned (FieldInfo::calibration) fields: VESC IDs,
+    // wheel circumference, track width, VESC minimum speed. A profile is a
+    // driving feel, so those keep their current values.
     registry_.defaults();
-    applyTlvs(registry_, payload, length);
+    applyCalibrationTlvs(registry_, old, oldLength);
+    applyTlvs(registry_, payload, length, /*keepCalibration=*/true);
     if (validate_ && !validate_()) {
         applyTlvs(registry_, old, oldLength);
         return false;

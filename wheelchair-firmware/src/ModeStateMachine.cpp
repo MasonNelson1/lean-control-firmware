@@ -16,27 +16,26 @@ void ModeStateMachine::requestDisarm()
     confirmingProfile_ = NoProfile;
 }
 
-bool ModeStateMachine::needsSeatSample(const Inputs &in) const
-{
-    return in.lean.edge || in.remote.edge || in.disarm.edge ||
-           leanPending_ || remotePending_ || disarmPending_ ||
-           assistHoldPending_ || confirmingProfile_ != NoProfile;
-}
-
 ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t now)
 {
     Actions actions;
+    disarmPending_ |= in.disarm.edge;
     if (in.calibrationActive)
     {
-        // Poll buttons normally, but discard presses instead of queuing a mode change.
-        leanPending_ = remotePending_ = disarmPending_ = assistHoldPending_ = false;
+        // While calibrating, the other mode buttons are discarded instead of
+        // queued. DISARM always works: it ends the calibration and disarms,
+        // without starting the hold that leads to Assist.
+        leanPending_ = remotePending_ = assistHoldPending_ = false;
         calibrationPending_ = false;
         confirmingProfile_ = NoProfile;
+        if (in.disarm.pressed && disarmPending_)
+            selectedMode_ = DISARM;
+        if (in.disarm.pressed || in.disarm.released)
+            disarmPending_ = false;
         return actions;
     }
     leanPending_ |= in.lean.edge;
     remotePending_ |= in.remote.edge;
-    disarmPending_ |= in.disarm.edge;
     calibrationPending_ |= in.calibrate.pressed && selectedMode_ == LEAN;
 
     if (confirmingProfile_ != in.pendingProfile || !in.profileSettled ||
@@ -82,10 +81,17 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
         confirmingProfile_ = NoProfile;
     }
 
+    actions.disarmPressed = disarmPressed;
+    if (disarmPressed && !in.seated && selectedMode_ == DISARM && currentMode_ == DISARM)
+        actions.toggleFreewheel = true;
     if (disarmPressed)
     {
-        // Exiting Assist requires a fresh press before it can be entered again.
-        assistHoldPending_ = selectedMode_ != ASSIST;
+        // Only a press that starts with the chair already disarmed can go on
+        // to Assist. A press that stops LEAN or REMOTE stays a stop however
+        // long it is held (people hold a stop button down), and leaving
+        // Assist needs a fresh press before it can be entered again.
+        assistHoldPending_ = selectedMode_ == DISARM && currentMode_ == DISARM &&
+                             !(leftDriveMode_ && now - disarmedAt_ < AssistArmDelayMs);
         selectedMode_ = DISARM;
     }
     else if (leanPressed && !profilePress && selectedMode_ != LEAN)
@@ -111,8 +117,18 @@ ModeStateMachine::Actions ModeStateMachine::update(const Inputs &in, uint32_t no
 ModeStateMachine::Transition ModeStateMachine::applySeat(bool seated, uint32_t now)
 {
     const bool seatDisarm = requiresSeat() && !seated;
+    // LEAN comes back by itself when the rider sits down again (it will not
+    // move until it is calibrated). Assist does not: a person getting into
+    // the chair pushes on it, and Assist answers a push with motor current.
+    if (seatDisarm && selectedMode_ == ASSIST)
+        selectedMode_ = DISARM;
     const mode next = seatDisarm ? DISARM : selectedMode_;
     if (next == currentMode_) return {};
+    if (next == DISARM)
+    {
+        leftDriveMode_ = true;
+        disarmedAt_ = now;
+    }
     currentMode_ = next;
     if (next == ASSIST) assistEnteredAt_ = now;
     return {true, seatDisarm, next == LEAN};

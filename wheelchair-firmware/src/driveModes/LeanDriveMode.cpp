@@ -197,7 +197,9 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
         // (shaped ~-0.06), which must not count as reversing. Flip once clearly
         // reversing; un-flip only near standstill AND with the turn near neutral.
         command = lean::shapeCommand(raw, 0.0f, speedResponseExponent, turnResponseExponent, -1.0e9f);
-        if (!reverseFlipped && command.speed < lean::CornerReverseEngage)
+        if (!lean::CornerReverseFlipEnabled)
+            reverseFlipped = false;
+        else if (!reverseFlipped && command.speed < lean::CornerReverseEngage)
             reverseFlipped = true;
         else if (reverseFlipped && command.speed > lean::CornerReverseRelease &&
                  fabsf(command.turn) < lean::CornerReverseReleaseTurn)

@@ -146,6 +146,10 @@ namespace lean
     // Corner layout: reverse turning flips as soon as the chair is clearly reversing.
     // Was -0.3 (plus tuning); on the court slow reversing stayed above it. Charles, 2026-11-22.
     constexpr float CornerReverseFlipAt = -0.1f;      // kept for the shapeCommand tests
+    // OFF for now (Charles, court 2026-11-22 ~18:12): reversing is rare and the flip
+    // kept surprising the rider mid-manoeuvre. Leaning left always turns the chair
+    // the same way, forward or backward. Set true to bring the latched flip back.
+    constexpr bool CornerReverseFlipEnabled = false;
     constexpr float CornerReverseEngage = -0.15f;     // flip reverse turning below this speed
     constexpr float CornerReverseRelease = -0.02f;    // un-flip only above this speed...
     constexpr float CornerReverseReleaseTurn = 0.15f; // ...and with |turn| below this

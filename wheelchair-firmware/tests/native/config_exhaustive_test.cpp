@@ -400,6 +400,60 @@ static void protocolTests() {
         CHECK(f.command(op, body) == Status::Unknown);
     });
     test("set rejects out-of-range value without revision", [] { Fixture f; CHECK(f.command(Command::Set, {10, 0, 101, 0}) == Status::Invalid); CHECK(f.a.get() == 5 && f.protocol.revision() == 0); });
+    // RAM-only fields (FieldInfo::persistent = false), e.g. the bench-test trigger.
+    struct RamOnly : Fixture {
+        ConfigField<uint8_t> trigger{registry, 30, {parent, "trigger", "help", "", false, false}, 0, 0, 1};
+        RamOnly() { persistence.load(); }
+    };
+    test("RAM-only field is left out of snapshots, saves and the dirty flag", [] {
+        RamOnly f;
+        uint8_t raw[64];
+        const size_t withoutTrigger = snapshot(f.registry, raw, sizeof(raw));
+        CHECK(withoutTrigger == 2 * 6); // only a and b
+        CHECK(f.command(Command::Set, {30, 0, 1}) == Status::Ok && f.trigger.get() == 1);
+        CHECK(!f.persistence.dirty());
+        CHECK(snapshot(f.registry, raw, sizeof(raw)) == withoutTrigger);
+        CHECK(f.command(Command::Save) == Status::Ok);
+        f.persistence.load();
+        CHECK(f.trigger.get() == 0);
+    });
+    test("RAM-only field ignores a stored record and resets on revert", [] {
+        RamOnly f;
+        const uint8_t record[] = {30, 0, static_cast<uint8_t>(Type::U8), 1, 1};
+        applyTlvs(f.registry, record, sizeof(record));
+        CHECK(f.trigger.get() == 0);
+        CHECK(f.command(Command::Set, {30, 0, 1}) == Status::Ok);
+        CHECK(f.command(Command::Revert) == Status::Ok && f.trigger.get() == 0);
+    });
+    test("profile upload drops a RAM-only record and still needs every persistent field", [] {
+        RamOnly f;
+        const std::vector<uint8_t> all{10, 0, uint8_t(Type::U16), 2, 42, 0,
+                                       30, 0, uint8_t(Type::U8), 1, 1,
+                                       20, 0, uint8_t(Type::U16), 2, 6, 0};
+        std::vector<uint8_t> begin(27);
+        begin[1] = static_cast<uint8_t>(all.size());
+        begin[3] = 'R';
+        std::vector<uint8_t> chunk{0, 0};
+        chunk.insert(chunk.end(), all.begin(), all.end());
+        CHECK(f.command(Command::ProfileBegin, begin) == Status::Ok);
+        CHECK(f.command(Command::ProfileChunk, chunk) == Status::Ok);
+        CHECK(f.command(Command::ProfileCommit) == Status::Ok);
+        CHECK(f.trigger.get() == 0 && f.a.get() == 5); // validating it changed nothing in RAM
+        uint8_t name[Persistence::ProfileNameSize], payload[Persistence::ProfileCapacity];
+        const size_t length = f.persistence.readProfile(0, name, payload);
+        CHECK(length == 12);
+        for (size_t offset = 0; offset < length; offset += 4 + payload[offset + 3])
+            CHECK(read<uint16_t>(payload + offset) != 30);
+        CHECK(f.protocol.selectProfile(0) && f.a.get() == 42 && f.trigger.get() == 0);
+        // The RAM-only record can't stand in for a persistent one.
+        const std::vector<uint8_t> missing{10, 0, uint8_t(Type::U16), 2, 42, 0, 30, 0, uint8_t(Type::U8), 1, 1};
+        begin[1] = static_cast<uint8_t>(missing.size());
+        std::vector<uint8_t> chunk2{0, 0};
+        chunk2.insert(chunk2.end(), missing.begin(), missing.end());
+        CHECK(f.command(Command::ProfileBegin, begin) == Status::Ok);
+        CHECK(f.command(Command::ProfileChunk, chunk2) == Status::Ok);
+        CHECK(f.command(Command::ProfileCommit) == Status::Invalid);
+    });
     test("set rejects wrong value width", [] { Fixture f; CHECK(f.command(Command::Set, {10, 0, 1}) == Status::Malformed); });
     test("unknown operation reports Unknown", [] { Fixture f; CHECK(f.command(static_cast<Command>(255)) == Status::Unknown); });
     test("save and revert restore acknowledged value", [] { Fixture f; CHECK(f.command(Command::Set, {10, 0, 42, 0}) == Status::Ok); CHECK(f.command(Command::Save) == Status::Ok); CHECK(f.command(Command::Set, {10, 0, 12, 0}) == Status::Ok); CHECK(f.command(Command::Revert) == Status::Ok && f.a.get() == 42); });

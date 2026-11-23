@@ -3,6 +3,7 @@
 #include "Protocol.h"
 #include "../common.h"
 #include "../driveModes/lean_layout.h"
+#include "../bench_test.h"
 
 namespace settings
 {
@@ -41,6 +42,9 @@ namespace settings
     extern config::ConfigField<int> calibrationSamples, defaultFloor;
     extern config::ConfigField<uint8_t> leftVesc, rightVesc;
     extern config::ConfigField<float> wheelCircumference;
+    // Wheels-off bench test trigger (bench_test.h). RAM only: never saved to EEPROM
+    // or a profile, 0 at every boot, and set back to 0 when the routine ends.
+    extern config::EnumField<bench::Request, 2> benchTest;
 
     // Each profile owns six consecutive stable field IDs beginning at firstId.
     // tuning() builds a controller tuning object while retaining hard acceleration caps.

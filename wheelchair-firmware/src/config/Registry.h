@@ -156,6 +156,9 @@ struct FieldInfo {
     const char *description;
     const char *units = "";
     bool restart = false; // UI hint. The consumer controls when the value is used.
+    // false = RAM only: never written to EEPROM or a profile, never read back from
+    // one, and not counted as an unsaved change (e.g. the bench-test trigger).
+    bool persistent = true;
 };
 
 /**

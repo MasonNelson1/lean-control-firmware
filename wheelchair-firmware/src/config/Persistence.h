@@ -6,11 +6,13 @@ namespace config {
 
 // Records are [field ID:16, type:8, length:8, value:length].
 // A zero result indicates insufficient capacity, or an empty registry.
+// RAM-only fields (FieldInfo::persistent = false) are left out.
 size_t snapshot(const Registry &registry, uint8_t *data, size_t capacity);
 // Checks record boundaries before any field values are consumed.
 bool validTlvs(const uint8_t *data, size_t size);
-// Applies compatible records to the current RAM values. Unknown IDs and values
-// rejected by field validation are skipped. load() supplies defaults beforehand.
+// Applies compatible records to the current RAM values. Unknown IDs, RAM-only
+// fields and values rejected by field validation are skipped. load() supplies
+// defaults beforehand.
 void applyTlvs(Registry &registry, const uint8_t *data, size_t size);
 
 // Byte storage adapter. Firmware uses EEPROM, and host tests supply a memory

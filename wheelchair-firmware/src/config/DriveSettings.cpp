@@ -30,8 +30,11 @@ namespace settings
         Group transition(registry(), 11, "Transitions (reserved)", true, &pid);
         Group corner(registry(), 12, "Corner layout reach", false, &lean);
         Group cornerSensors(registry(), 13, "Corner layout sensors", true);
+        Group benchGroup(registry(), 14, "Bench test (wheels off)", true);
 
         constexpr Choice Modes[] = {{common::LEAN, "LEAN"}, {common::REMOTE, "REMOTE"}, {common::DISARM, "DISARM"}, {common::ASSIST, "ASSIST"}};
+        constexpr Choice BenchChoices[] = {{static_cast<uint8_t>(bench::Request::Off), "OFF"},
+                                           {static_cast<uint8_t>(bench::Request::Run), "RUN"}};
         constexpr Choice Layouts[] = {{static_cast<uint8_t>(lean::SensorLayout::Plus), "PLUS"},
                                       {static_cast<uint8_t>(lean::SensorLayout::Corner), "CORNER"}};
         constexpr float DefaultForewardBackKnee[] = {0.21f, 0.09f};
@@ -180,6 +183,17 @@ namespace settings
     ConfigField<float> wheelCircumference(registry(), 62,
                                           {motor, "Wheel circumference", "Measured rolling circumference. Updates LINEAR_TO_RPM for wheel speed and acceleration conversion.", "m"},
                                           common::WHEEL_CIRCUMFERENCE_M, 1.80f, 2.00f);
+
+    // RAM only (persistent = false): left out of every EEPROM save and profile, so
+    // it costs no profile bytes and is OFF at every power-on. Setting it marks no
+    // unsaved change. main.cpp starts the bench routine when it reads RUN.
+    EnumField<bench::Request, 2> benchTest(registry(), 110,
+                                           {benchGroup, "Bench test",
+                                            "WHEELS OFF. RUN spins both motors through a ~60 s test and logs DBG BENCH lines. "
+                                            "DISARM, empty seat and still wheels only; any button, sitting down, a VESC "
+                                            "fault or OFF aborts. Never saved.",
+                                            "", false, /*persistent=*/false},
+                                           bench::Request::Off, BenchChoices);
 
     PidProfile::PidProfile(Group &group, uint16_t firstId)
         : lowTau(registry(), firstId,

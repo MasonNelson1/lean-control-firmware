@@ -223,25 +223,41 @@ Status Protocol::profiles(Command command, const uint8_t *body, size_t size, Wri
     if (!oldLength) return Status::Storage;
 
     // Validate the candidate synchronously, then restore the active registry
-    // before touching EEPROM or returning to the control loop.
-    size_t fields = 0;
+    // before touching EEPROM or returning to the control loop. The dashboard
+    // uploads every field it discovered; RAM-only fields (the bench-test
+    // trigger) are dropped here, so a profile can never carry one.
+    size_t fields = 0, kept = 0;
     uint16_t seen[Persistence::ProfileCapacity / 5];
     bool valid = true;
     for (size_t offset = 0; offset < length && valid;) {
         const auto id = read<uint16_t>(upload_ + offset);
         auto *field = registry_.find(id);
-        const auto width = upload_[offset + 3];
+        const size_t recordSize = 4 + upload_[offset + 3];
         for (size_t i = 0; i < fields; ++i)
             if (seen[i] == id) valid = false;
         seen[fields++] = id;
-        valid = valid && field && static_cast<uint8_t>(field->type) == upload_[offset + 2] &&
-                field->update(upload_ + offset + 4, width);
-        offset += 4 + width;
+        valid = valid && field && static_cast<uint8_t>(field->type) == upload_[offset + 2];
+        if (valid && !field->info.persistent) {
+            offset += recordSize; // skipped, not validated: update() would change RAM
+            continue;
+        }
+        valid = valid && field->update(upload_ + offset + 4, recordSize - 4);
+        memmove(upload_ + kept, upload_ + offset, recordSize); // compact in place (kept <= offset)
+        kept += recordSize;
+        offset += recordSize;
     }
-    valid = valid && fields == registry_.fieldCount() && (!validate_ || validate_());
+    size_t persistentFields = 0;
+    for (auto *field = registry_.fields(); field; field = field->next())
+        persistentFields += field->info.persistent;
+    size_t uploadedPersistent = 0;
+    for (size_t i = 0; i < fields; ++i) {
+        const auto *field = registry_.find(seen[i]);
+        uploadedPersistent += field && field->info.persistent;
+    }
+    valid = valid && kept && uploadedPersistent == persistentFields && (!validate_ || validate_());
     applyTlvs(registry_, old, oldLength);
     if (!valid) return Status::Invalid;
-    return persistence_.writeProfile(uploadSlot_, uploadName_, upload_, length) ? Status::Ok : Status::Storage;
+    return persistence_.writeProfile(uploadSlot_, uploadName_, upload_, kept) ? Status::Ok : Status::Storage;
 }
 
 Status Protocol::update(Field &field, const uint8_t *data, size_t size, Writer &out) {

@@ -23,6 +23,7 @@ uint32_t crc32(const uint8_t *data, size_t size, uint32_t crc = UINT32_MAX) {
 size_t snapshot(const Registry &registry, uint8_t *data, size_t capacity) {
     Writer out(data, capacity);
     for (auto *field = registry.fields(); field; field = field->next()) {
+        if (!field->info.persistent) continue;
         out.put(field->id);
         out.put(static_cast<uint8_t>(field->type));
         out.put(field->width());
@@ -48,7 +49,7 @@ void applyTlvs(Registry &registry, const uint8_t *data, size_t size) {
         Field *field = registry.find(read<uint16_t>(data));
         // update() additionally checks width, range, enum choices, and profile
         // constraints. Rejected records leave the caller's existing value intact.
-        if (field && data[2] == static_cast<uint8_t>(field->type))
+        if (field && field->info.persistent && data[2] == static_cast<uint8_t>(field->type))
             field->update(data + TlvHeaderSize, data[3]);
         data += TlvHeaderSize + data[3];
     }

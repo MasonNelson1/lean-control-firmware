@@ -84,6 +84,17 @@ struct MotorSetup
 static MotorSetup motors;
 static VescStatus measuredMotors[2]{};
 
+// Read-only VESC firmware-version probe (see vesc_probe.h).
+static vescprobe::Reply probeReply;
+static vescapply::Applier vescApplier; // one-shot approved VESC settings write (vesc_apply.h)
+static vescmon::Monitor vescMonitor;   // read-only GET_VALUES poll + fault watch (vesc_monitor.h)
+
+// Wheels-off bench test (bench_test.h), started by the RAM-only "Bench test"
+// setting. buttonActivity: any button held, pressed or edged since the bench
+// last looked (it aborts on any of them).
+static bench::Routine benchRoutine;
+static bool buttonActivity = false;
+
 static telemetry::MotorCommands motorTelemetry{};
 static telemetry::Telemetry telemetryOutput;
 static MotorTargets assistBoostCurrent{};
@@ -446,6 +457,11 @@ static void updateModeInputs()
     input.profileSettled = profileKnob.settled();
     input.pendingProfile = pendingProfile;
     input.calibrationActive = leanMode.calibrationActive();
+    if (input.lean.edge || input.remote.edge || input.disarm.edge || input.lean.pressed || input.remote.pressed ||
+        input.disarm.pressed || input.calibrate.pressed || leanModeButton.getStateRaw() == LOW ||
+        remoteModeButton.getStateRaw() == LOW || disarmModeButton.getStateRaw() == LOW ||
+        calibrateButton.getStateRaw() == LOW)
+        buttonActivity = true;
     logButtonEvents(input);
     const mode selectedBefore = modeState.selected();
     // Refresh only the seat reading, leaving the control/telemetry sample intact.
@@ -539,6 +555,35 @@ static void applySeatedLatch()
                                transition.seatDisarm ? "seat-empty" : "selected");
 }
 
+// One bench-test tick (bench_test.h): its gates and abort checks see the mode,
+// seat, buttons, safety brake and both VESCs. Clears the setting when it ends.
+static bench::Output updateBench(uint32_t now)
+{
+    bench::Inputs in;
+    in.nowMs = now;
+    in.requested = settings::benchTest.get() != bench::Request::Off;
+    in.mode = modeState.current();
+    in.seated = leanMode.isSeated();
+    in.button = buttonActivity;
+    buttonActivity = false;
+    in.safetyBrake = safetyBrake;
+    in.vescBusy = vescApplier.active();
+    for (int i = 0; i < 2; ++i)
+    {
+        const VescStatus &m = measuredMotors[i];
+        in.fresh[i] = m.rpmFrames != 0 && now - m.lastRpmMs <= bench::VescSilentMs;
+        const vescmon::Side &values = vescMonitor.side(i);
+        in.fault[i] = values.have ? values.values.fault : 0;
+        in.faultEpisodes[i] = values.faults;
+        in.rpm[i] = m.erpm / VESC_ERPM_PER_WHEEL_RPM;
+        in.current[i] = m.current;
+    }
+    const bench::Output out = benchRoutine.update(in);
+    if (out.clearRequest)
+        settings::benchTest.reset(); // RAM only; the dashboard shows OFF on its next read
+    return out;
+}
+
 static void updateDrive()
 {
     // rate limit the loop.
@@ -569,6 +614,9 @@ static void updateDrive()
         modeState.requestDisarm();
     }
     applySeatedLatch();
+    // Before the calibration block's early return, so a bench run (DISARM only)
+    // always sees a mode change and aborts.
+    const bench::Output benchCommand = updateBench(now);
     if (modeState.current() == LEAN && leanMode.isSeated() && calibrationRequested)
     {
         vescSetCurrent(can1, motors.leftId, 0.0f);
@@ -639,7 +687,26 @@ static void updateDrive()
         break;
     }
     assistBoostCurrent = modeState.current() == ASSIST ? targets : MotorTargets{};
-    if (modeState.current() == LEAN || modeState.current() == REMOTE)
+    if (modeState.current() == DISARM && benchCommand.cmd != bench::Cmd::None)
+    {
+        // The same command to both wheels, so the sides can be compared.
+        switch (benchCommand.cmd)
+        {
+        case bench::Cmd::Rpm:
+            vescSetWheelRPM(can1, motors.leftId, static_cast<int32_t>(lroundf(benchCommand.value)));
+            vescSetWheelRPM(can1, motors.rightId, static_cast<int32_t>(lroundf(benchCommand.value)));
+            break;
+        case bench::Cmd::Brake:
+            vescSetBrakeCurrent(can1, motors.leftId, benchCommand.value);
+            vescSetBrakeCurrent(can1, motors.rightId, benchCommand.value);
+            break;
+        default:
+            vescSetCurrent(can1, motors.leftId, 0.0f);
+            vescSetCurrent(can1, motors.rightId, 0.0f);
+            break;
+        }
+    }
+    else if (modeState.current() == LEAN || modeState.current() == REMOTE)
     {
         setMotorPower(targets.left, targets.right, dt);
     }
@@ -671,6 +738,10 @@ static void replyToConfiguration()
         return;
 
     uint8_t response[config::MaxResponseSize];
+    // What would be saved, before and after this request: a change to a RAM-only
+    // field (the bench-test trigger) alone leaves it identical and isn't auto-saved.
+    static uint8_t savedBefore[config::Persistence::PayloadCapacity], savedAfter[config::Persistence::PayloadCapacity];
+    const size_t beforeLength = config::snapshot(settings::registry(), savedBefore, sizeof(savedBefore));
     // Configuration writes are permitted only while the current mode is DISARM.
     // Only successful runtime mutations require refreshing derived settings.
     const uint32_t revision = settings::protocol.revision();
@@ -679,7 +750,9 @@ static void replyToConfiguration()
     {
         applyRuntimeSettings();
         settingsFlashUntil = millis() + SETTINGS_FLASH_MS;
-        settingsChangedAt = millis(); // auto-saved into the active profile shortly (see loop)
+        const size_t afterLength = config::snapshot(settings::registry(), savedAfter, sizeof(savedAfter));
+        if (afterLength != beforeLength || memcmp(savedBefore, savedAfter, afterLength) != 0)
+            settingsChangedAt = millis(); // auto-saved into the active profile shortly (see loop)
         telemetry::Telemetry::logf("DBG EVT %lu settings rev=%lu\n", static_cast<unsigned long>(millis()),
                                    static_cast<unsigned long>(settings::protocol.revision()));
     }
@@ -689,10 +762,6 @@ static void replyToConfiguration()
     configReplyBytes += length + length / 254 + 3; // COBS-framed, approximately
 }
 
-// Read-only VESC firmware-version probe (see vesc_probe.h).
-static vescprobe::Reply probeReply;
-static vescapply::Applier vescApplier; // one-shot approved VESC settings write (vesc_apply.h)
-static vescmon::Monitor vescMonitor;   // read-only GET_VALUES poll + fault watch (vesc_monitor.h)
 static uint32_t probeAsked = 0, probeFrames = 0, probeReplies = 0;
 // A config reply being streamed out as hex, a chunk per telemetry tick.
 static uint8_t confDump[1024];
@@ -928,6 +997,12 @@ void loop()
         }
     }
     vescMonitor.flushFaults(); // a DBG VFAULT goes out as soon as there is room
+    // DBG BENCH lines likewise: queued, never dropped by a busy link.
+    while (benchRoutine.hasLine() && telemetry::Telemetry::hasRoom(strlen(benchRoutine.line())))
+    {
+        telemetry::Telemetry::logf("%s", benchRoutine.line());
+        benchRoutine.popLine();
+    }
     {
         const bool disarmed = modeState.current() == DISARM;
         // The applier starts only when no monitor/probe reply is in flight; while it

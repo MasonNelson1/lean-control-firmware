@@ -1,5 +1,6 @@
 // g++ -std=c++17 -Wall -Wextra -Werror -I tests/native/config_stubs -I src tests/native/drive_settings_test.cpp src/config/DriveSettings.cpp src/config/Registry.cpp src/config/Persistence.cpp src/config/Protocol.cpp -o .pio/drive_settings_test.exe
 #include "config/DriveSettings.h"
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <set>
@@ -67,7 +68,8 @@ int main() {
             &settings::sensorLayout, &settings::cornerDeadzone,
             &settings::reachForward, &settings::reachBack, &settings::reachLeft, &settings::reachRight, &settings::passiveMargin,
             &settings::emptyPlateF, &settings::emptyPlateB, &settings::emptyPlateL, &settings::emptyPlateR,
-            &settings::cornerGainF, &settings::cornerGainB, &settings::cornerGainL, &settings::cornerGainR
+            &settings::cornerGainF, &settings::cornerGainB, &settings::cornerGainL, &settings::cornerGainR,
+            &settings::benchTest
         };
         CHECK(exported.size() == settings::registry().fieldCount());
         for (const auto *field : exported) CHECK(settings::registry().find(field->id) == field);
@@ -154,6 +156,48 @@ int main() {
         CHECK(settings::sensorLayout.get() == lean::SensorLayout::Corner);
         CHECK(settings::reachForward.get() == lean::DefaultReachForward);
         settings::registry().defaults();
+    });
+    test("bench test trigger is RAM only: never saved, never dirty, OFF after load", [] {
+        CHECK(!settings::benchTest.info.persistent);
+        CHECK(settings::benchTest.get() == bench::Request::Off);
+        settings::persistence.load();
+        uint8_t before[Persistence::PayloadCapacity], after[Persistence::PayloadCapacity];
+        const size_t length = snapshot(settings::registry(), before, sizeof(before));
+        for (size_t offset = 0; offset < length; offset += 4 + before[offset + 3])
+            CHECK(read<uint16_t>(before + offset) != settings::benchTest.id);
+        const uint8_t run = 1;
+        CHECK(request(Command::Set, settings::benchTest.id, &run, 1) == Status::Ok);
+        CHECK(settings::benchTest.get() == bench::Request::Run);
+        CHECK(!settings::persistence.dirty()); // nothing for the dashboard to save
+        CHECK(snapshot(settings::registry(), after, sizeof(after)) == length && !memcmp(before, after, length));
+        CHECK(settings::persistence.save());
+        settings::persistence.load(); // = power-on
+        CHECK(settings::benchTest.get() == bench::Request::Off);
+        const uint8_t bad = 2;
+        CHECK(request(Command::Set, settings::benchTest.id, &bad, 1) == Status::Invalid);
+    });
+    test("bench test trigger stays out of saved profiles and profile selection clears it", [] {
+        uint8_t payload[Persistence::ProfileCapacity], name[Persistence::ProfileNameSize] = "Bench";
+        const uint8_t run = 1;
+        CHECK(request(Command::Set, settings::benchTest.id, &run, 1) == Status::Ok);
+        const size_t length = snapshot(settings::registry(), payload, sizeof(payload));
+        CHECK(settings::persistence.writeProfile(5, name, payload, length));
+        uint8_t readName[Persistence::ProfileNameSize], read[Persistence::ProfileCapacity];
+        const size_t stored = settings::persistence.readProfile(5, readName, read);
+        CHECK(stored == length);
+        for (size_t offset = 0; offset < stored; offset += 4 + read[offset + 3])
+            CHECK(config::read<uint16_t>(read + offset) != settings::benchTest.id);
+        CHECK(settings::protocol.selectProfile(5));
+        CHECK(settings::benchTest.get() == bench::Request::Off);
+    });
+    test("a dashboard profile upload (every field, bench trigger included) fits on the Teensy", [] {
+        // The dashboard uploads every discovered field; the firmware drops the
+        // bench record. The host's unsigned long is 8 bytes, the Teensy's 4.
+        uint8_t data[Persistence::PayloadCapacity];
+        size_t teensy = snapshot(settings::registry(), data, sizeof(data)) + 4 + settings::benchTest.width();
+        for (auto *f = settings::registry().fields(); f; f = f->next())
+            if (f->type == scalarType<unsigned long>() && sizeof(unsigned long) == 8) teensy -= 4;
+        CHECK(teensy <= Persistence::ProfileCapacity);
     });
     test("actual settings fit EEPROM and survive reload", [] {
         CHECK(settings::persistence.save());

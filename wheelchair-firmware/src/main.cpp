@@ -120,12 +120,20 @@ void setMotorPower(double left, double right, float dt)
     const float rightTargetRPM = constrain(right, -1.0f, 1.0f) * speedLimitMS * LINEAR_TO_RPM;
     const float leftMeasuredRPM = measuredMotors[0].erpm / VESC_ERPM_PER_WHEEL_RPM;
     const float rightMeasuredRPM = measuredMotors[1].erpm / VESC_ERPM_PER_WHEEL_RPM;
-    const float leftRpms = constrain(
-        leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, MAX_ACCEL),
-        leftMeasuredRPM - common::MAX_RPM_COMMAND_DIFF, leftMeasuredRPM + common::MAX_RPM_COMMAND_DIFF);
-    const float rightRpms = constrain(
-        rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, MAX_ACCEL),
-        rightMeasuredRPM - common::MAX_RPM_COMMAND_DIFF, rightMeasuredRPM + common::MAX_RPM_COMMAND_DIFF);
+    const float leftSmoothed = leftRPMSetpointPID.smoothRPM(leftTargetRPM, dt, speedLimitMS, MAX_ACCEL);
+    const float rightSmoothed = rightRPMSetpointPID.smoothRPM(rightTargetRPM, dt, speedLimitMS, MAX_ACCEL);
+    // Steering while braking (court 2026-11-22): clamping each wheel to its own
+    // measured RPM +- MAX_RPM_COMMAND_DIFF pinned both wheels at "measured - 50"
+    // while slowing down and erased the turn. Clamp only the forward (mean) part
+    // to the measured mean +- the limit, then put the commanded turn (half the
+    // difference) back on top, so leaning to turn works while braking.
+    const float measuredMean = 0.5f * (leftMeasuredRPM + rightMeasuredRPM);
+    const float mean = constrain(0.5f * (leftSmoothed + rightSmoothed),
+                                 measuredMean - common::MAX_RPM_COMMAND_DIFF, measuredMean + common::MAX_RPM_COMMAND_DIFF);
+    const float halfDiff = 0.5f * (leftSmoothed - rightSmoothed);
+    const float maxRPM = speedLimitMS * LINEAR_TO_RPM;
+    const float leftRpms = constrain(mean + halfDiff, -maxRPM, maxRPM);
+    const float rightRpms = constrain(mean - halfDiff, -maxRPM, maxRPM);
     vescSetWheelRPM(can1, motors.leftId, leftRpms);
     vescSetWheelRPM(can1, motors.rightId, rightRpms);
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};

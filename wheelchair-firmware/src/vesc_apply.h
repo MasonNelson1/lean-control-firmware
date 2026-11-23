@@ -168,7 +168,8 @@ class Applier
 {
 public:
 
-  bool active() const { return step_ != Step::Idle && step_ != Step::Done; }
+  // Paused (chair armed) counts as inactive, so VESC monitoring and fault polling carry on.
+  bool active() const { return step_ != Step::Idle && step_ != Step::Done && !paused_; }
   bool finished() const { return step_ == Step::Done; }
 
   // Start once both VESCs are reporting and the chair is disarmed.
@@ -190,7 +191,7 @@ public:
   // Abort if the chair leaves DISARM mid-run (it can't while the seat is empty, but be sure).
   void update(VescBus &bus, bool disarmed)
   {
-    if (!active())
+    if (step_ == Step::Idle || step_ == Step::Done)
       return;
     if (!disarmed)
     {

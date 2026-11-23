@@ -26,6 +26,10 @@ using namespace common;
 // wheel toward zero and can't reverse it) until the rider presses DISARM (then the
 // wheels are free, as before) or selects another mode.
 static bool safetyBrake = false;
+// All four mode LEDs blink for a moment whenever a setting changes over Bluetooth
+// (dashboard or Claude's CLI), so the riders can see a change land (Charles, 2026-11-22).
+static uint32_t settingsFlashUntil = 0;
+constexpr uint32_t SETTINGS_FLASH_MS = 1200; // ~4 blinks at 150 ms
 constexpr float SAFETY_BRAKE_MOVING_A = 15.0f; // VESC braking current limit is 20 A
 constexpr float SAFETY_BRAKE_HOLD_A = 5.0f;    // once both wheels are below SAFETY_BRAKE_STILL_RPM
 constexpr float SAFETY_BRAKE_STILL_RPM = 3.0f;
@@ -380,6 +384,15 @@ static void updateModeInputs()
 
 static void updateModeLEDs()
 {
+    if (static_cast<int32_t>(settingsFlashUntil - millis()) > 0)
+    {
+        const uint8_t on = (millis() / 150) % 2 ? HIGH : LOW;
+        digitalWrite(common::PIN_LEAN_LED, on);
+        digitalWrite(common::PIN_DISARM_LED, on);
+        digitalWrite(common::PIN_REMOTE_LED, on);
+        digitalWrite(common::PIN_CAL_LED, on);
+        return;
+    }
     switch (modeState.current())
     {
     case LEAN:
@@ -575,6 +588,7 @@ static void replyToConfiguration()
     if (settings::protocol.revision() != revision)
     {
         applyRuntimeSettings();
+        settingsFlashUntil = millis() + SETTINGS_FLASH_MS;
         telemetry::Telemetry::logf("DBG EVT %lu settings rev=%lu\n", static_cast<unsigned long>(millis()),
                                    static_cast<unsigned long>(settings::protocol.revision()));
     }

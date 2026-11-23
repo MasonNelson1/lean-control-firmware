@@ -194,9 +194,20 @@ public:
       return;
     if (!disarmed)
     {
-      report("abort", "chair left DISARM");
-      step_ = Step::Done;
+      // Writes happen only in DISARM. Leaving DISARM pauses the run; it restarts
+      // the current job from a fresh read once the chair is disarmed again
+      // (court 2026-11-22: arming mid-run left one VESC written and one not).
+      if (!paused_)
+        report("pause", "chair left DISARM; resumes when disarmed");
+      paused_ = true;
+      step_ = Step::Get;
+      tries_ = 0;
       return;
+    }
+    if (paused_)
+    {
+      paused_ = false;
+      report("resume", "disarmed again; re-reading this VESC");
     }
     sender_.pump(bus);
     const Job &j = jobs()[job_];
@@ -369,5 +380,6 @@ private:
   uint32_t waitSince_ = 0, firstOkMs_ = 0;
   LongSender sender_;
   uint8_t target_[1024] = {};
+  bool paused_ = false;
 };
 } // namespace vescapply

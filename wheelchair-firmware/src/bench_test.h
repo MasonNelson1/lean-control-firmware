@@ -241,6 +241,7 @@ private:
         if (in.button) return "button";
         if (in.seated) return "seated";
         if (in.safetyBrake) return "safety-brake";
+        if (in.vescBusy) return "vesc-busy";
         if (!in.fresh[0]) return "vesc-silent-L";
         if (!in.fresh[1]) return "vesc-silent-R";
         if (in.fault[0] || in.faultEpisodes[0] != episodes_[0]) return "fault-L";

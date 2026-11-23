@@ -516,7 +516,8 @@ static void updateModeLEDs()
         // Blinking = the safety brake is holding the wheels; steady = wheels free.
         digitalWrite(common::PIN_DISARM_LED, safetyBrake ? ((millis() / 200) % 2 ? HIGH : LOW) : HIGH);
         digitalWrite(common::PIN_REMOTE_LED, LOW);
-        digitalWrite(common::PIN_CAL_LED, LOW);
+        // Fast CAL blink: the bench test is driving the motors.
+        digitalWrite(common::PIN_CAL_LED, benchRoutine.active() && (millis() / 100) % 2 ? HIGH : LOW);
         break;
     case ASSIST:
         digitalWrite(common::PIN_LEAN_LED, LOW);
@@ -1007,8 +1008,9 @@ void loop()
         const bool disarmed = modeState.current() == DISARM;
         // The applier starts only when no monitor/probe reply is in flight; while it
         // runs, the monitor asks nothing (both share the reply path to PROBE_CAN_ID).
+        // Never starts a VESC settings write while the bench test spins the motors.
         vescApplier.maybeStart(vescFresh(measuredMotors[0], 500) && vescFresh(measuredMotors[1], 500) &&
-                                   !vescMonitor.busy(millis()),
+                                   !vescMonitor.busy(millis()) && !benchRoutine.active(),
                                disarmed, motors.leftId, motors.rightId);
         vescApplier.update(can1, disarmed);
         vescApplier.repeatSummary();

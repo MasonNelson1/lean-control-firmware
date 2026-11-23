@@ -214,6 +214,7 @@ static void aborts()
         {"button", [](Inputs &in) { in.button = true; }},
         {"seated", [](Inputs &in) { in.seated = true; }},
         {"safety-brake", [](Inputs &in) { in.safetyBrake = true; }},
+        {"vesc-busy", [](Inputs &in) { in.vescBusy = true; }},
         {"vesc-silent-L", [](Inputs &in) { in.fresh[0] = false; }},
         {"vesc-silent-R", [](Inputs &in) { in.fresh[1] = false; }},
         {"fault-L", [](Inputs &in) { in.fault[0] = 2; }},

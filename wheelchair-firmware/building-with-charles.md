@@ -53,6 +53,20 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
   ```
 - `set` checks every value against the firmware's min/max before sending anything, prints `old -> new` as acknowledged by the chair, and refuses ambiguous names (use `Group / Name` or the id). Set/save/revert work only in **DISARM**: the firmware refuses otherwise (exit code 3). Writes are never retried; on a missing ACK, `get` to check.
 
+## Wheels-off bench test (`src/bench_test.h`)
+- **Wheels off the ground, nobody in the chair, DISARM** (DISARM LED steady, not blinking: a blinking safety brake refuses it; press DISARM to clear). Then:
+  ```bash
+  python.exe tools/chair_config.py set "bench" 1      # RUN; "bench" 0 aborts
+  python3 tools/bench_report.py                       # after it ends: table + chart in ../experiments/
+  ```
+- About 65 s, both wheels on the same command: creep 3/5/8 RPM (3 s each; 300 min ERPM ≈ 5.2 wheel RPM), 15/30/60/90 RPM forward then reverse (5 s each, stats over the last 2 s), brake to still, 0→60→0 steps twice (3 s each), spin to 90 RPM, 15 A brake.
+- **Starts only if** DISARM, seat empty, no button held, safety brake off, no VESC settings write running, both VESCs' STATUS_1 under 200 ms old and no fault code, both wheels under 3 RPM. Otherwise logs `DBG BENCH ... refused why=...` and sets the field back to OFF.
+- **Aborts** on any button (held or pressed), the seat becoming occupied, a VESC silent for 200 ms or reporting a fault (a new fault episode counts too), the field set to OFF, a stop/spin-up/brake step timing out (6 s), the safety brake latching, or a VESC settings write starting (it can't start during a run anyway): 15 A brake until both wheels are under 3 RPM (at most 4 s), then zero current. Leaving DISARM stops it at once (the new mode owns the motors).
+- While it runs the CAL LED blinks fast.
+- The field is **RAM only**: never in EEPROM or a profile, OFF at power-on, OFF when the routine ends, and setting it doesn't trigger the 2 s auto-save.
+- Lines: `DBG BENCH <ms> begin|refused|abort|released|done ...` and per step `step=<name> start|sum|end`. `sum` carries per side `i`/`isd` (motor current mean/sd, A), `rpm`/`rsd`, `ok` (reached the setpoint within 10% or 1.5 RPM); steps add `t90` (ms), `ovs` (% overshoot), `setl` (ms to stay within 5%, -1 never); brake adds `stopL/stopR` (ms to < 3 RPM). Raw data: the 20 Hz CSV (actual RPM) and `DBG M` (currents).
+- `bench_report.py` flags current asymmetry > 25% (holds above 0.5 A), RPM ripple > 10% of the setpoint, and missed setpoints. `--list`, `--run N`, `--file`, `--no-html`.
+
 ## Reading the data
 - **SQL:** `python3 tools/chair_sql.py "SELECT ..."` (also `--schema`, `--trend N`, `--file <csv>`).
   - Tables: `t` (telemetry rows), `raw` (20 Hz raw), `sens`, `corner`, `cop`, `vesc`, `vval`, `vfault`, `motor`, `sys`, `io`, `evt`, `msg` (text lines; `kind` `TAP`/`CORRUPT`/...). `--schema` lists the columns.

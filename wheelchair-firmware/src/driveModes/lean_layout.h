@@ -141,6 +141,11 @@ namespace lean
     // Corner layout: reverse turning flips as soon as the chair is clearly reversing.
     // Was -0.3 (plus tuning); on the court slow reversing stayed above it. Charles, 2026-11-22.
     constexpr float CornerReverseFlipAt = -0.1f;
+    // Corner layout turn authority (fraction of the speed cap given to the wheel
+    // difference), replacing the plus-era turn mix that grew with speed.
+    constexpr float TurnAuthorityStopped = 0.45f;  // spins in place and slow S-turns
+    constexpr float TurnAuthorityFast = 0.25f;     // at and above the fade speed
+    constexpr float TurnAuthorityFadeSpeed = 0.5f; // |speed| where it reaches TurnAuthorityFast
 
     // Below this many counts of total load the centre of pressure is noise. A
     // seated rider loads the plate by ≈1,300–2,600 counts, and the seat gate

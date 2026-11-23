@@ -205,7 +205,18 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     const int segment = speedMagnitude < mix[2] ? 0 : 2;
     const float ratio = (speedMagnitude - mix[segment]) / (mix[segment + 2] - mix[segment]);
     const float turnGain = mix[segment + 1] + ratio * (mix[segment + 3] - mix[segment + 1]);
-    const float mixedTurn = turnGain * turn;
+    float mixedTurn = turnGain * turn;
+    // Corner layout: turning is snappy at low speed and tame at speed (court
+    // 2026-11-22: reversing at half speed with a full side lean put one wheel at
+    // full reverse and the chair into a spin it couldn't brake out of). The turn
+    // authority fades from TurnAuthorityStopped to TurnAuthorityFast by
+    // TurnAuthorityFadeSpeed, forward or reverse. Plus layout unchanged.
+    if (settings::sensorLayout.get() == lean::SensorLayout::Corner)
+    {
+        const float fade = std::min(speedMagnitude / lean::TurnAuthorityFadeSpeed, 1.0f);
+        const float authority = lean::TurnAuthorityStopped + fade * (lean::TurnAuthorityFast - lean::TurnAuthorityStopped);
+        mixedTurn = constrain(turn, -1.0f, 1.0f) * authority;
+    }
     return {constrain(speed + mixedTurn, -1.0f, 1.0f),
             constrain(speed - mixedTurn, -1.0f, 1.0f)};
 }

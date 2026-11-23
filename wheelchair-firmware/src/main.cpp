@@ -132,8 +132,32 @@ void setMotorPower(double left, double right, float dt)
                                  measuredMean - common::MAX_RPM_COMMAND_DIFF, measuredMean + common::MAX_RPM_COMMAND_DIFF);
     const float halfDiff = 0.5f * (leftSmoothed - rightSmoothed);
     const float maxRPM = speedLimitMS * LINEAR_TO_RPM;
-    const float leftRpms = constrain(mean + halfDiff, -maxRPM, maxRPM);
-    const float rightRpms = constrain(mean - halfDiff, -maxRPM, maxRPM);
+    float leftRpms = constrain(mean + halfDiff, -maxRPM, maxRPM);
+    float rightRpms = constrain(mean - halfDiff, -maxRPM, maxRPM);
+    // Court 2026-11-22 18:03: (1) slowing from speed, both wheels sit on the
+    // battery's regen limit, so commanding the inside wheel even lower can't make
+    // it slow more: the chair just went straight. While turning and slowing, the
+    // OUTSIDE wheel isn't braked (its command is held at its measured speed), so
+    // the inside wheel's braking turns the chair. (2) A wheel still rolling one way
+    // must not be commanded the other way: that reverse surge tripped
+    // ABS_OVER_CURRENT. Above NO_PLUG_RPM it is commanded to zero instead (the
+    // VESC brakes it), and reverses only once it has slowed down.
+    constexpr float TURN_BRAKE_MIN_DIFF_RPM = 5.0f;
+    constexpr float NO_PLUG_RPM = 15.0f;
+    if (fabsf(halfDiff) > TURN_BRAKE_MIN_DIFF_RPM)
+    {
+        const bool leftOutside = halfDiff > 0.0f; // left faster = turning right = left is outside
+        float &outside = leftOutside ? leftRpms : rightRpms;
+        const float outsideMeasured = leftOutside ? leftMeasuredRPM : rightMeasuredRPM;
+        if (outsideMeasured > NO_PLUG_RPM && outside < outsideMeasured)
+            outside = std::min(outsideMeasured, maxRPM);
+        else if (outsideMeasured < -NO_PLUG_RPM && outside > outsideMeasured)
+            outside = std::max(outsideMeasured, -maxRPM);
+    }
+    if (leftMeasuredRPM > NO_PLUG_RPM && leftRpms < 0.0f) leftRpms = 0.0f;
+    if (leftMeasuredRPM < -NO_PLUG_RPM && leftRpms > 0.0f) leftRpms = 0.0f;
+    if (rightMeasuredRPM > NO_PLUG_RPM && rightRpms < 0.0f) rightRpms = 0.0f;
+    if (rightMeasuredRPM < -NO_PLUG_RPM && rightRpms > 0.0f) rightRpms = 0.0f;
     vescSetWheelRPM(can1, motors.leftId, leftRpms);
     vescSetWheelRPM(can1, motors.rightId, rightRpms);
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};

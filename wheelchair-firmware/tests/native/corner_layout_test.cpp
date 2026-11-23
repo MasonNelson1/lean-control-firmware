@@ -272,17 +272,17 @@ namespace
         return lean::cornerCommand(mode.getCentreOfPressure().at, mode.neutralZone(), mode.activeReach());
     }
 
-    // Half a right lean plus a back lean of `back` (0..1 of the way to BackTouch).
-    // Half, not full: a full right lean already reads raw speed -0.16 because the
-    // CoP drifts back with a side lean, which would engage the latch by itself.
-    lean::Counts rightAndBack(float back) { return blend(blend(ActiveNeutral, Right, 0.5f), BackTouch, back); }
+    // A right lean of `right` (0..1 of the way to the E9 Right hold) plus a back
+    // lean of `back` (0..1 of the way to BackTouch). The values used below were
+    // read off the shaped speed/turn each posture produces (the asserts pin them).
+    lean::Counts rightAndBack(float right, float back) { return blend(blend(ActiveNeutral, Right, right), BackTouch, back); }
 
-    // The reverse-turn flip is a latch: engages below CornerReverseEngage, and
-    // releases only near standstill AND with the turn near neutral, so the turn
-    // direction never flips in the middle of a turn. Judged by the turn's sign
-    // (a flipped turn comes out negative for a right lean). The raw numbers
-    // asserted here (speed in the hysteresis band, turn above the release turn)
-    // are what make each step a real test of the latch.
+    // The reverse-turn flip is a latch on the SHAPED speed and turn: it engages
+    // below CornerReverseEngage, and releases only near standstill (shaped speed
+    // above CornerReverseRelease) AND with the shaped turn near neutral, so the
+    // turn direction never flips in the middle of a turn. Judged by the turn's
+    // sign (a flipped turn comes out negative for a right lean). The asserts on
+    // the shaped numbers are what make each step a real test of the latch.
     void reverseTurnLatch()
     {
         setLayout(SensorLayout::Corner);
@@ -293,50 +293,54 @@ namespace
         drive(mode, ActiveNeutral);
         const float engage = lean::CornerReverseEngage, release = lean::CornerReverseRelease, releaseTurn = lean::CornerReverseReleaseTurn;
 
-        // Turning with raw speed between engage and release: not flipped. Reversing
-        // at -0.08 alone no longer flips (a single -0.1 threshold chattered).
-        auto cmd = drive(mode, rightAndBack(0.0f));
-        auto raw = rawCommand(mode);
-        assert(raw.speed > release && raw.turn > releaseTurn && cmd.turn > 0);
-        cmd = drive(mode, rightAndBack(0.1f));
-        raw = rawCommand(mode);
-        assert(raw.speed < release && raw.speed > engage && raw.turn > releaseTurn);
+        // A pure side lean from neutral is NOT reversing: the CoP drifts back with
+        // it (raw speed below the engage threshold) but the shaped speed (about
+        // -0.06) stays above it, so the turn keeps its direction. Both sides.
+        auto cmd = drive(mode, Right);
+        assert(rawCommand(mode).speed < engage && cmd.speed > engage && cmd.speed < release && cmd.turn > 0.9f);
+        drive(mode, ActiveNeutral);
+        cmd = drive(mode, Left);
+        assert(cmd.speed > engage && cmd.turn < -0.9f); // a flipped left lean would come out positive
+        drive(mode, ActiveNeutral);
+        // ...and it did not latch: a full right lean with a little back lean, still
+        // shaped-speed above the engage threshold, turns right.
+        cmd = drive(mode, rightAndBack(1.0f, 0.2f));
+        assert(cmd.speed < release && cmd.speed > engage && cmd.turn > releaseTurn);
         assert(cmd.turn > 0);
 
-        // Below the engage speed it latches on: the same right lean turns the other way.
-        cmd = drive(mode, rightAndBack(0.2f));
-        raw = rawCommand(mode);
-        assert(raw.speed < engage && raw.turn > releaseTurn);
+        // Engages once the shaped speed passes the threshold: the same right lean turns the other way.
+        cmd = drive(mode, rightAndBack(1.0f, 0.3f));
+        assert(cmd.speed < engage && fabsf(cmd.turn) > releaseTurn);
         assert(cmd.turn < 0);
 
-        // Speed hovering around -0.1 while turning: stays flipped, never chatters.
-        for (float back : {0.1f, 0.12f, 0.08f, 0.1f, 0.14f, 0.1f})
+        // Shaped speed hovering around the engage threshold while turning: stays flipped, never chatters.
+        for (float back : {0.2f, 0.3f, 0.2f, 0.25f, 0.2f, 0.3f})
         {
-            cmd = drive(mode, rightAndBack(back));
-            raw = rawCommand(mode);
-            assert(raw.speed < release && raw.speed > engage && raw.turn > releaseTurn);
+            cmd = drive(mode, rightAndBack(1.0f, back));
+            assert(cmd.speed < release && fabsf(cmd.turn) > releaseTurn);
             assert(cmd.turn < 0);
         }
 
-        // Speed back near 0 while still turning: stays flipped (no mid-turn flip).
-        cmd = drive(mode, rightAndBack(0.0f));
-        raw = rawCommand(mode);
-        assert(raw.speed > release && raw.turn > releaseTurn);
+        // Shaped speed back near standstill while still turning (shaped turn ~0.29): stays flipped.
+        cmd = drive(mode, rightAndBack(0.5f, 0.0f));
+        assert(cmd.speed > release && fabsf(cmd.turn) > releaseTurn);
         assert(cmd.turn < 0);
 
-        // Straight back at about -0.03 (turn 0, still reversing): not standstill, no release...
-        cmd = drive(mode, blend(ActiveNeutral, BackTouch, 0.2f));
-        raw = rawCommand(mode);
-        assert(raw.speed < release && raw.speed > engage && fabsf(raw.turn) < releaseTurn);
-        cmd = drive(mode, rightAndBack(0.1f));
-        assert(cmd.turn < 0); // ...so the turn is still flipped
+        // Straight back at about -0.04 (turn 0, still reversing): shaped turn is
+        // small but the speed is not at standstill, so no release... (Reached via
+        // a deep back lean: the direct ramp from the turn above passes through
+        // standstill with a small turn, which is a real release.)
+        drive(mode, rightAndBack(0.5f, 0.5f));
+        cmd = drive(mode, blend(ActiveNeutral, BackTouch, 0.3f));
+        assert(cmd.speed < release && cmd.speed > engage && fabsf(cmd.turn) < releaseTurn);
+        cmd = drive(mode, rightAndBack(0.75f, 0.2f));
+        assert(cmd.speed < release && cmd.speed > engage && cmd.turn < 0); // ...so the turn is still flipped
 
         // Near standstill with the turn near neutral releases it.
-        drive(mode, ActiveNeutral);
-        raw = rawCommand(mode);
-        assert(raw.speed > release && fabsf(raw.turn) < releaseTurn);
-        cmd = drive(mode, rightAndBack(0.1f));
-        assert(cmd.turn > 0);
+        cmd = drive(mode, ActiveNeutral);
+        assert(cmd.speed > release && fabsf(cmd.turn) < releaseTurn);
+        cmd = drive(mode, rightAndBack(0.75f, 0.2f));
+        assert(cmd.speed < release && cmd.speed > engage && cmd.turn > 0);
     }
 
     void seatDetectionIsLayoutIndependent()

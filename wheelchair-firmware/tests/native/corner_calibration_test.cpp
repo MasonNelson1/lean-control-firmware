@@ -155,6 +155,7 @@ namespace
         assert(near(cmd.speed, 0.49544f) && near(cmd.turn, 0.06865f)); // forward reach now from relaxed
         cmd = drive(mode, BackTouch, &t);
         assert(near(cmd.speed, -0.99116f) && cmd.turn == 0);
+        drive(mode, ActiveNeutral); // BackTouch latched the reverse-turn flip; neutral releases it
         cmd = drive(mode, Left, &t);
         assert(near(cmd.speed, -0.00265f) && near(cmd.turn, -1));
 

@@ -239,8 +239,14 @@ namespace
         assert(near(cmd.speed, 1) && near(cmd.turn, 0.06865f) && near(t.left, 1) && near(t.right, 1 - 0.06865f * lean::TurnAuthorityFast));
         cmd = drive(mode, BackTouch, &t);
         assert(near(cmd.speed, -0.99062f) && cmd.turn == 0 && near(t.left, -0.99062f) && near(t.right, -0.99062f));
+        // BackTouch latched the reverse-turn flip; neutral (speed 0, turn 0) releases it.
+        drive(mode, ActiveNeutral);
+        // The Right hold's raw speed is -0.162, under CornerReverseEngage (-0.15), so
+        // the latch engages on the hold itself and the turn mirrors: same magnitudes
+        // as the old unflipped numbers (turn +1, left +0.42582, right -0.42582), swapped.
         cmd = drive(mode, Right, &t);
-        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, 1) && near(t.left, -0.06045f + 0.42582f) && near(t.right, -0.06045f - 0.42582f)); // authority 0.45 fading toward 0.25
+        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, -1) && near(t.left, -0.06045f - 0.42582f) && near(t.right, -0.06045f + 0.42582f)); // authority 0.45 fading toward 0.25
+        drive(mode, ActiveNeutral); // the Right hold latched the flip again
         cmd = drive(mode, Left, &t);
         assert(cmd.speed == 0 && near(cmd.turn, -1) && near(t.left, -lean::TurnAuthorityStopped) && near(t.right, lean::TurnAuthorityStopped));
         // Relaxing into passive neutral is 0.74" forward of active neutral: a slow creep.
@@ -251,6 +257,87 @@ namespace
         cmd = drive(mode, EmptyPlate, &t);
         assert(t.left == 0 && t.right == 0 && mode.getTelemetry().stopped);
         assert(!mode.getCentreOfPressure().valid);
+    }
+
+    lean::Counts blend(const lean::Counts &a, const lean::Counts &b, float k)
+    {
+        lean::Counts out;
+        for (size_t i = 0; i < lean::Channels; ++i)
+            out[i] = static_cast<int>(a[i] + (b[i] - a[i]) * k + 0.5f);
+        return out;
+    }
+
+    // The raw (pre-shaping) command at the posture the mode last sampled.
+    lean::Command rawCommand(const LeanDriveMode &mode)
+    {
+        return lean::cornerCommand(mode.getCentreOfPressure().at, mode.neutralZone(), mode.activeReach());
+    }
+
+    // Half a right lean plus a back lean of `back` (0..1 of the way to BackTouch).
+    // Half, not full: a full right lean already reads raw speed -0.16 because the
+    // CoP drifts back with a side lean, which would engage the latch by itself.
+    lean::Counts rightAndBack(float back) { return blend(blend(ActiveNeutral, Right, 0.5f), BackTouch, back); }
+
+    // The reverse-turn flip is a latch: engages below CornerReverseEngage, and
+    // releases only near standstill AND with the turn near neutral, so the turn
+    // direction never flips in the middle of a turn. Judged by the turn's sign
+    // (a flipped turn comes out negative for a right lean). The raw numbers
+    // asserted here (speed in the hysteresis band, turn above the release turn)
+    // are what make each step a real test of the latch.
+    void reverseTurnLatch()
+    {
+        setLayout(SensorLayout::Corner);
+        auto mode = freshMode();
+        sensors(ActiveNeutral);
+        mode.calibrate();
+        lastRaw = {};
+        drive(mode, ActiveNeutral);
+        const float engage = lean::CornerReverseEngage, release = lean::CornerReverseRelease, releaseTurn = lean::CornerReverseReleaseTurn;
+
+        // Turning with raw speed between engage and release: not flipped. Reversing
+        // at -0.08 alone no longer flips (a single -0.1 threshold chattered).
+        auto cmd = drive(mode, rightAndBack(0.0f));
+        auto raw = rawCommand(mode);
+        assert(raw.speed > release && raw.turn > releaseTurn && cmd.turn > 0);
+        cmd = drive(mode, rightAndBack(0.1f));
+        raw = rawCommand(mode);
+        assert(raw.speed < release && raw.speed > engage && raw.turn > releaseTurn);
+        assert(cmd.turn > 0);
+
+        // Below the engage speed it latches on: the same right lean turns the other way.
+        cmd = drive(mode, rightAndBack(0.2f));
+        raw = rawCommand(mode);
+        assert(raw.speed < engage && raw.turn > releaseTurn);
+        assert(cmd.turn < 0);
+
+        // Speed hovering around -0.1 while turning: stays flipped, never chatters.
+        for (float back : {0.1f, 0.12f, 0.08f, 0.1f, 0.14f, 0.1f})
+        {
+            cmd = drive(mode, rightAndBack(back));
+            raw = rawCommand(mode);
+            assert(raw.speed < release && raw.speed > engage && raw.turn > releaseTurn);
+            assert(cmd.turn < 0);
+        }
+
+        // Speed back near 0 while still turning: stays flipped (no mid-turn flip).
+        cmd = drive(mode, rightAndBack(0.0f));
+        raw = rawCommand(mode);
+        assert(raw.speed > release && raw.turn > releaseTurn);
+        assert(cmd.turn < 0);
+
+        // Straight back at about -0.03 (turn 0, still reversing): not standstill, no release...
+        cmd = drive(mode, blend(ActiveNeutral, BackTouch, 0.2f));
+        raw = rawCommand(mode);
+        assert(raw.speed < release && raw.speed > engage && fabsf(raw.turn) < releaseTurn);
+        cmd = drive(mode, rightAndBack(0.1f));
+        assert(cmd.turn < 0); // ...so the turn is still flipped
+
+        // Near standstill with the turn near neutral releases it.
+        drive(mode, ActiveNeutral);
+        raw = rawCommand(mode);
+        assert(raw.speed > release && fabsf(raw.turn) < releaseTurn);
+        cmd = drive(mode, rightAndBack(0.1f));
+        assert(cmd.turn > 0);
     }
 
     void seatDetectionIsLayoutIndependent()
@@ -364,7 +451,7 @@ namespace
         auto cmd = drive(mode, Forward, &t);
         assert(near(cmd.speed, 1));
         cmd = drive(mode, Right, &t);
-        assert(near(cmd.turn, 1));
+        assert(near(std::fabs(cmd.turn), 1)); // full right lean; its CoP drift back engages the reverse flip, so the sign mirrors
 
         // One weak direction rejects all four and keeps the previous reach.
         sensors(ActiveNeutral);
@@ -467,6 +554,7 @@ int main()
     centreOfPressureMath();
     mappingMath();
     e9Holds();
+    reverseTurnLatch();
     seatDetectionIsLayoutIndependent();
     layoutSwitch();
     dynamicReach();

@@ -21,9 +21,14 @@ plugged() {
 for _ in $(seq 1 1440); do   # 2 h at 5 s
     if plugged; then
         echo "Teensy detected at $(date +%T); uploading"
-        if timeout 180 pio run -t upload 2>&1 | tail -3 | tee /dev/stderr | grep -q SUCCESS; then
-            echo "$want" > "$marker"; echo "upload OK at $(date +%T)"; exit 0
-        fi
+        # The first try sometimes lands while Windows is still enumerating the Teensy.
+        for attempt in 1 2 3; do
+            sleep 2
+            if timeout 180 pio run -t upload 2>&1 | tail -3 | tee /dev/stderr | grep -q SUCCESS; then
+                sha256sum .pio/build/teensy41/firmware.hex | cut -d' ' -f1 > "$marker"; echo "upload OK at $(date +%T)"; exit 0
+            fi
+            echo "upload attempt $attempt failed"
+        done
         echo "upload failed"; exit 2
     fi
     sleep 5

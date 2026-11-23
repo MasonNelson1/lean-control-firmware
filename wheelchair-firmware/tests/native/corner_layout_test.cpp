@@ -241,12 +241,11 @@ namespace
         assert(near(cmd.speed, -0.99062f) && cmd.turn == 0 && near(t.left, -0.99062f) && near(t.right, -0.99062f));
         // BackTouch latched the reverse-turn flip; neutral (speed 0, turn 0) releases it.
         drive(mode, ActiveNeutral);
-        // The Right hold's raw speed is -0.162, under CornerReverseEngage (-0.15), so
-        // the latch engages on the hold itself and the turn mirrors: same magnitudes
-        // as the old unflipped numbers (turn +1, left +0.42582, right -0.42582), swapped.
+        // A pure side lean drifts the CoP back (raw speed -0.162, shaped -0.06). The
+        // latch acts on shaped speed, so this is NOT reversing: the turn stays right.
         cmd = drive(mode, Right, &t);
-        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, -1) && near(t.left, -0.06045f - 0.42582f) && near(t.right, -0.06045f + 0.42582f)); // authority 0.45 fading toward 0.25
-        drive(mode, ActiveNeutral); // the Right hold latched the flip again
+        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, 1) && near(t.left, -0.06045f + 0.42582f) && near(t.right, -0.06045f - 0.42582f)); // authority 0.45 fading toward 0.25
+        drive(mode, ActiveNeutral);
         cmd = drive(mode, Left, &t);
         assert(cmd.speed == 0 && near(cmd.turn, -1) && near(t.left, -lean::TurnAuthorityStopped) && near(t.right, lean::TurnAuthorityStopped));
         // Relaxing into passive neutral is 0.74" forward of active neutral: a slow creep.

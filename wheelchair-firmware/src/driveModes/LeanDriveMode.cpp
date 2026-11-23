@@ -190,17 +190,20 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
         // The corner deadzone is in inches inside cornerCommand, with the output
         // ramping from its edge, so the normalised deadband is skipped (0).
         const auto raw = lean::cornerCommand(cop.at, neutralZone(), activeReach());
-        // Reverse-turn flip with hysteresis (court 2026-11-22): a single threshold
-        // at -0.1 chattered while turning on the spot with a slight back lean, so
-        // the turn direction flipped mid-turn and threw the rider into a spin.
-        // Flip once clearly reversing; un-flip only near standstill AND with the
-        // turn near neutral, never in the middle of a turn.
-        if (!reverseFlipped && raw.speed < lean::CornerReverseEngage)
+        // Shape first with no flip, then apply the reverse-turn flip with hysteresis
+        // on the SHAPED speed (court 2026-11-22). A single threshold at -0.1 chattered
+        // while turning on the spot with a slight back lean; and the raw speed is the
+        // wrong signal: a pure full side lean drifts the CoP back to raw -0.16
+        // (shaped ~-0.06), which must not count as reversing. Flip once clearly
+        // reversing; un-flip only near standstill AND with the turn near neutral.
+        command = lean::shapeCommand(raw, 0.0f, speedResponseExponent, turnResponseExponent, -1.0e9f);
+        if (!reverseFlipped && command.speed < lean::CornerReverseEngage)
             reverseFlipped = true;
-        else if (reverseFlipped && raw.speed > lean::CornerReverseRelease && fabsf(raw.turn) < lean::CornerReverseReleaseTurn)
+        else if (reverseFlipped && command.speed > lean::CornerReverseRelease &&
+                 fabsf(command.turn) < lean::CornerReverseReleaseTurn)
             reverseFlipped = false;
-        command = lean::shapeCommand(raw, 0.0f, speedResponseExponent, turnResponseExponent,
-                                     reverseFlipped ? 1.0e9f : -1.0e9f);
+        if (reverseFlipped)
+            command.turn = -command.turn;
     }
     else
     {

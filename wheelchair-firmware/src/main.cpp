@@ -16,6 +16,8 @@
 #include "drive_knobs.h"
 #include "ModeStateMachine.h"
 #include "telemetry/Telemetry.h"
+#include "build_stamp.h"
+#include <EEPROM.h>
 
 using namespace common;
 
@@ -257,6 +259,33 @@ static void updateKnobs()
     if (speedChanged || profileChanged)
         applyKnobs();
 }
+// After an upload the chair chases its four mode LEDs three times, so the riders
+// can see the new firmware took (Charles, 2026-11-22). An ordinary power-on with
+// the same firmware doesn't. The build stamp (a hash of src/, tools/build_stamp.py)
+// is kept in the last 4 EEPROM bytes, past the settings storage.
+static bool firmwareIsNew = false;
+static void newFirmwareSignal()
+{
+    constexpr int addr = E2END - 3;
+    static_assert(E2END - 3 >= static_cast<int>(config::Persistence::StorageSize), "build stamp overlaps settings");
+    uint32_t stored = 0;
+    for (int i = 0; i < 4; ++i)
+        stored |= static_cast<uint32_t>(EEPROM.read(addr + i)) << (8 * i);
+    firmwareIsNew = stored != BUILD_STAMP;
+    if (!firmwareIsNew)
+        return;
+    const uint8_t pins[] = {common::PIN_LEAN_LED, common::PIN_DISARM_LED, common::PIN_REMOTE_LED, common::PIN_CAL_LED};
+    for (int round = 0; round < 3; ++round)
+        for (uint8_t pin : pins)
+        {
+            digitalWrite(pin, HIGH);
+            delay(70);
+            digitalWrite(pin, LOW);
+        }
+    for (int i = 0; i < 4; ++i)
+        EEPROM.update(addr + i, (BUILD_STAMP >> (8 * i)) & 0xFF);
+}
+
 void setup()
 {
     // Once-a-second lines each have their own 20 Hz tick (publishTelemetry), so
@@ -279,6 +308,7 @@ void setup()
     pinMode(common::PIN_LEAN_LED, OUTPUT);
     pinMode(common::PIN_DISARM_LED, OUTPUT);
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
+    newFirmwareSignal();
 
     settings::persistence.load();
     modeState.begin(settings::defaultMode.get());
@@ -793,6 +823,17 @@ static void publishTelemetry()
 
 void loop()
 {
+    {
+        // Which firmware is running, every 5 s, so the laptop can confirm an upload
+        // took (tools/upload_on_plug.sh prints the stamp it just built).
+        static uint32_t lastBootLine = 0;
+        if (millis() - lastBootLine >= 5000)
+        {
+            lastBootLine = millis();
+            telemetry::Telemetry::logf("DBG BOOT stamp=%08lx new=%d up=%lu\n", static_cast<unsigned long>(BUILD_STAMP),
+                                       firmwareIsNew, static_cast<unsigned long>(millis() / 1000));
+        }
+    }
     static uint32_t loopStartUs = micros();
     const uint32_t loopUs = micros() - loopStartUs; // the previous loop, start to start
     loopStartUs += loopUs;

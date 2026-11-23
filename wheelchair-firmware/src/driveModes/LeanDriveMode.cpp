@@ -243,7 +243,7 @@ void LeanDriveMode::calibrate()
     // a dead or unplugged sensor, and steering from it would be wrong.
     const auto forces = lean::cornerForces(average, emptyPlate(), cornerGains());
     for (size_t i = 0; i < lean::Channels; ++i)
-        if (forces[i] < lean::MinNeutralChannelLoad || forces[i] < lean::MinNeutralChannelShare * neutral.total)
+        if (forces[i] < lean::MinNeutralChannelLoad)
         {
             telemetry::Telemetry::logf("Calibration rejected: channel %c (%s) carries %.0f of %.0f counts; check that sensor. LEAN stays stopped.\n",
                                        lean::ChannelLetters[i], lean::CornerNames[i], forces[i], neutral.total);

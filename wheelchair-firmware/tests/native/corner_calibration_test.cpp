@@ -292,8 +292,11 @@ namespace
         auto mode = freshMode();
         shortPress(mode, ActiveNeutral, 1000);
         assert(mode.getNeutral().valid && !mode.calibrationLEDOn(20000));
-        // The share rule: 60 counts is over 50 but under 5% of ≈2,460.
-        shortPress(mode, {{1500, 1300, 427 + 60, 800}}, 30000);
+        // Court 2026-11-22: sitting back, front-left carried ~75 of ~2,050. Accepted now
+        // (the old 5% share rule rejected it); under 30 counts is still rejected.
+        shortPress(mode, {{1344, 1076, 427 + 75, 755}}, 30000);
+        assert(mode.getNeutral().valid);
+        shortPress(mode, {{1500, 1300, 427 + 20, 800}}, 60000);
         assert(!mode.getNeutral().valid);
     }
 

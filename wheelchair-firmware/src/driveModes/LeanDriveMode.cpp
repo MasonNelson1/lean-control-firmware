@@ -389,12 +389,19 @@ void LeanDriveMode::finishReachCalibration()
         }
     if (!valid)
         return;
-    calibratedReach = {std::min(peaks[0], lean::MaxReach), std::min(peaks[1], lean::MaxReach),
-                       std::min(peaks[2], lean::MaxReach), std::min(peaks[3], lean::MaxReach)};
+    // Full output comes at ReachUseFraction of the rider's calibration peak, and the
+    // two turn directions share the smaller side, so turning feels the same both ways
+    // (court test 2026-11-22: right reach calibrated 2.7-2.9" vs left 2.3-2.4", and
+    // riding never got past 0.71 turn to the right).
+    const float f = lean::ReachUseFraction;
+    const float side = std::min(peaks[2], peaks[3]) * f;
+    calibratedReach = {std::min(peaks[0] * f, lean::MaxReach), std::min(peaks[1] * f, lean::MaxReach),
+                       std::min(side, lean::MaxReach), std::min(side, lean::MaxReach)};
     reachCalibrated = true;
     reachConfigAtCalibration = configuredReach();
-    telemetry::Telemetry::logf("Reach calibration complete: forward %.2f back %.2f left %.2f right %.2f in.\n",
-                               calibratedReach.forward, calibratedReach.back, calibratedReach.left, calibratedReach.right);
+    telemetry::Telemetry::logf("Reach calibration complete: forward %.2f back %.2f left %.2f right %.2f in (peaks %.2f/%.2f/%.2f/%.2f).\n",
+                               calibratedReach.forward, calibratedReach.back, calibratedReach.left, calibratedReach.right,
+                               peaks[0], peaks[1], peaks[2], peaks[3]);
 }
 
 void LeanDriveMode::capturePassive()

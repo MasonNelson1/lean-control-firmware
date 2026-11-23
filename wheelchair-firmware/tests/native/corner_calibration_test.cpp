@@ -205,10 +205,10 @@ namespace
         assert(holdPress(mode, PassiveNeutral, {Forward, BackTouch, Left, Right}, 3000));
         assert(mode.getPassive().valid);
         const auto reach = mode.activeReach();
-        assert(near(reach.forward, 0.4265f + 0.8971f, 0.001f)); // from relaxed, not upright
-        assert(near(reach.back, 3.5248f - 1.6349f, 0.001f));    // from upright
-        assert(near(reach.left, 2.0289f - 0.2976f, 0.001f));
-        assert(near(reach.right, 1.3047f + 0.2976f, 0.001f));
+        assert(near(reach.forward, (0.4265f + 0.8971f) * lean::ReachUseFraction, 0.001f)); // from relaxed, not upright
+        assert(near(reach.back, (3.5248f - 1.6349f) * lean::ReachUseFraction, 0.001f));    // from upright
+        assert(near(reach.left, (1.3047f + 0.2976f) * lean::ReachUseFraction, 0.001f)); // both sides use the smaller one
+        assert(near(reach.right, (1.3047f + 0.2976f) * lean::ReachUseFraction, 0.001f));
     }
 
     void reachLimitsAndLifetime()
@@ -225,14 +225,14 @@ namespace
 
         // A good hold sets this rider's reach...
         assert(holdPress(mode, ActiveNeutral, {Forward, BackTouch, Left, Right}, 2000));
-        assert(near(mode.activeReach().forward, 2.0614f, 0.001f));
+        assert(near(mode.activeReach().forward, 2.0614f * lean::ReachUseFraction, 0.001f));
         // ...which a new neutral press (same rider, re-entering LEAN) keeps.
         mode.reset();
         shortPress(mode, ActiveNeutral, 5000);
-        assert(near(mode.activeReach().forward, 2.0614f, 0.001f));
+        assert(near(mode.activeReach().forward, 2.0614f * lean::ReachUseFraction, 0.001f));
         // Editing any reach setting drops it in favour of the settings, for good.
         mode.settingsChanged(); // an unrelated change keeps it
-        assert(near(mode.activeReach().forward, 2.0614f, 0.001f));
+        assert(near(mode.activeReach().forward, 2.0614f * lean::ReachUseFraction, 0.001f));
         set(settings::reachLeft, 1.5f);
         assert(mode.activeReach().forward == lean::DefaultReachForward && mode.activeReach().left == 1.5f);
         mode.settingsChanged();

@@ -351,11 +351,11 @@ namespace
         assert(step(ActiveNeutral, 1500, false));
         const auto reach = mode.activeReach();
         // Each direction's furthest travel from neutral (CoP at hold averages).
-        assert(near(reach.forward, 0.4265f + 1.6349f, 0.001f));
-        assert(near(reach.back, 3.5248f - 1.6349f, 0.001f));
-        assert(near(reach.left, 2.0289f - 0.2976f, 0.001f));
-        assert(near(reach.right, 1.3047f + 0.2976f, 0.001f));
-        assert(messages.find("Reach calibration complete: forward 2.06 back 1.89 left 1.73 right 1.60 in.") != std::string::npos);
+        assert(near(reach.forward, (0.4265f + 1.6349f) * lean::ReachUseFraction, 0.001f));
+        assert(near(reach.back, (3.5248f - 1.6349f) * lean::ReachUseFraction, 0.001f));
+        assert(near(reach.left, (1.3047f + 0.2976f) * lean::ReachUseFraction, 0.001f)); // both sides use the smaller one
+        assert(near(reach.right, (1.3047f + 0.2976f) * lean::ReachUseFraction, 0.001f));
+        assert(messages.find("Reach calibration complete: forward 1.75 back 1.61 left 1.36 right 1.36 in (peaks 2.06/1.89/1.73/1.60).") != std::string::npos);
         // The plus gains are untouched by a corner calibration.
         assert(mode.getDynamicGains()[0] == settings::frontGain.get());
 

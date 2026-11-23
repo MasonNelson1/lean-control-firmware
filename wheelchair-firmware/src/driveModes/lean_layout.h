@@ -113,6 +113,9 @@ namespace lean
     // passive slump was 0.74" forward of active). E9's real leans were 1.3–2.1".
     constexpr float MinReach = 1.2f;
     constexpr float MaxReach = 6.0f;
+    // Hold calibration: full output at this fraction of the rider's peak lean, so full
+    // speed/turn doesn't need a maximal lean (court test 2026-11-22).
+    constexpr float ReachUseFraction = 0.85f;
 
     // Neutral calibration on the corner layout is rejected unless every channel
     // carries at least this load: a dead or unplugged sensor reads ≈372, below

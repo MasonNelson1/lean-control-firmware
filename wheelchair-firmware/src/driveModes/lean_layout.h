@@ -124,7 +124,12 @@ namespace lean
     // Mason sitting back put only 72-77 of ~2,050 counts on front-left, and the old
     // 50-count-and-5% rule rejected every press. A dead channel reads <= 0 here, so
     // an absolute floor of 30 counts is enough; the share rule is gone.
-    constexpr float MinNeutralChannelLoad = 30.0f;  // counts above the empty plate
+    constexpr float MinNeutralChannelLoad = 30.0f;  // (no longer used at calibration; kept for reference)
+    // Court 2026-11-22 18:04: a rider sitting back-right put only 11-28 counts on
+    // front-left and the 30-count rule rejected every press. What actually marks a
+    // dead or unplugged channel is its raw reading sitting at the amplifier zero
+    // (~372), below every corner's empty-plate baseline (391-427). Reject below this.
+    constexpr int DeadChannelRawMax = 382;
 
     // Largest believable centre-of-pressure move between two control ticks
     // (2–15 ms apart), in inches. Healthy E9 riding peaked at 0.54" per 50 ms

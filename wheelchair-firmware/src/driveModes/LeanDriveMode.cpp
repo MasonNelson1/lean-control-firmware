@@ -265,12 +265,11 @@ void LeanDriveMode::calibrate()
     }
     // Sitting still, every corner carries part of the rider. One that doesn't is
     // a dead or unplugged sensor, and steering from it would be wrong.
-    const auto forces = lean::cornerForces(average, emptyPlate(), cornerGains());
     for (size_t i = 0; i < lean::Channels; ++i)
-        if (forces[i] < lean::MinNeutralChannelLoad)
+        if (average[i] < lean::DeadChannelRawMax)
         {
-            telemetry::Telemetry::logf("Calibration rejected: channel %c (%s) carries %.0f of %.0f counts; check that sensor. LEAN stays stopped.\n",
-                                       lean::ChannelLetters[i], lean::CornerNames[i], forces[i], neutral.total);
+            telemetry::Telemetry::logf("Calibration rejected: channel %c (%s) reads raw %d (dead or unplugged reads about 372); check that sensor. LEAN stays stopped.\n",
+                                       lean::ChannelLetters[i], lean::CornerNames[i], average[i]);
             neutral.valid = false;
         }
     if (neutral.valid)

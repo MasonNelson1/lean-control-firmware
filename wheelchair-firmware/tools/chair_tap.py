@@ -180,8 +180,8 @@ def main():
     print(f"Tapping {port} at {args.baud} -> {os.path.normpath(path)}", flush=True)
 
     lines = skipped = 0
-    with open(path, "w", buffering=1, newline="") as out, \
-            open(current, "w", buffering=1, newline="") as cur:
+    with open(path, "w", buffering=1, newline="", encoding="utf-8", errors="replace") as out, \
+            open(current, "w", buffering=1, newline="", encoding="utf-8", errors="replace") as cur:
         for f in (out, cur):
             f.write(HEADER + "\n")
 

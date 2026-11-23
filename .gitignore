@@ -14,3 +14,4 @@ node_modules/
 !.vscode/extensions.json
 .DS_Store
 wheelchair-firmware/logs/live/
+wheelchair-firmware/src/build_stamp.h

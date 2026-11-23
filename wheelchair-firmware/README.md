@@ -49,7 +49,9 @@ tick before motor commands.
 - **To push the empty chair by hand**, tap DISARM while it is disarmed with
   the seat empty. The DISARM LED winks off once a second while it free-wheels.
   Tap again, sit down or select a mode to end it.
-- **Reverse** is half the forward speed limit. A back lean that starts while
+- **Reverse** is half the forward speed limit, per wheel: while reversing, a
+  turn only gets what is left of that, so no wheel ever runs backwards faster
+  than half the knob (the 17:39 spin). A back lean that starts while
   the chair rolls forward only brakes it to a stop; come back to neutral
   before leaning back to reverse.
 - If the log says "No valid saved settings were found" at power-on, the

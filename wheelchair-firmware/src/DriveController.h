@@ -79,6 +79,13 @@ public:
     bool stopping() const { return stop_.active(); }
     // The empty chair has been let go to be pushed by hand (see parked()).
     bool freewheeling() const { return freewheel_; }
+    // DISARM after an automatic disarm (fault, empty seat) and the chair is
+    // still braking or being held. Cleared by a DISARM press or arming a mode.
+    // main.cpp blinks the DISARM LED on it.
+    bool autoBraking() const;
+    // True once after a hold calibration wrote new reach settings (main.cpp
+    // saves them to the active profile).
+    bool takeReachSave() { const bool p = reachSave_; reachSave_ = false; return p; }
     const telemetry::MotorCommands &commands() const { return commands_; }
     const MotionSmoother &motion() const { return motion_; }
     float speedLimitMS() const { return speedLimitMS_; } // slewed speed cap, for DBG M
@@ -121,6 +128,8 @@ private:
     // A fault stopped the chair: hold it, rider aboard or not, until someone
     // presses DISARM or arms a mode.
     bool faultHold_ = false;
+    bool autoBrake_ = false; // the last disarm was automatic (see autoBraking())
+    bool reachSave_ = false;
     bool faultInAssist_ = false; // the fault being handled this tick was raised in Assist
     // A back lean that began while rolling forward only brakes (see tick()).
     bool reverseLocked_ = false;

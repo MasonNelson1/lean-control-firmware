@@ -224,28 +224,43 @@ namespace
         const float short_ = 1.19f;
         assert(!settings::reachForward.update(reinterpret_cast<const uint8_t *>(&short_), 4));
 
-        // A good hold sets this rider's reach...
+        assert(!mode.takeReachSave()); // a rejected hold saves nothing
+        assert(settings::reachForward.get() == lean::DefaultReachForward);
+
+        // A good hold sets this rider's reach, and writes it into the reach settings
+        // so it survives power cycles (main.cpp saves them into the active profile).
+        const float forward = 2.0614f * lean::ReachUseFraction;
+        const float back = (3.5248f - 1.6349f) * lean::ReachUseFraction;
+        const float side = (1.3047f + 0.2976f) * lean::ReachUseFraction; // both sides use the smaller one
+        auto settingsHoldReach = [&] {
+            return near(settings::reachForward.get(), forward, 0.001f) && near(settings::reachBack.get(), back, 0.001f) &&
+                   near(settings::reachLeft.get(), side, 0.001f) && near(settings::reachRight.get(), side, 0.001f);
+        };
         assert(holdPress(mode, ActiveNeutral, {Forward, BackTouch, Left, Right}, 2000));
-        assert(near(mode.activeReach().forward, 2.0614f * lean::ReachUseFraction, 0.001f));
+        assert(near(mode.activeReach().forward, forward, 0.001f));
+        assert(settingsHoldReach());
+        assert(mode.takeReachSave()); // one save per calibration...
+        assert(!mode.takeReachSave());
         // ...which a new neutral press (same rider, re-entering LEAN) keeps.
         mode.reset();
         shortPress(mode, ActiveNeutral, 5000);
-        assert(near(mode.activeReach().forward, 2.0614f * lean::ReachUseFraction, 0.001f));
-        // Editing any reach setting drops it in favour of the settings, for good.
+        assert(near(mode.activeReach().forward, forward, 0.001f));
+        assert(!mode.takeReachSave());
         mode.settingsChanged(); // an unrelated change keeps it
-        assert(near(mode.activeReach().forward, 2.0614f * lean::ReachUseFraction, 0.001f));
+        assert(near(mode.activeReach().forward, forward, 0.001f));
+        // Editing a reach setting changes just that direction; the rest stay calibrated.
         set(settings::reachLeft, 1.5f);
-        assert(mode.activeReach().forward == lean::DefaultReachForward && mode.activeReach().left == 1.5f);
+        assert(near(mode.activeReach().forward, forward, 0.001f) && mode.activeReach().left == 1.5f);
         mode.settingsChanged();
         assert(logged("Reach setting changed: hold-calibrated reach cleared."));
-        settings::reachLeft.reset();
-        mode.settingsChanged();
-        assert(mode.activeReach().forward == lean::DefaultReachForward); // stays dropped
+        assert(near(mode.activeReach().forward, forward, 0.001f) && mode.activeReach().left == 1.5f);
 
-        // The seat empty for 3 s (a new rider) drops it too; a brief lift doesn't.
+        // The calibrated reach lives in the settings, so an empty seat for 3 s (a new
+        // rider) and a profile change leave it alone; only loading defaults drops it.
+        settings::registry().defaults();
         assert(holdPress(mode, ActiveNeutral, {Forward, BackTouch, Left, Right}, 16000));
-        const float riderReach = mode.activeReach().forward;
-        assert(riderReach != lean::DefaultReachForward);
+        assert(settingsHoldReach());
+        assert(mode.takeReachSave());
         auto tick = [&](const lean::Counts &raw, uint32_t from, uint32_t to) {
             sensors(raw);
             for (uint32_t now = from; now <= to; now += 50)
@@ -257,17 +272,21 @@ namespace
         tick(ActiveNeutral, 20000, 20000);
         tick(EmptyPlate, 20050, 22000);   // out of the seat for 2 s...
         tick(ActiveNeutral, 22050, 22050); // ...and back
-        assert(mode.activeReach().forward == riderReach);
+        assert(near(mode.activeReach().forward, forward, 0.001f));
         messages.clear();
         tick(EmptyPlate, 22100, 25000);    // 2,950 ms after the last seated sample
-        assert(mode.activeReach().forward == riderReach);
+        assert(near(mode.activeReach().forward, forward, 0.001f));
         tick(EmptyPlate, 25050, 25050);    // 3,000 ms
-        assert(mode.activeReach().forward == lean::DefaultReachForward);
         assert(logged("Seat empty: hold-calibrated reach cleared; using the configured reach."));
+        assert(near(mode.activeReach().forward, forward, 0.001f) && settingsHoldReach());
+        assert(!mode.takeReachSave());
 
-        // A profile change drops it.
+        // A profile change keeps the calibrated settings until the new profile loads its own.
         assert(holdPress(mode, ActiveNeutral, {Forward, BackTouch, Left, Right}, 40000));
+        assert(mode.takeReachSave());
         mode.resetDynamicGains();
+        assert(near(mode.activeReach().forward, forward, 0.001f));
+        settings::registry().defaults();
         assert(mode.activeReach().forward == lean::DefaultReachForward);
     }
 
@@ -293,8 +312,11 @@ namespace
         auto mode = freshMode();
         shortPress(mode, ActiveNeutral, 1000);
         assert(mode.getNeutral().valid && !mode.calibrationLEDOn(20000));
-        // The share rule: 60 counts is over 50 but under 5% of ≈2,460.
-        shortPress(mode, {{1500, 1300, 427 + 60, 800}}, 30000);
+        // Court 2026-11-22: sitting back, front-left carried ~75 of ~2,050. Accepted now
+        // (the old 5% share rule rejected it); under 30 counts is still rejected.
+        shortPress(mode, {{1344, 1076, 427 + 75, 755}}, 30000);
+        assert(mode.getNeutral().valid);
+        shortPress(mode, {{1500, 1300, 427 + 20, 800}}, 60000);
         assert(!mode.getNeutral().valid);
     }
 

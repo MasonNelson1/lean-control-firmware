@@ -234,7 +234,7 @@ void LeanDriveMode::calibrate()
     // a dead or unplugged sensor, and steering from it would be wrong.
     const auto forces = lean::cornerForces(average, emptyPlate(), cornerGains());
     for (size_t i = 0; i < lean::Channels; ++i)
-        if (forces[i] < lean::MinNeutralChannelLoad || forces[i] < lean::MinNeutralChannelShare * neutral.total)
+        if (forces[i] < lean::MinNeutralChannelLoad)
         {
             telemetry::Telemetry::logf("Calibration rejected: channel %c (%s) carries %.0f of %.0f counts; check that sensor. LEAN stays stopped.\n",
                                        lean::ChannelLetters[i], lean::CornerNames[i], forces[i], neutral.total);
@@ -388,6 +388,20 @@ void LeanDriveMode::finishReachCalibration()
     const float side = std::min(peaks[2], peaks[3]) * f;
     calibratedReach = {std::min(peaks[0] * f, lean::MaxReach), std::min(peaks[1] * f, lean::MaxReach),
                        std::min(side, lean::MaxReach), std::min(side, lean::MaxReach)};
+    // Charles, court 2026-11-22: e-stops power-cycle the chair, so the reach is
+    // written into the reach settings and main.cpp saves them into the active
+    // profile. After a power cycle only the short (neutral) press is needed.
+    auto setReach = [](config::ConfigField<float> &field, float value) {
+        value = std::max(lean::MinReach, std::min(value, lean::MaxReach));
+        uint8_t bytes[sizeof(float)];
+        memcpy(bytes, &value, sizeof(value));
+        field.update(bytes, sizeof(bytes));
+    };
+    setReach(settings::reachForward, calibratedReach.forward);
+    setReach(settings::reachBack, calibratedReach.back);
+    setReach(settings::reachLeft, calibratedReach.left);
+    setReach(settings::reachRight, calibratedReach.right);
+    reachSavePending = true;
     reachCalibrated = true;
     reachConfigAtCalibration = configuredReach();
     telemetry::Telemetry::logf("Reach calibration complete: forward %.2f back %.2f left %.2f right %.2f in (peaks %.2f/%.2f/%.2f/%.2f).\n",

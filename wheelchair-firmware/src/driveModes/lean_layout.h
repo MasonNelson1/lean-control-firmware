@@ -120,9 +120,11 @@ namespace lean
     // Neutral calibration on the corner layout is rejected unless every channel
     // carries at least this load: a dead or unplugged sensor reads ≈372, below
     // its empty-plate baseline, so it shows up as ~0. In E9's active neutral the
-    // lightest corner carried 230 counts (13% of 1,725).
-    constexpr float MinNeutralChannelLoad = 50.0f;  // counts above the empty plate
-    constexpr float MinNeutralChannelShare = 0.05f; // fraction of the total load
+    // lightest corner carried 230 counts (13% of 1,725). On the court (2026-11-22)
+    // Mason sitting back put only 72-77 of ~2,050 counts on front-left, and the old
+    // 50-count-and-5% rule rejected every press. A dead channel reads <= 0 here, so
+    // an absolute floor of 30 counts is enough; the share rule is gone.
+    constexpr float MinNeutralChannelLoad = 30.0f;  // counts above the empty plate
 
     // Largest believable centre-of-pressure move between two control ticks
     // (2–15 ms apart), in inches. Healthy E9 riding peaked at 0.54" per 50 ms
@@ -139,6 +141,10 @@ namespace lean
     // Corner layout: reverse turning flips as soon as the chair is clearly reversing.
     // Was -0.3 (plus tuning); on the court slow reversing stayed above it. Charles, 2026-11-22.
     constexpr float CornerReverseFlipAt = -0.1f;
+    // (dev-setup b9cc0a3's turn authority fade, 0.45 stopped -> 0.25 by half
+    // speed, is not in the council-corner build: there turn is a rate, capped by
+    // the sideways-acceleration limit, and the faster wheel never passes the
+    // speed cap (MotionSmoother). See DriveController::turnLimitRPM.)
 
     // Below this many counts of total load the centre of pressure is noise. A
     // seated rider loads the plate by ≈1,300–2,600 counts, and the seat gate

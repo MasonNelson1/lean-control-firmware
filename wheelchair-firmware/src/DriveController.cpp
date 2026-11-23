@@ -43,6 +43,7 @@ void DriveController::begin(bool afterWatchdogReset)
     driving_ = false;
     freewheel_ = false;
     faultHold_ = afterWatchdogReset; // nobody was expecting that stop either
+    autoBrake_ = afterWatchdogReset;
     reverseLocked_ = false;
     fault_ = afterWatchdogReset ? Fault::WatchdogReset : Fault::None;
 }
@@ -86,6 +87,14 @@ ModeStateMachine::Actions DriveController::updateButtons(ModeStateMachine::Input
         telemetry::Telemetry::logf(freewheel_ ? "Free-wheel: the empty chair can be pushed by hand. Press DISARM again to hold it.\n"
                                               : "Holding the empty chair again.\n");
     }
+    // Riders' rule (dev-setup a02e0f4): the DISARM LED blinks while the chair
+    // is braked or held after an automatic disarm, and a DISARM press frees the
+    // wheels. With a rider aboard one press does it. With the seat empty the
+    // council's empty-chair hold stays until the free-wheel tap, which may be a
+    // second press (the first can just move the selection to DISARM), so the
+    // blink lasts until the wheels really are free.
+    if (actions.disarmPressed && (lean_.isSeated() || freewheel_))
+        autoBrake_ = false;
     return actions;
 }
 
@@ -97,6 +106,7 @@ void DriveController::raiseFault(Fault fault)
     // (The remote's stop button is a person asking for a stop: that brakes.)
     faultInAssist_ = modeState_.current() == ASSIST && fault != Fault::RemoteStop;
     faultHold_ = !faultInAssist_;
+    autoBrake_ = !faultInAssist_;
     // An unplugged sensor does not show up here: the sensors are two-wire,
     // so an open circuit reads the same as an unloaded sensor. (LeanDriveMode
     // makes sure that cannot create motion.)
@@ -166,6 +176,10 @@ void DriveController::applySeat(const TickInput &in)
 
     lean_.cancelCalibration();
     freewheel_ = false;
+    if (transition.seatDisarm)
+        autoBrake_ = true; // the empty seat disarmed it, not the rider
+    else if (modeState_.current() != DISARM)
+        autoBrake_ = false;
     reverseLocked_ = false;
     if (modeState_.current() == DISARM)
     {
@@ -266,6 +280,11 @@ DriveController::MotorCommand DriveController::stopOrRelease(const TickInput &in
 //   - DISARM with the seat empty, after DISARM has been tapped to ask for
 //     free-wheel (to push the empty chair around).
 // Holding is damping, not a parking brake: on a slope the chair creeps.
+bool DriveController::autoBraking() const
+{
+    return autoBrake_ && modeState_.current() == DISARM && (stop_.active() || holds());
+}
+
 bool DriveController::holds() const
 {
     const common::mode mode = modeState_.current();
@@ -347,6 +366,20 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
     if (fresh)
         motion_.unwind(measuredLinear, measuredTurn, linearTargetRPM, turnTargetRPM);
 
+    // Reversing: no wheel may run backwards faster than the reverse cap
+    // (REVERSE_SPEED_FRACTION of the knob), so the turn gets only what is left
+    // of it. Court 17:39 (dev-setup b9cc0a3): reversing with a full side lean
+    // put one wheel at full reverse and the chair into a spin it couldn't brake
+    // out of. Here, without this, a 160 deg/s turn on knob 1 did the same (its
+    // 26.5 RPM half-difference is more than the knob's reverse share). Uses the
+    // more-reverse of the target and the command, so a chair still rolling back
+    // after the lean eases off keeps the limit until it has slowed.
+    const float reverseRPM = std::min(linearTargetRPM, motion_.linearRPM());
+    if (reverseRPM < 0.0f)
+    {
+        const float room = std::max(0.0f, REVERSE_SPEED_FRACTION * speedLimitMS_ * LINEAR_TO_RPM - std::fabs(reverseRPM));
+        turnTargetRPM = clampTo(turnTargetRPM, -room, room);
+    }
     const float halfTrackRPM = settings::trackWidth.get() / 2.0f * LINEAR_TO_RPM; // wheel RPM per rad/s of turn
     const auto wheels = motion_.update(linearTargetRPM, turnTargetRPM, in.dt, speedLimitMS_,
                                        TURN_ACCEL_DEG_S2 * DegToRad * halfTrackRPM,
@@ -371,6 +404,16 @@ DriveController::MotorCommand DriveController::driveRPM(const TickInput &in, flo
         const float leftCap = std::max(maxRPM, std::fabs(in.leftRPM)), rightCap = std::max(maxRPM, std::fabs(in.rightRPM));
         left = clampTo(left, -leftCap, leftCap);
         right = clampTo(right, -rightCap, rightCap);
+        // Reversing: a hard floor on each wheel's reverse command at the reverse
+        // cap (see reverseRPM above), whatever the smoother's turn state holds
+        // (unwind() can pull it to a measured turn). A wheel already reversing
+        // faster is braked down to the cap. Forward commands are not touched.
+        if (reverseRPM < 0.0f)
+        {
+            const float reverseCap = REVERSE_SPEED_FRACTION * maxRPM;
+            left = std::max(left, -reverseCap);
+            right = std::max(right, -reverseCap);
+        }
         // The command itself may not run further ahead than what is sent.
         motion_.limitLead(measuredLinear, measuredTurn, MAX_RPM_COMMAND_DIFF);
     }
@@ -525,6 +568,7 @@ DriveController::MotorCommand DriveController::tick(const TickInput &in)
         if (lean_.calibrationActive() && lean_.updateCalibration(in.now, in.calButtonHeld))
         {
             telemetry::Telemetry::logf("DBG EVT %lu cal-end disarm\n", static_cast<unsigned long>(in.now));
+            reachSave_ |= lean_.takeReachSave();
             modeState_.requestDisarm();
             applySeat(in);
             return stopOrRelease(in);

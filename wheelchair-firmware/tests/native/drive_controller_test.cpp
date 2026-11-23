@@ -379,12 +379,31 @@ int main()
         assert(sim.drive.mode() == DISARM && sim.drive.fault() == Fault::SensorRail);
         assert(logged("seat sensor is reading at an ADC rail"));
         // The stuck-high reading keeps the seat "occupied"; the chair stays disarmed anyway.
+        assert(sim.drive.autoBraking()); // DISARM LED blinks while it brakes...
         assert(sim.expectStop() < 1.0f);
+        assert(sim.drive.autoBraking()); // ...and while it holds after the fault
         sim.run(500);
         assert(sim.drive.mode() == DISARM && sim.last.left.kind == Kind::Current && sim.left == 0);
         sim.press(LEAN);
         sim.run(100);
         assert(sim.drive.mode() == DISARM);
+        sim.press(DISARM); // acknowledged: the blink stops and the wheels are free
+        assert(!sim.drive.autoBraking() && sim.last.left.kind == Kind::Current && sim.last.left.value == 0);
+    }
+    { // The empty seat's automatic disarm blinks too, until DISARM frees the chair.
+        Sim sim;
+        sim.rideLean();
+        leanBy(600, 0);
+        sim.run(2500);
+        emptySeat();
+        sim.tick();
+        assert(sim.drive.mode() == DISARM && sim.drive.autoBraking());
+        sim.expectStop();
+        assert(sim.drive.autoBraking()); // the empty chair is held
+        sim.press(DISARM); // selects DISARM: the empty chair is still held, still blinking
+        assert(sim.drive.autoBraking() && !sim.drive.freewheeling());
+        sim.press(DISARM); // the free-wheel tap: wheels free, blink ends
+        assert(!sim.drive.autoBraking() && sim.drive.freewheeling());
     }
     { // DISARM at speed brakes; DISARM at a standstill just releases.
         Sim sim;
@@ -495,10 +514,14 @@ int main()
         sim.tick();
         assert(sim.drive.mode() == DISARM);
         assert(logged("Reach calibration complete"));
-        assert(!settings::persistence.dirty()); // RAM only
+        // dev-setup 43e35e2: the reach is written into the reach settings, and
+        // main.cpp is asked (once) to save them into the active profile.
+        assert(settings::reachForward.get() != lean::DefaultReachForward);
+        assert(sim.drive.takeReachSave() && !sim.drive.takeReachSave());
         // Back in LEAN a fresh neutral is needed before driving.
         sim.press(LEAN);
         assert(sim.drive.mode() == LEAN && !sim.drive.lean().calibrated());
+        settings::registry().defaults(); // later scenarios use the default reach
     }
     { // council-corner: in place of the council's DISARM tare, the corner
       // empty-plate baseline re-zeroes itself while DISARMED with the seat empty
@@ -1843,6 +1866,40 @@ int main()
     }
     // (council-corner: the council's neutral-trim test is gone with the trim
     // itself, which belonged to the council's lean math.)
+    { // 17:39 death spiral (dev-setup b9cc0a3): reversing with a full side lean
+      // must not put a wheel at full reverse. Every back lean, both sides, every
+      // knob position: the worst wheel over the whole ride, as a share of the knob.
+        float worstShare = 0, worstRPM = 0;
+        int worstKnob = 0, worstBack = 0;
+        for (int knob = 0; knob < knobs::Positions; ++knob)
+            for (int back = 40; back <= 400; back += 40)
+                for (int side : {-500, 500})
+                {
+                    Sim sim;
+                    sim.knobMS = knobs::speedLimitMS(knob);
+                    sim.rideLean();
+                    leanBy(-back, 0); // reverse from a standstill: not locked
+                    sim.run(2500);
+                    leanBy(-back, side);
+                    for (int k = 0; k < 600; ++k)
+                    {
+                        sim.tick();
+                        const float top = sim.knobMS * LINEAR_TO_RPM;
+                        for (float w : {sim.left, sim.right})
+                            if (std::fabs(w) / top > worstShare)
+                            {
+                                worstShare = std::fabs(w) / top;
+                                worstRPM = w;
+                                worstKnob = knob + 1;
+                                worstBack = back;
+                            }
+                    }
+                }
+        fprintf(stderr, "death-spiral worst wheel: %.2f of the knob (%.1f RPM) on knob %d at back lean %d/400\n",
+                worstShare, worstRPM, worstKnob, worstBack);
+        // Full reverse would be 1.0; the reverse cap is REVERSE_SPEED_FRACTION.
+        assert(worstShare <= REVERSE_SPEED_FRACTION + 0.05f);
+    }
     { // A wheel that ignores a low speed command (VESC minimum ERPM) is pointed out, once.
         Sim sim;
         sim.rideLean();

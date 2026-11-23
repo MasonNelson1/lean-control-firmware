@@ -17,9 +17,9 @@
 
 namespace vescapply
 {
-// council-corner build: off. The VESC settings were already written on
-// 2026-11-22; this build must not write them again.
-constexpr bool VESC_APPLY_ENABLED = false;
+// council-corner build: on. Everything it writes is already on both VESCs
+// (the -20 A braking limit verified 17:35:58), so it reports "already applied".
+constexpr bool VESC_APPLY_ENABLED = true;
 constexpr uint8_t COMM_SET_MCCONF = 13;
 constexpr uint8_t COMM_SET_APPCONF = 16;
 constexpr uint32_t REPLY_TIMEOUT_MS = 3000; // flash write on SET can take a moment
@@ -170,7 +170,8 @@ class Applier
 {
 public:
 
-  bool active() const { return step_ != Step::Idle && step_ != Step::Done; }
+  // Paused (chair armed) counts as inactive, so VESC monitoring and fault polling carry on.
+  bool active() const { return step_ != Step::Idle && step_ != Step::Done && !paused_; }
   bool finished() const { return step_ == Step::Done; }
 
   // Start once both VESCs are reporting and the chair is disarmed.
@@ -192,13 +193,24 @@ public:
   // Abort if the chair leaves DISARM mid-run (it can't while the seat is empty, but be sure).
   void update(VescBus &bus, bool disarmed)
   {
-    if (!active())
+    if (step_ == Step::Idle || step_ == Step::Done)
       return;
     if (!disarmed)
     {
-      report("abort", "chair left DISARM");
-      step_ = Step::Done;
+      // Writes happen only in DISARM. Leaving DISARM pauses the run; it restarts
+      // the current job from a fresh read once the chair is disarmed again
+      // (court 2026-11-22: arming mid-run left one VESC written and one not).
+      if (!paused_)
+        report("pause", "chair left DISARM; resumes when disarmed");
+      paused_ = true;
+      step_ = Step::Get;
+      tries_ = 0;
       return;
+    }
+    if (paused_)
+    {
+      paused_ = false;
+      report("resume", "disarmed again; re-reading this VESC");
     }
     sender_.pump(bus);
     const Job &j = jobs()[job_];
@@ -371,5 +383,6 @@ private:
   uint32_t waitSince_ = 0, firstOkMs_ = 0;
   LongSender sender_;
   uint8_t target_[1024] = {};
+  bool paused_ = false;
 };
 } // namespace vescapply

@@ -30,6 +30,8 @@
 class LeanDriveMode
 {
 public:
+    // True once after a hold calibration wrote new reach settings (main.cpp saves them to the active profile).
+    bool takeReachSave() { const bool p = reachSavePending; reachSavePending = false; return p; }
     // Raw 12-bit counts outside [SensorRailLow, SensorRailHigh] mean a shorted,
     // open or unplugged channel (both layouts; main.cpp disarms LEAN on it). An
     // unloaded amplifier reads ≈372 and the lowest seated reading in E9 was 369,
@@ -163,4 +165,5 @@ public:
     lean::Counts emptyPlateInUse() const { return emptyPlate(); }
     // Dynamic-calibration reach if one was taken, otherwise the configured reach.
     lean::Reach activeReach() const;
+    bool reachSavePending = false;
 };

@@ -380,14 +380,29 @@ namespace
         assert(messages.find("Reach calibration rejected: right reached 0.49 in, required 1.20.") != std::string::npos);
         assert(mode.activeReach().right == reach.right && mode.activeReach().forward == reach.forward);
 
-        // Recalibrating neutral keeps the rider's reach; a profile change drops it.
+        // The calibrated reach is written into the reach settings (the chair saves them
+        // into the profile), so it is the settings, not a transient override.
+        const float f = lean::ReachUseFraction;
+        assert(near(settings::reachForward.get(), (0.4265f + 1.6349f) * f, 0.001f));
+        assert(near(settings::reachBack.get(), (3.5248f - 1.6349f) * f, 0.001f));
+        assert(near(settings::reachLeft.get(), (1.3047f + 0.2976f) * f, 0.001f));
+        assert(near(settings::reachRight.get(), settings::reachLeft.get()));
+        assert(mode.takeReachSave());
+        assert(!mode.takeReachSave());
+
+        // Recalibrating neutral, re-entering LEAN and an empty seat all keep it.
         sensors(ActiveNeutral);
         mode.calibrate();
         assert(mode.activeReach().forward == reach.forward);
         mode.reset();
         assert(mode.activeReach().forward == reach.forward);
         mode.resetDynamicGains();
+        assert(mode.activeReach().forward == reach.forward);
+        assert(!mode.takeReachSave());
+        // Loading default settings (a fresh profile) is what returns the default reach.
+        settings::registry().defaults();
         assert(mode.activeReach().forward == lean::DefaultReachForward);
+        assert(mode.activeReach().right == lean::DefaultReachRight);
     }
 
     void telemetryLines()

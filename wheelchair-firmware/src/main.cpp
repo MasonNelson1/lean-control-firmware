@@ -11,9 +11,20 @@
 #include "drive_knobs.h"
 #include "telemetry/Telemetry.h"
 #include "watchdog.h"
+#include "build_stamp.h"
+#include <EEPROM.h>
 
 using namespace common;
 
+// Safety brake on automatic disarm (dev-setup a02e0f4): in this build the
+// council's DriveController does the braking (a ramped stop, then brake-current
+// hold) and keeps the riders' UX: the DISARM LED blinks while it brakes or holds
+// after an automatic disarm or fault (DriveController::autoBraking), and a
+// DISARM press frees the wheels once the stop has finished.
+// All four mode LEDs blink for a moment whenever a setting changes over Bluetooth
+// (dashboard or Claude's CLI), so the riders can see a change land (Charles, 2026-11-22).
+static uint32_t settingsFlashUntil = 0;
+constexpr uint32_t SETTINGS_FLASH_MS = 1200; // ~4 blinks at 150 ms
 // Runtime knob selections, set by updateKnobs(). Start at the gentlest
 // position until the knobs are read in setup().
 knobs::RotarySwitch speedKnob;
@@ -123,6 +134,28 @@ static void applyKnobs()
         static_cast<unsigned>(profileKnob.lastRaw()), profileKnob.faulted() ? " FAULT" : "");
 }
 
+// Save the current settings (including a freshly calibrated reach) into the
+// active profile and the main bank, so they survive e-stops (Charles, 2026-11-22).
+static void saveSettingsToActiveProfile(const char *why)
+{
+    static uint8_t payload[config::Persistence::ProfileCapacity];
+    static uint8_t existing[config::Persistence::ProfileCapacity];
+    uint8_t name[config::Persistence::ProfileNameSize] = {};
+    bool profileOk = false;
+    const size_t length = config::snapshot(settings::registry(), payload, sizeof(payload));
+    if (length && activeProfile >= 0 && activeProfile < static_cast<int>(config::Persistence::ProfileCount))
+    {
+        if (!settings::persistence.readProfile(activeProfile, name, existing))
+            snprintf(reinterpret_cast<char *>(name), sizeof(name), "Rider %d", activeProfile + 1);
+        profileOk = settings::persistence.writeProfile(activeProfile, name, payload, length);
+    }
+    const bool mainOk = settings::persistence.save();
+    telemetry::Telemetry::logf("DBG EVT %lu settings-saved why=%s profile=%d profileOk=%d mainOk=%d bytes=%u\n",
+                               static_cast<unsigned long>(millis()), why, activeProfile + 1, profileOk, mainOk,
+                               static_cast<unsigned>(length));
+    settingsFlashUntil = millis() + SETTINGS_FLASH_MS; // the four-LED blink: saved
+}
+
 static bool activateProfile(int slot)
 {
     if (!settings::protocol.selectProfile(slot))
@@ -184,6 +217,33 @@ static void updateKnobs()
     if (speedChanged || profileChanged)
         applyKnobs();
 }
+// After an upload the chair chases its four mode LEDs three times, so the riders
+// can see the new firmware took (Charles, 2026-11-22). An ordinary power-on with
+// the same firmware doesn't. The build stamp (a hash of src/, tools/build_stamp.py)
+// is kept in the last 4 EEPROM bytes, past the settings storage.
+static bool firmwareIsNew = false;
+static void newFirmwareSignal()
+{
+    constexpr int addr = E2END - 3;
+    static_assert(E2END - 3 >= static_cast<int>(config::Persistence::StorageSize), "build stamp overlaps settings");
+    uint32_t stored = 0;
+    for (int i = 0; i < 4; ++i)
+        stored |= static_cast<uint32_t>(EEPROM.read(addr + i)) << (8 * i);
+    firmwareIsNew = stored != BUILD_STAMP;
+    if (!firmwareIsNew)
+        return;
+    const uint8_t pins[] = {common::PIN_LEAN_LED, common::PIN_DISARM_LED, common::PIN_REMOTE_LED, common::PIN_CAL_LED};
+    for (int round = 0; round < 3; ++round)
+        for (uint8_t pin : pins)
+        {
+            digitalWrite(pin, HIGH);
+            delay(70);
+            digitalWrite(pin, LOW);
+        }
+    for (int i = 0; i < 4; ++i)
+        EEPROM.update(addr + i, (BUILD_STAMP >> (8 * i)) & 0xFF);
+}
+
 void setup()
 {
     // Once-a-second lines each have their own 20 Hz tick (publishTelemetry), so
@@ -207,6 +267,7 @@ void setup()
     pinMode(common::PIN_LEAN_LED, OUTPUT);
     pinMode(common::PIN_DISARM_LED, OUTPUT);
     pinMode(common::PIN_CONNECTED_LED, OUTPUT);
+    newFirmwareSignal();
 
     settings::persistence.load();
     drive.begin(watchdogReset);
@@ -306,15 +367,25 @@ static void updateModeInputs()
 static void updateModeLEDs()
 {
     const uint32_t now = millis();
+    if (static_cast<int32_t>(settingsFlashUntil - now) > 0)
+    {
+        // All four LEDs blink: a setting changed over Bluetooth, or was saved.
+        const uint8_t on = (now / 150) % 2 ? HIGH : LOW;
+        digitalWrite(common::PIN_LEAN_LED, on);
+        digitalWrite(common::PIN_DISARM_LED, on);
+        digitalWrite(common::PIN_REMOTE_LED, on);
+        digitalWrite(common::PIN_CAL_LED, on);
+        return;
+    }
     const mode current = drive.mode();
     digitalWrite(common::PIN_LEAN_LED, current == LEAN ? HIGH : LOW);
     digitalWrite(common::PIN_REMOTE_LED, current == REMOTE ? HIGH : LOW);
-    // DISARM: solid; a fast blink when a fault put the chair there (it stays
-    // until a mode is armed again); a slow wink off while the empty chair is
-    // free-wheeling. Assist: slow blink.
-    const bool faulted = drive.fault() != DriveController::Fault::None;
-    const bool disarmLED = current == DISARM ? (faulted ? (now / 100) % 2 == 0
-                                                        : !drive.freewheeling() || (now / 100) % 10 != 0)
+    // DISARM: solid when the wheels are free; blinking (200 ms, dev-setup's
+    // safety-brake blink) while the chair brakes or holds after an automatic
+    // disarm or fault, until DISARM is pressed or a mode is armed; a slow wink
+    // off while the empty chair is free-wheeling. Assist: slow blink.
+    const bool disarmLED = current == DISARM ? (drive.autoBraking() ? (now / 200) % 2 == 0
+                                                                    : !drive.freewheeling() || (now / 100) % 10 != 0)
                                              : current == ASSIST && drive.modeState().assistLEDOn(now);
     digitalWrite(common::PIN_DISARM_LED, disarmLED ? HIGH : LOW);
     // Calibration LED: lean calibration in LEAN (on until calibrated, fast
@@ -369,6 +440,11 @@ static void updateDrive()
     };
     send(motors.leftId, command.left);
     send(motors.rightId, command.right);
+    // A hold calibration wrote the reach settings: keep them in the active
+    // profile so they survive an e-stop (dev-setup 43e35e2). The chair is in
+    // DISARM and was stopped for the calibration.
+    if (drive.takeReachSave())
+        saveSettingsToActiveProfile("reach-calibrated");
 }
 
 static void replyToConfiguration()
@@ -394,6 +470,7 @@ static void replyToConfiguration()
     if (settings::protocol.revision() != revision)
     {
         applyRuntimeSettings();
+        settingsFlashUntil = millis() + SETTINGS_FLASH_MS;
         telemetry::Telemetry::logf("DBG EVT %lu settings rev=%lu\n", static_cast<unsigned long>(millis()),
                                    static_cast<unsigned long>(settings::protocol.revision()));
     }
@@ -628,6 +705,17 @@ static void publishTelemetry()
 
 void loop()
 {
+    {
+        // Which firmware is running, every 5 s, so the laptop can confirm an upload
+        // took (tools/upload_on_plug.sh prints the stamp it just built).
+        static uint32_t lastBootLine = 0;
+        if (millis() - lastBootLine >= 5000)
+        {
+            lastBootLine = millis();
+            telemetry::Telemetry::logf("DBG BOOT stamp=%08lx new=%d up=%lu\n", static_cast<unsigned long>(BUILD_STAMP),
+                                       firmwareIsNew, static_cast<unsigned long>(millis() / 1000));
+        }
+    }
     static uint32_t loopStartUs = micros();
     const uint32_t loopUs = micros() - loopStartUs; // the previous loop, start to start
     loopStartUs += loopUs;

@@ -196,6 +196,28 @@ static void applyKnobs()
         static_cast<unsigned>(profileKnob.lastRaw()), profileKnob.faulted() ? " FAULT" : "");
 }
 
+// Save the current settings (including a freshly calibrated reach) into the
+// active profile and the main bank, so they survive e-stops (Charles, 2026-11-22).
+static void saveSettingsToActiveProfile(const char *why)
+{
+    static uint8_t payload[config::Persistence::ProfileCapacity];
+    static uint8_t existing[config::Persistence::ProfileCapacity];
+    uint8_t name[config::Persistence::ProfileNameSize] = {};
+    bool profileOk = false;
+    const size_t length = config::snapshot(settings::registry(), payload, sizeof(payload));
+    if (length && activeProfile >= 0 && activeProfile < static_cast<int>(config::Persistence::ProfileCount))
+    {
+        if (!settings::persistence.readProfile(activeProfile, name, existing))
+            snprintf(reinterpret_cast<char *>(name), sizeof(name), "Rider %d", activeProfile + 1);
+        profileOk = settings::persistence.writeProfile(activeProfile, name, payload, length);
+    }
+    const bool mainOk = settings::persistence.save();
+    telemetry::Telemetry::logf("DBG EVT %lu settings-saved why=%s profile=%d profileOk=%d mainOk=%d bytes=%u\n",
+                               static_cast<unsigned long>(millis()), why, activeProfile + 1, profileOk, mainOk,
+                               static_cast<unsigned>(length));
+    settingsFlashUntil = millis() + SETTINGS_FLASH_MS; // the four-LED blink: saved
+}
+
 static bool activateProfile(int slot)
 {
     if (!settings::protocol.selectProfile(slot))
@@ -533,6 +555,8 @@ static void updateDrive()
             telemetry::Telemetry::logf("DBG EVT %lu cal-end disarm\n", static_cast<unsigned long>(millis()));
             modeState.requestDisarm();
             applySeatedLatch();
+            if (leanMode.takeReachSave())
+                saveSettingsToActiveProfile("reach-calibrated");
         }
         leanMode.sampleSensors();
         vescSetCurrent(can1, motors.leftId, 0.0f);

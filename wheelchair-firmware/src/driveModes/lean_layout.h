@@ -140,7 +140,10 @@ namespace lean
     constexpr float MaxCopStep = 2.5f;
     // Corner layout: reverse turning flips as soon as the chair is clearly reversing.
     // Was -0.3 (plus tuning); on the court slow reversing stayed above it. Charles, 2026-11-22.
-    constexpr float CornerReverseFlipAt = -0.1f;
+    constexpr float CornerReverseFlipAt = -0.1f;      // kept for the shapeCommand tests
+    constexpr float CornerReverseEngage = -0.15f;     // flip reverse turning below this speed
+    constexpr float CornerReverseRelease = -0.02f;    // un-flip only above this speed...
+    constexpr float CornerReverseReleaseTurn = 0.15f; // ...and with |turn| below this
     // Corner layout turn authority (fraction of the speed cap given to the wheel
     // difference), replacing the plus-era turn mix that grew with speed.
     constexpr float TurnAuthorityStopped = 0.45f;  // spins in place and slow S-turns

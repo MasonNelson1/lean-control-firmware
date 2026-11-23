@@ -31,6 +31,9 @@ static bool safetyBrake = false;
 // All four mode LEDs blink for a moment whenever a setting changes over Bluetooth
 // (dashboard or Claude's CLI), so the riders can see a change land (Charles, 2026-11-22).
 static uint32_t settingsFlashUntil = 0;
+// A live settings change is saved into the active profile 2 s after the last one,
+// because the profile the knob is on is reloaded at power-on (court 2026-11-22).
+static uint32_t settingsChangedAt = 0;
 constexpr uint32_t SETTINGS_FLASH_MS = 1200; // ~4 blinks at 150 ms
 constexpr float SAFETY_BRAKE_MOVING_A = 15.0f; // VESC braking current limit is 20 A
 constexpr float SAFETY_BRAKE_HOLD_A = 5.0f;    // once both wheels are below SAFETY_BRAKE_STILL_RPM
@@ -643,6 +646,7 @@ static void replyToConfiguration()
     {
         applyRuntimeSettings();
         settingsFlashUntil = millis() + SETTINGS_FLASH_MS;
+        settingsChangedAt = millis(); // auto-saved into the active profile shortly (see loop)
         telemetry::Telemetry::logf("DBG EVT %lu settings rev=%lu\n", static_cast<unsigned long>(millis()),
                                    static_cast<unsigned long>(settings::protocol.revision()));
     }
@@ -847,6 +851,11 @@ static void publishTelemetry()
 
 void loop()
 {
+    if (settingsChangedAt && millis() - settingsChangedAt > 2000 && modeState.current() == DISARM)
+    {
+        settingsChangedAt = 0;
+        saveSettingsToActiveProfile("settings-changed");
+    }
     {
         // Which firmware is running, every 5 s, so the laptop can confirm an upload
         // took (tools/upload_on_plug.sh prints the stamp it just built).

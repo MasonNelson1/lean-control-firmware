@@ -144,4 +144,5 @@ public:
     // Dynamic-calibration reach if one was taken, otherwise the configured reach.
     lean::Reach activeReach() const;
     bool reachSavePending = false;
+    bool reverseFlipped = false; // corner reverse-turn flip latch (see getTargetsFromSample)
 };

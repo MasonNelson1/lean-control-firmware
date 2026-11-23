@@ -189,8 +189,18 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
         }
         // The corner deadzone is in inches inside cornerCommand, with the output
         // ramping from its edge, so the normalised deadband is skipped (0).
-        command = lean::shapeCommand(lean::cornerCommand(cop.at, neutralZone(), activeReach()),
-                                     0.0f, speedResponseExponent, turnResponseExponent, lean::CornerReverseFlipAt);
+        const auto raw = lean::cornerCommand(cop.at, neutralZone(), activeReach());
+        // Reverse-turn flip with hysteresis (court 2026-11-22): a single threshold
+        // at -0.1 chattered while turning on the spot with a slight back lean, so
+        // the turn direction flipped mid-turn and threw the rider into a spin.
+        // Flip once clearly reversing; un-flip only near standstill AND with the
+        // turn near neutral, never in the middle of a turn.
+        if (!reverseFlipped && raw.speed < lean::CornerReverseEngage)
+            reverseFlipped = true;
+        else if (reverseFlipped && raw.speed > lean::CornerReverseRelease && fabsf(raw.turn) < lean::CornerReverseReleaseTurn)
+            reverseFlipped = false;
+        command = lean::shapeCommand(raw, 0.0f, speedResponseExponent, turnResponseExponent,
+                                     reverseFlipped ? 1.0e9f : -1.0e9f);
     }
     else
     {

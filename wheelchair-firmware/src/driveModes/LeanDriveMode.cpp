@@ -228,7 +228,11 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
     {
         const float fade = std::min(speedMagnitude / lean::TurnAuthorityFadeSpeed, 1.0f);
         const float authority = lean::TurnAuthorityStopped + fade * (lean::TurnAuthorityFast - lean::TurnAuthorityStopped);
-        mixedTurn = constrain(turn, -1.0f, 1.0f) * authority;
+        // Turning must feel the same on every speed-knob position (Charles, court
+        // 2026-11-22): the wheel targets are fractions of the knob's speed cap, so
+        // scale the turn by (reference speed / knob speed). Per-wheel clamping to
+        // +-1 still applies, which only bites on the lowest knob at speed.
+        mixedTurn = constrain(turn, -1.0f, 1.0f) * authority * turnKnobScale;
     }
     return {constrain(speed + mixedTurn, -1.0f, 1.0f),
             constrain(speed - mixedTurn, -1.0f, 1.0f)};

@@ -605,6 +605,7 @@ static void updateDrive()
     switch (modeState.current())
     {
     case LEAN:
+        leanMode.setTurnKnobScale(lean::TurnReferenceKnobFraction * MAX_SPEED / max(userMaxSpeedMS, 0.1f));
         targets = leanMode.getTargetsFromSample();
         // Corner layout: a CoP step no body can make in one tick is a sensor
         // dropping out (lean::MaxCopStep). getTargetsFromSample already returned

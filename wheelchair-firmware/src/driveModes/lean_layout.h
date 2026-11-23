@@ -154,6 +154,9 @@ namespace lean
     constexpr float TurnAuthorityStopped = 0.45f;  // spins in place and slow S-turns
     constexpr float TurnAuthorityFast = 0.25f;     // at and above the fade speed
     constexpr float TurnAuthorityFadeSpeed = 0.5f; // |speed| where it reaches TurnAuthorityFast
+    // Turning is scaled to this fraction of MAX_SPEED whatever the speed knob says
+    // (the court tuning was done on knob 3 = 75%).
+    constexpr float TurnReferenceKnobFraction = 0.75f;
 
     // Below this many counts of total load the centre of pressure is noise. A
     // seated rider loads the plate by ≈1,300–2,600 counts, and the seat gate

@@ -23,6 +23,8 @@
 class LeanDriveMode : public DriveMode
 {
 public:
+    // main.cpp sets this each tick: reference speed / speed-knob cap (corner layout turn).
+    void setTurnKnobScale(float scale) { turnKnobScale = scale; }
     // True once after a hold calibration wrote new reach settings (main.cpp saves them to the active profile).
     bool takeReachSave() { const bool p = reachSavePending; reachSavePending = false; return p; }
     // Raw 12-bit counts outside [SensorRailLow, SensorRailHigh] mean a shorted,
@@ -145,4 +147,5 @@ public:
     lean::Reach activeReach() const;
     bool reachSavePending = false;
     bool reverseFlipped = false; // corner reverse-turn flip latch (see getTargetsFromSample)
+    float turnKnobScale = 1.0f;
 };

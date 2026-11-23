@@ -43,6 +43,16 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
     - `DYNAMIC_GAINS`.
   - The dashboard hides `DBG` lines from its console. Its **Motor controllers** cards show each VESC's health (temps, voltage, currents, last fault, frame ages); the **VESC settings** page decodes the `DBG VCONF` dumps into every setting, side by side. Read-only: it never changes VESC settings. On the corner layout it moves the channel tiles to their corners and draws the plate: live CoP with a 2 s trail, neutral (+), relaxed posture (○), the no-output box and the full-lean box.
 
+## Changing firmware settings live (`chair_config.py`)
+- Talks to the chair through the tap's bridge (the tap must be running), so it works alongside the dashboard. Windows Python, stdlib only:
+  ```bash
+  python.exe tools/chair_config.py list [--json]              # id, group, name, value, default, limits, units
+  python.exe tools/chair_config.py get "forward" 92           # case-insensitive substring or id
+  python.exe tools/chair_config.py set "full lean left" 1.8 "deadzone" 0.3   # RAM only (dashboard Apply)
+  python.exe tools/chair_config.py save                       # persist (dashboard Save); revert drops RAM edits
+  ```
+- `set` checks every value against the firmware's min/max before sending anything, prints `old -> new` as acknowledged by the chair, and refuses ambiguous names (use `Group / Name` or the id). Set/save/revert work only in **DISARM**: the firmware refuses otherwise (exit code 3). Writes are never retried; on a missing ACK, `get` to check.
+
 ## Reading the data
 - **SQL:** `python3 tools/chair_sql.py "SELECT ..."` (also `--schema`, `--trend N`, `--file <csv>`).
   - Tables: `t` (telemetry rows), `raw` (20 Hz raw), `sens`, `corner`, `cop`, `vesc`, `vval`, `vfault`, `motor`, `sys`, `io`, `evt`, `msg` (text lines; `kind` `TAP`/`CORRUPT`/...). `--schema` lists the columns.

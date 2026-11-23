@@ -520,8 +520,10 @@ def match(fields, query):
     exact = [f for f in fields if f["name"].lower() == low]
     if len(exact) == 1:
         return exact[0]
-    hits = exact or [f for f in fields if low in f["name"].lower() or low in
-                     (f["group_path"] + " / " + f["name"]).lower()]
+    # "group / name" queries: the last part must be in the name, the others in the group path.
+    *group_parts, name_part = [part.strip() for part in low.split("/")]
+    hits = exact or [f for f in fields if name_part in f["name"].lower() and
+                     all(part in f["group_path"].lower() for part in group_parts)]
     if not hits:
         raise SystemExit(f"No setting matches '{query}'. Try `list`.")
     if len(hits) > 1:

@@ -155,6 +155,8 @@ class Validation(unittest.TestCase):
         self.assertEqual(cc.match(fields, "timeout")["id"], 40)
         self.assertEqual(cc.match(fields, "82")["id"], 82)
         self.assertEqual(cc.match(fields, "normal / integral")["id"], 72)
+        fields[1]["group_path"] = "PID / Transitions (reserved)"
+        self.assertEqual(cc.match(fields, "transitions / integral")["id"], 82)
         with self.assertRaises(SystemExit):
             cc.match(fields, "integral")
         with self.assertRaises(SystemExit):

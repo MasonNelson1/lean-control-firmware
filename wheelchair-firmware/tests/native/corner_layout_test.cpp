@@ -285,6 +285,23 @@ namespace
     // the shaped numbers are what make each step a real test of the latch.
     void reverseTurnLatch()
     {
+        // The flip is switched off for now (lean::CornerReverseFlipEnabled, court
+        // 2026-11-22): reversing while leaning to one side keeps the turn's sign.
+        if (!lean::CornerReverseFlipEnabled)
+        {
+            setLayout(SensorLayout::Corner);
+            auto m = freshMode();
+            sensors(ActiveNeutral);
+            m.calibrate();
+            for (int i = 0; i < 20; ++i)
+                drive(m, BackTouch);
+            lean::Counts backRight = BackTouch;
+            backRight[lean::R] += 300; // lean right while reversing
+            backRight[lean::L] -= 100;
+            const auto c = drive(m, backRight);
+            assert(c.speed < 0 && c.turn > 0); // still turns right
+            return;
+        }
         setLayout(SensorLayout::Corner);
         auto mode = freshMode();
         sensors(ActiveNeutral);

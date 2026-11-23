@@ -313,10 +313,13 @@ namespace
         shortPress(mode, ActiveNeutral, 1000);
         assert(mode.getNeutral().valid && !mode.calibrationLEDOn(20000));
         // Court 2026-11-22: sitting back, front-left carried ~75 of ~2,050. Accepted now
-        // (the old 5% share rule rejected it); under 30 counts is still rejected.
+        // (the old 5% share rule rejected it). 18:04: even 11-28 counts on front-left
+        // must pass; only a raw reading at the amp zero (< DeadChannelRawMax) is dead.
         shortPress(mode, {{1344, 1076, 427 + 75, 755}}, 30000);
         assert(mode.getNeutral().valid);
         shortPress(mode, {{1500, 1300, 427 + 20, 800}}, 60000);
+        assert(mode.getNeutral().valid);
+        shortPress(mode, {{1500, 1300, lean::DeadChannelRawMax - 6, 800}}, 90000);
         assert(!mode.getNeutral().valid);
     }
 

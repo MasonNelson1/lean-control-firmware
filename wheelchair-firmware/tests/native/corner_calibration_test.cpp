@@ -299,30 +299,31 @@ namespace
 
     void deadChannelMidRide()
     {
-        // Riding at neutral or leaning forward, any channel dropping to the amp
-        // offset jumps the CoP more than MaxCopStep in one tick: stop at once.
+        // MaxCopStep was raised to 2.5" (2026-11-22) after the 0.75" check misfired
+        // during normal riding. It now catches gross jumps, such as both back corners
+        // dropping out at once (the CoP leaps to the front pair), not one dead channel.
         for (const auto &posture : {ActiveNeutral, Forward})
-            for (size_t dead = 0; dead < lean::Channels; ++dead)
-            {
-                auto mode = freshMode();
-                shortPress(mode, ActiveNeutral, 1000);
-                drive(mode, posture);
-                lean::Counts raw = posture;
-                raw[dead] = AmpOffset;
-                sensors(raw);
-                const auto t = mode.getTargets();
-                assert(mode.centreOfPressureJumped());
-                assert(t.left == 0 && t.right == 0 && mode.getTelemetry().stopped);
-                // The flag is per tick; the disarm in main.cpp is what sticks.
-                mode.getTargets();
-                assert(!mode.centreOfPressureJumped());
-            }
-        // Known limit: leaning far back, the front corners carry little, so losing
-        // one moves the CoP only 0.27" (L) or 0.62" (R) and isn't caught here.
+        {
+            auto mode = freshMode();
+            shortPress(mode, ActiveNeutral, 1000);
+            drive(mode, posture);
+            lean::Counts raw = posture;
+            raw[lean::F] = AmpOffset; // back-left
+            raw[lean::B] = AmpOffset; // back-right
+            sensors(raw);
+            const auto t = mode.getTargets();
+            assert(mode.centreOfPressureJumped());
+            assert(t.left == 0 && t.right == 0 && mode.getTelemetry().stopped);
+            // The flag is per tick; the disarm in main.cpp is what sticks.
+            mode.getTargets();
+            assert(!mode.centreOfPressureJumped());
+        }
+        // Known limit now: a single dead channel steps the CoP 0.22-1.96", under the
+        // threshold, so it isn't caught by this check (rail check: raw < 340 still is).
         auto mode = freshMode();
         shortPress(mode, ActiveNeutral, 1000);
-        drive(mode, BackTouch);
-        lean::Counts raw = BackTouch;
+        drive(mode, ActiveNeutral);
+        lean::Counts raw = ActiveNeutral;
         raw[lean::L] = AmpOffset;
         sensors(raw);
         mode.getTargets();

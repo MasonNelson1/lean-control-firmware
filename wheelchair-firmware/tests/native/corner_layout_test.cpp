@@ -169,6 +169,10 @@ namespace
         assert(near(shaped.turn, 0.5f)); // not flipped at exactly -0.3
         shaped = lean::shapeCommand({-0.95f, 0.5f}, 0, 1, 1);
         assert(shaped.turn == 0); // turning off in hard reverse
+        // Corner layout flips reverse turning from -0.1 (court test 2026-11-22).
+        assert(lean::shapeCommand({-0.2f, 0.5f}, 0, 1, 1, lean::CornerReverseFlipAt).turn < 0);
+        assert(lean::shapeCommand({-0.05f, 0.5f}, 0, 1, 1, lean::CornerReverseFlipAt).turn > 0);
+        assert(lean::shapeCommand({-0.2f, 0.5f}, 0, 1, 1).turn > 0); // plus default still -0.3
         shaped = lean::shapeCommand({0.04f, -0.04f}, 0.05f, 1, 1);
         assert(shaped.speed == 0 && shaped.turn == 0); // plus deadband still works
 

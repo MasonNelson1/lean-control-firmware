@@ -128,7 +128,14 @@ namespace lean
     // CoP at once: in E9's sweep F by ≥1.96", B by ≥1.07", R by ≥0.53" (1.06" in
     // 95% of postures) and L by ≥0.22" (1.13" median). A lightly loaded channel
     // dying is hard to see and, for that moment, does little harm.
-    constexpr float MaxCopStep = 0.75f;
+    // Raised 0.75 -> 2.5 on 2026-11-22 after it misfired during normal riding on the
+    // court (16:50:02, all four sensors healthy). Real riding in LEAN reached 1.75"
+    // per 20 Hz sample (p99.9 1.02"). At 2.5" it only catches gross glitches, not a
+    // single dead channel (those step the CoP 0.22-1.96"); that needs a better detector.
+    constexpr float MaxCopStep = 2.5f;
+    // Corner layout: reverse turning flips as soon as the chair is clearly reversing.
+    // Was -0.3 (plus tuning); on the court slow reversing stayed above it. Charles, 2026-11-22.
+    constexpr float CornerReverseFlipAt = -0.1f;
 
     // Below this many counts of total load the centre of pressure is noise. A
     // seated rider loads the plate by ≈1,300–2,600 counts, and the seat gate
@@ -247,7 +254,7 @@ namespace lean
 
     // Deadband, response curves and the reverse-turn flip, in that order.
     // deadband is in normalised units; pass 0 to skip it.
-    Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent);
+    Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent, float reverseFlipAt = -0.3f);
 
     const char *layoutName(SensorLayout layout);
 

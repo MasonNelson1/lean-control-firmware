@@ -190,7 +190,7 @@ MotorTargets LeanDriveMode::getTargetsFromSample()
         // The corner deadzone is in inches inside cornerCommand, with the output
         // ramping from its edge, so the normalised deadband is skipped (0).
         command = lean::shapeCommand(lean::cornerCommand(cop.at, neutralZone(), activeReach()),
-                                     0.0f, speedResponseExponent, turnResponseExponent);
+                                     0.0f, speedResponseExponent, turnResponseExponent, lean::CornerReverseFlipAt);
     }
     else
     {

@@ -140,7 +140,7 @@ namespace lean
                 normalizeSensorPair(rightMinusLeft, userWeightEstimate)};
     }
 
-    Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent)
+    Command shapeCommand(Command command, float deadband, float speedExponent, float turnExponent, float reverseFlipAt)
     {
         float speed = command.speed, turn = command.turn;
 
@@ -157,9 +157,10 @@ namespace lean
         // it feels natural. Threshold -0.3, not 0, was picked by feel on the chair; at 0
         // turning near a standstill felt wrong. Below -0.9 (hard reverse) turning is off.
         // Deliberate tuning: don't change without testing on the chair.
-        // Applies to every layout: it acts on the shaped speed/turn, which mean the
-        // same thing whichever sensors produced them.
-        if (speed < -0.3f)
+        // The plus layout keeps -0.3 (default argument). The corner layout passes
+        // CornerReverseFlipAt: on the court (2026-11-22) slow reversing rarely got past
+        // -0.3, so back-left spun the chair the wrong way.
+        if (speed < reverseFlipAt)
         {
             turn *= -1;
         }

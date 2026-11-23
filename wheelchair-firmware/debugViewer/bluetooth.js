@@ -198,8 +198,39 @@ async function readBluetooth(port) {
   }
 }
 
+// "Bluetooth via Claude's tap": the HC-06 takes one connection, and the laptop's
+// tap (tools/chair_tap.py) holds it to log everything. The tap relays every byte
+// over a local WebSocket and writes what this page sends back to the chair, so the
+// dashboard (live view and configuration) and the tap work at the same time. This
+// object looks enough like a Web Serial port for the code below.
+const TAP_BRIDGE_URL = 'ws://127.0.0.1:8766';
+let useTapBridge = false;
+function openTapBridge(url) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    let control;
+    const port = {
+      readable: new ReadableStream({start(c) { control = c; }, cancel() { try { ws.close(); } catch {} }}),
+      writable: new WritableStream({write(chunk) { if (ws.readyState === WebSocket.OPEN) ws.send(chunk); }}),
+      async open() {},
+      async close() { try { ws.close(); } catch {} },
+      getInfo() { return {tapBridge: true}; }
+    };
+    ws.onmessage = event => { if (event.data instanceof ArrayBuffer) control.enqueue(new Uint8Array(event.data)); };
+    ws.onclose = () => { try { control.close(); } catch {} };
+    ws.onopen = () => resolve(port);
+    ws.onerror = () => reject(new Error(`couldn't reach the tap's bridge at ${url}; is tools/chair_tap.py running?`));
+  });
+}
+
 async function connectBluetooth() {
-  if (!window.isSecureContext || !navigator.serial) {
+  if (useTapBridge) return connectBluetoothPort(() => openTapBridge(TAP_BRIDGE_URL), 'Connected through the tap (Claude keeps logging).');
+  return connectBluetoothPort(null, 'Bluetooth connected. Live sensor telemetry is available in every mode.');
+}
+
+async function connectBluetoothPort(openPort, connectedMessage) {
+  if (!openPort && (!window.isSecureContext || !navigator.serial)) {
     appendConsole('Bluetooth serial requires desktop Chrome with Web Serial enabled. Open this dashboard at http://localhost:8000 or HTTPS, and pair the HC-06 in your system Bluetooth settings first.');
     return;
   }
@@ -208,7 +239,7 @@ async function connectBluetooth() {
   let port;
   try {
     // Standard Serial Port Profile services are allowed by default.
-    port = await navigator.serial.requestPort({filters: [{bluetoothServiceClassId: 0x1101}]});
+    port = openPort ? await openPort() : await navigator.serial.requestPort({filters: [{bluetoothServiceClassId: 0x1101}]});
     // Leave room for short rendering pauses on phones without overrunning reads.
     await port.open({baudRate: 115200, bufferSize: 65536});
     bluetoothPort = port;
@@ -220,7 +251,7 @@ async function connectBluetooth() {
     displayed = [];
     graphs();
     renderBluetooth();
-    appendConsole('Bluetooth connected. Live sensor telemetry is available in every mode.');
+    appendConsole(connectedMessage);
     bluetoothTimer = setInterval(renderBluetooth, 100);
     bluetoothReadTask = readBluetooth(port);
     window.configurationConnectionChanged?.(port);
@@ -249,7 +280,9 @@ async function changeConnectionMode() {
   usbConnected = false;
   syncUsbMonitoring();
   try {
-    connectionMode = dashboardBackend ? $('#connection-mode').value : 'bluetooth';
+    const selected = $('#connection-mode').value;
+    useTapBridge = selected === 'tap';
+    connectionMode = dashboardBackend && selected === 'usb' ? 'usb' : 'bluetooth';
     // A new source starts disconnected and never shows the old source's data.
     latest = []; displayed = []; lastRow = null;
     resetConnectionStatus();

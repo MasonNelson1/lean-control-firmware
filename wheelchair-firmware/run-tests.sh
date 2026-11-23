@@ -90,7 +90,7 @@ run_viewer() {
 }
 
 run_tools() {
-    echo "== Laptop tools tests (chair_sql, chair_summary)"
+    echo "== Laptop tools tests (chair_sql, chair_summary, chair_config)"
     if python3 -B -m unittest discover -s tools/tests >"$OUT/tools-py.log" 2>&1; then
         echo "ok  $(grep -E '^Ran ' "$OUT/tools-py.log")"
     else

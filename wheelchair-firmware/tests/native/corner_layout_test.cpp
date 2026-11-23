@@ -236,13 +236,13 @@ namespace
         assert(mode.getTelemetry().left == 230 && mode.getTelemetry().right == 390);
 
         cmd = drive(mode, Forward, &t);
-        assert(near(cmd.speed, 1) && near(cmd.turn, 0.06865f) && near(t.left, 1) && near(t.right, 0.92820f));
+        assert(near(cmd.speed, 1) && near(cmd.turn, 0.06865f) && near(t.left, 1) && near(t.right, 1 - 0.06865f * lean::TurnAuthorityFast));
         cmd = drive(mode, BackTouch, &t);
         assert(near(cmd.speed, -0.99062f) && cmd.turn == 0 && near(t.left, -0.99062f) && near(t.right, -0.99062f));
         cmd = drive(mode, Right, &t);
-        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, 1) && near(t.left, 0.34146f) && near(t.right, -0.46236f));
+        assert(near(cmd.speed, -0.06045f) && near(cmd.turn, 1) && near(t.left, -0.06045f + 0.42582f) && near(t.right, -0.06045f - 0.42582f)); // authority 0.45 fading toward 0.25
         cmd = drive(mode, Left, &t);
-        assert(cmd.speed == 0 && near(cmd.turn, -1) && near(t.left, -0.33880f) && near(t.right, 0.33880f));
+        assert(cmd.speed == 0 && near(cmd.turn, -1) && near(t.left, -lean::TurnAuthorityStopped) && near(t.right, lean::TurnAuthorityStopped));
         // Relaxing into passive neutral is 0.74" forward of active neutral: a slow creep.
         cmd = drive(mode, PassiveNeutral, &t);
         assert(near(cmd.speed, 0.13933f) && cmd.turn == 0);
@@ -375,14 +375,29 @@ namespace
         assert(messages.find("Reach calibration rejected: right reached 0.49 in, required 1.20.") != std::string::npos);
         assert(mode.activeReach().right == reach.right && mode.activeReach().forward == reach.forward);
 
-        // Recalibrating neutral keeps the rider's reach; a profile change drops it.
+        // The calibrated reach is written into the reach settings (the chair saves them
+        // into the profile), so it is the settings, not a transient override.
+        const float f = lean::ReachUseFraction;
+        assert(near(settings::reachForward.get(), (0.4265f + 1.6349f) * f, 0.001f));
+        assert(near(settings::reachBack.get(), (3.5248f - 1.6349f) * f, 0.001f));
+        assert(near(settings::reachLeft.get(), (1.3047f + 0.2976f) * f, 0.001f));
+        assert(near(settings::reachRight.get(), settings::reachLeft.get()));
+        assert(mode.takeReachSave());
+        assert(!mode.takeReachSave());
+
+        // Recalibrating neutral, re-entering LEAN and an empty seat all keep it.
         sensors(ActiveNeutral);
         mode.calibrate();
         assert(mode.activeReach().forward == reach.forward);
         mode.reset();
         assert(mode.activeReach().forward == reach.forward);
         mode.resetDynamicGains();
+        assert(mode.activeReach().forward == reach.forward);
+        assert(!mode.takeReachSave());
+        // Loading default settings (a fresh profile) is what returns the default reach.
+        settings::registry().defaults();
         assert(mode.activeReach().forward == lean::DefaultReachForward);
+        assert(mode.activeReach().right == lean::DefaultReachRight);
     }
 
     void telemetryLines()

@@ -251,7 +251,8 @@ ul.tight{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35
   <div class="formula"><span class="m">motor volts × motor amps</span> = <span class="b">battery volts × battery amps</span></div>
   <p>Now put in what's fixed. The battery side is pinned: about <span class="mono">53.5 V</span>, and we've capped battery current at <span class="mono">3 A</span> per motor because we thought the battery couldn't take more. So the battery side can never take more than 53.5 × 3 ≈ <b class="mono">160 W</b> per motor.</p>
   <p>The motor side has to fit inside that same 160 W. But the motor's voltage isn't fixed: it depends on speed. So:</p>
-  <div class="formula"><span class="m">motor amps allowed</span> = 160 W ÷ <span class="m">motor volts</span> = 160 W ÷ (7.9 V × speed in m/s)</div>
+  <div class="formula"><span class="m">motor amps allowed</span> = 160 W ÷ <span class="m">motor volts</span> = 160 W ÷ (7.9 V per m/s × chair speed)</div>
+  <p>7.9 V per m/s is the motor's generator constant: every 1 m/s of chair speed makes 7.9 V across the motor (estimated from the 11/22 logs). The same constant gives the force: each amp of motor current pushes the wheel with about 7.9 N.</p>
   <p>Fast means high motor voltage, so 160 W buys only a few amps: weak braking. Slow means low motor voltage, so the same 160 W buys a lot of amps: strong braking, then far too strong. Drag the slider and watch.</p>
 </section>
 
@@ -261,7 +262,7 @@ ul.tight{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35
     <input type="range" id="spd" min="0.15" max="3" step="0.01" value="2">
   </div>
   <div class="readouts">
-    <div class="ro"><span class="l">Motor voltage</span><span class="v m" id="s-vm">—</span><span class="s">7.9 V × speed</span></div>
+    <div class="ro"><span class="l">Motor voltage</span><span class="v m" id="s-vm">—</span><span class="s">7.9 V per m/s × speed</span></div>
     <div class="ro"><span class="l">Motor amps, 3 A cap</span><span class="v m" id="s-i3">—</span><span class="s">160 W ÷ motor V</span></div>
     <div class="ro"><span class="l">Motor amps, 7.5 A cap</span><span class="v m" id="s-i75">—</span><span class="s">400 W ÷ motor V</span></div>
     <div class="ro"><span class="l">What happens</span><span class="v" id="s-what" style="font-size:1rem;font-family:var(--f-body);font-weight:600">—</span><span class="s" id="s-why">&nbsp;</span></div>
@@ -465,7 +466,7 @@ const ft=el("text",{x:cv.X(55),y:cv.Y(41.5),"text-anchor":"middle",class:"lbl",s
 
 // ---------- rule chart ----------
 const rHost=$("c-rule");
-const rl=document.createElement("div");rl.className="legend";rl.innerHTML='<span><i style="background:var(--motor)"></i>battery cap 3 A (today)</span><span><i style="background:repeating-linear-gradient(90deg,var(--motor) 0 5px,transparent 5px 8px)"></i>battery cap 7.5 A</span><span><i style="background:var(--fault)"></i>~50 A: VESC hard limit, it faults</span><span><i style="background:var(--ink-3)"></i>32.7 A: old motor limit</span><span><i style="background:var(--cap)"></i>20 A: new motor cap (fix 1)</span>';
+const rl=document.createElement("div");rl.className="legend";rl.innerHTML='<span><i style="background:var(--motor)"></i>battery cap 3 A (today)</span><span><i style="background:repeating-linear-gradient(90deg,var(--motor) 0 5px,transparent 5px 8px)"></i>battery cap 7.5 A</span><span><i style="background:var(--fault)"></i>red, ~50 A: VESC trip wire. Cross it and the VESC shuts off</span><span><i style="background:var(--ink-3)"></i>grey, 32.7 A: the old motor-current setting</span><span><i style="background:var(--cap)"></i>purple, 20 A: the new motor-current setting (fix 1)</span>';
 const vs=[];for(let v=0.15;v<=3.0001;v+=0.01)vs.push(v);
 const cr=lineChart(rHost,{xMax:3,yMax:80,h:250,mr:50,xTicks:[0,0.5,1,1.5,2,2.5,3],yTicks:[0,20,40,60,80],xLabel:"chair speed (m/s)",
   bands:[{x0:0,x1:0.40,fill:"var(--fault-soft)"}],

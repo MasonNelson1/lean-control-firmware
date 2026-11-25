@@ -1,0 +1,1 @@
+(fp_lib_table (version 7) (lib (name "LEAN") (type "KiCad") (uri "${KIPRJMOD}/LEAN.pretty") (options "") (descr "Project footprint snapshots")))

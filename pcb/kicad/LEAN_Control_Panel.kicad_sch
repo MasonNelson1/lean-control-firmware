@@ -1,0 +1,2130 @@
+(kicad_sch (version 20250114) (generator "eeschema") (uuid "62c65ec1-fff8-4106-b7b9-003b037b9949") (paper "A3") (title_block (title "LEAN Control Panel") (date "2026-10-14") (rev "K")) (lib_symbols (symbol "LEAN_Symbols:A10403RNCQ" (pin_names (offset 0.8)) (exclude_from_sim no) (in_bom yes) (on_board yes) (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27)))) (property "Value" "A10403RNCQ" (at 0 0 0) (effects (font (size 1.27 1.27)))) (symbol "A10403RNCQ_0_1" (rectangle (start -7.62 10.16) (end 7.62 -12.7) (stroke (width 0.254) (type default)) (fill (type background)))) (symbol "A10403RNCQ_1_1" (pin passive line (at -10.16 0 0) (length 2.54) (name "COM" (effects (font (size 1 1)))) (number "A" (effects (font (size 1 1)))))(pin passive line (at 10.16 7.62 180) (length 2.54) (name "1" (effects (font (size 1 1)))) (number "1" (effects (font (size 1 1)))))(pin passive line (at 10.16 2.54 180) (length 2.54) (name "2" (effects (font (size 1 1)))) (number "2" (effects (font (size 1 1)))))(pin passive line (at 10.16 -2.54 180) (length 2.54) (name "3" (effects (font (size 1 1)))) (number "3" (effects (font (size 1 1)))))(pin passive line (at 10.16 -7.62 180) (length 2.54) (name "4" (effects (font (size 1 1)))) (number "4" (effects (font (size 1 1)))))(pin passive line (at 0 -15.24 90) (length 2.54) (name "SUPPORT" (effects (font (size 1 1)))) (number "9" (effects (font (size 1 1)))))))
+(symbol "LEAN_Symbols:B3F-5051" (pin_names (offset 0.8)) (exclude_from_sim no) (in_bom yes) (on_board yes) (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27)))) (property "Value" "B3F-5051" (at 0 0 0) (effects (font (size 1.27 1.27)))) (symbol "B3F-5051_0_1" (rectangle (start -7.62 7.62) (end 7.62 -7.62) (stroke (width 0.254) (type default)) (fill (type background)))(polyline (pts (xy -7.62 5.08) (xy 7.62 5.08)) (stroke (width .254) (type default)) (fill (type none))) (polyline (pts (xy -7.62 -5.08) (xy 7.62 -5.08)) (stroke (width .254) (type default)) (fill (type none))) (polyline (pts (xy 0 -5.08) (xy -2.54 2.54)) (stroke (width .254) (type default)) (fill (type none)))) (symbol "B3F-5051_1_1" (pin passive line (at 10.16 -5.08 180) (length 2.54) (name "NO" (effects (font (size 1 1)))) (number "1" (effects (font (size 1 1)))))(pin passive line (at -10.16 -5.08 0) (length 2.54) (name "NO" (effects (font (size 1 1)))) (number "2" (effects (font (size 1 1)))))(pin passive line (at 10.16 5.08 180) (length 2.54) (name "COM" (effects (font (size 1 1)))) (number "3" (effects (font (size 1 1)))))(pin passive line (at -10.16 5.08 0) (length 2.54) (name "COM" (effects (font (size 1 1)))) (number "4" (effects (font (size 1 1)))))))
+(symbol "LEAN_Symbols:Conn_01x02_Pin"
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "J"
+				(at 0 2.54 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Conn_01x02_Pin"
+				(at 0 -5.08 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Generic connector, single row, 01x02, script generated"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_locked" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "connector"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "Connector*:*_1x??_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "Conn_01x02_Pin_1_1"
+				(rectangle
+					(start 0.8636 0.127)
+					(end 0 -0.127)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+				(rectangle
+					(start 0.8636 -2.413)
+					(end 0 -2.667)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.27 0) (xy 0.8636 0)
+					)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.27 -2.54) (xy 0.8636 -2.54)
+					)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 3.81)
+					(name "Pin_1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 -2.54 180)
+					(length 3.81)
+					(name "Pin_2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+(symbol "LEAN_Symbols:Conn_01x05_Pin"
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "J"
+			(at 0 7.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Conn_01x05_Pin"
+			(at 0 -7.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x05, script generated"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_locked" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "connector"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_fp_filters" "Connector*:*_1x??_*"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(symbol "Conn_01x05_Pin_1_1"
+			(rectangle
+				(start 0.8636 5.207)
+				(end 0 4.953)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 2.667)
+				(end 0 2.413)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 0.127)
+				(end 0 -0.127)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -2.413)
+				(end 0 -2.667)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -4.953)
+				(end 0 -5.207)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 5.08) (xy 0.8636 5.08)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 2.54) (xy 0.8636 2.54)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 0) (xy 0.8636 0)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -2.54) (xy 0.8636 -2.54)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -5.08) (xy 0.8636 -5.08)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(pin passive line
+				(at 5.08 5.08 180)
+				(length 3.81)
+				(name "Pin_1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 2.54 180)
+				(length 3.81)
+				(name "Pin_2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 0 180)
+				(length 3.81)
+				(name "Pin_3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -2.54 180)
+				(length 3.81)
+				(name "Pin_4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -5.08 180)
+				(length 3.81)
+				(name "Pin_5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+(symbol "LEAN_Symbols:Conn_01x10_Pin"
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "J"
+			(at 0 12.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Conn_01x10_Pin"
+			(at 0 -15.24 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x10, script generated"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_locked" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "connector"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_fp_filters" "Connector*:*_1x??_*"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(symbol "Conn_01x10_Pin_1_1"
+			(rectangle
+				(start 0.8636 10.287)
+				(end 0 10.033)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 7.747)
+				(end 0 7.493)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 5.207)
+				(end 0 4.953)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 2.667)
+				(end 0 2.413)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 0.127)
+				(end 0 -0.127)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -2.413)
+				(end 0 -2.667)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -4.953)
+				(end 0 -5.207)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -7.493)
+				(end 0 -7.747)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -10.033)
+				(end 0 -10.287)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -12.573)
+				(end 0 -12.827)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 10.16) (xy 0.8636 10.16)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 7.62) (xy 0.8636 7.62)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 5.08) (xy 0.8636 5.08)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 2.54) (xy 0.8636 2.54)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 0) (xy 0.8636 0)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -2.54) (xy 0.8636 -2.54)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -5.08) (xy 0.8636 -5.08)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -7.62) (xy 0.8636 -7.62)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -10.16) (xy 0.8636 -10.16)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -12.7) (xy 0.8636 -12.7)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(pin passive line
+				(at 5.08 10.16 180)
+				(length 3.81)
+				(name "Pin_1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 7.62 180)
+				(length 3.81)
+				(name "Pin_2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 5.08 180)
+				(length 3.81)
+				(name "Pin_3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 2.54 180)
+				(length 3.81)
+				(name "Pin_4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 0 180)
+				(length 3.81)
+				(name "Pin_5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -2.54 180)
+				(length 3.81)
+				(name "Pin_6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -5.08 180)
+				(length 3.81)
+				(name "Pin_7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -7.62 180)
+				(length 3.81)
+				(name "Pin_8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -10.16 180)
+				(length 3.81)
+				(name "Pin_9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -12.7 180)
+				(length 3.81)
+				(name "Pin_10"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "10"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+(symbol "LEAN_Symbols:LED"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "D"
+			(at 0 2.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "LED"
+			(at 0 -2.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Light emitting diode"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" "1=K 2=A"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_keywords" "LED diode"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_fp_filters" "LED* LED_SMD:* LED_THT:*"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(symbol "LED_0_1"
+			(polyline
+				(pts
+					(xy -3.048 -0.762) (xy -4.572 -2.286) (xy -3.81 -2.286) (xy -4.572 -2.286) (xy -4.572 -1.524)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -1.778 -0.762) (xy -3.302 -2.286) (xy -2.54 -2.286) (xy -3.302 -2.286) (xy -3.302 -1.524)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -1.27 0) (xy 1.27 0)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -1.27 -1.27) (xy -1.27 1.27)
+				)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -1.27) (xy 1.27 1.27) (xy -1.27 0) (xy 1.27 -1.27)
+				)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "LED_1_1"
+			(pin passive line
+				(at -3.81 0 0)
+				(length 2.54)
+				(name "K"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 3.81 0 180)
+				(length 2.54)
+				(name "A"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+(symbol "LEAN_Symbols:R"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "R"
+				(at 2.032 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "R"
+				(at 0 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at -1.778 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Resistor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "R res resistor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "R_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R_0_1"
+				(rectangle
+					(start -1.016 -2.54)
+					(end 1.016 2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "R_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 1.27)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 1.27)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+(symbol "LEAN_Symbols:ULN2003A"
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "U"
+			(at 0 15.875 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "ULN2003A"
+			(at 0 13.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 1.27 -13.97 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "http://www.ti.com/lit/ds/symlink/uln2003a.pdf"
+			(at 2.54 -5.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "High Voltage, High Current Darlington Transistor Arrays, SOIC16/SOIC16W/DIP16/TSSOP16"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_keywords" "darlington transistor array"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_fp_filters" "DIP*W7.62mm* SOIC*3.9x9.9mm*P1.27mm* SSOP*4.4x5.2mm*P0.65mm* TSSOP*4.4x5mm*P0.65mm* SOIC*W*5.3x10.2mm*P1.27mm*"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(symbol "ULN2003A_0_1"
+			(rectangle
+				(start -7.62 -12.7)
+				(end 7.62 12.7)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type background)
+				)
+			)
+			(polyline
+				(pts
+					(xy -4.572 5.08) (xy -3.556 5.08)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -3.556 6.096) (xy -3.556 4.064) (xy -2.032 5.08) (xy -3.556 6.096)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center -1.778 5.08)
+				(radius 0.254)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy -1.524 5.08) (xy 4.064 5.08)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center -1.27 2.54)
+				(radius 0.254)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(circle
+				(center -1.27 0)
+				(radius 0.254)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(circle
+				(center -1.27 -2.286)
+				(radius 0.254)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(circle
+				(center -0.508 5.08)
+				(radius 0.254)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(polyline
+				(pts
+					(xy -0.508 5.08) (xy -0.508 10.16) (xy 2.921 10.16)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 6.731) (xy -1.016 6.731)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 5.969) (xy -1.016 5.969) (xy -0.508 6.731) (xy 0 5.969)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "ULN2003A_1_1"
+			(pin input line
+				(at -10.16 5.08 0)
+				(length 2.54)
+				(name "I1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -10.16 2.54 0)
+				(length 2.54)
+				(name "I2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -10.16 0 0)
+				(length 2.54)
+				(name "I3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -10.16 -2.54 0)
+				(length 2.54)
+				(name "I4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -10.16 -5.08 0)
+				(length 2.54)
+				(name "I5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -10.16 -7.62 0)
+				(length 2.54)
+				(name "I6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -10.16 -10.16 0)
+				(length 2.54)
+				(name "I7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 0 -15.24 90)
+				(length 2.54)
+				(name "GND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 10.16 10.16 180)
+				(length 2.54)
+				(name "COM"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 5.08 180)
+				(length 2.54)
+				(name "O1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "16"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 2.54 180)
+				(length 2.54)
+				(name "O2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "15"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 0 180)
+				(length 2.54)
+				(name "O3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "14"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 -2.54 180)
+				(length 2.54)
+				(name "O4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "13"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 -5.08 180)
+				(length 2.54)
+				(name "O5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "12"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 -7.62 180)
+				(length 2.54)
+				(name "O6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "11"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin open_collector line
+				(at 10.16 -10.16 180)
+				(length 2.54)
+				(name "O7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "10"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)(symbol "LEAN_Symbols:SW_Push"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "SW"
+			(at 1.27 2.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SW_Push"
+			(at 0 -1.524 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 5.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 0 5.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Push button switch, generic, two pins"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_keywords" "switch normally-open pushbutton push-button"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(symbol "SW_Push_0_1"
+			(circle
+				(center -2.032 0)
+				(radius 0.508)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 1.27) (xy 0 3.048)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center 2.032 0)
+				(radius 0.508)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 2.54 1.27) (xy -2.54 1.27)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(pin passive line
+				(at -5.08 0 0)
+				(length 2.54)
+				(name "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 0 180)
+				(length 2.54)
+				(name "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	))
+(text "USER CONTROL PANEL - TWO ROTARY SELECTORS / FOUR BUTTONS / FIVE LEDS" (at 20.32 15.24 0) (effects (font (size 1.8 1.8)) (justify left)) (uuid "d282010e-2718-4bdf-a8a1-3a8cafa4bec3"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x05_Pin") (at 40.64 45.72 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "ca1e0a5f-ad74-4d66-998a-461ad9a72d8c") (property "Reference" "J11" (at 40.64 29.72 0) (effects (font (size 1 1))))(property "Value" "TO MAIN J4" (at 40.64 32.22 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical" (at 40.64 45.72 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 40.64 45.72 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "6850d1e6-bcbe-418f-956c-981f11b6f309"))(pin "2" (uuid "ecc8d9d7-37d0-41a8-80ae-fa1d9e95d684"))(pin "3" (uuid "5e7e41a2-2c57-49ba-bc33-e7c20f2150db"))(pin "4" (uuid "1e37f9f0-6f5d-406c-b157-6c1c220ff7b4"))(pin "5" (uuid "16257436-f097-4c43-8b73-de25d9372018"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J11") (unit 1)))))
+(wire (pts (xy 45.7200 40.6400) (xy 50.8000 40.6400)) (stroke (width 0) (type default)) (uuid "c7b7d1a2-a03d-460f-854f-109f3c87a020"))
+(global_label "CP_SPEED_ADC" (shape input) (at 50.8000 40.6400 0) (effects (font (size 1 1)) (justify left)) (uuid "6a080c40-ebaa-4d7c-8766-97feac656e5d"))
+(wire (pts (xy 45.7200 43.1800) (xy 50.8000 43.1800)) (stroke (width 0) (type default)) (uuid "72bab529-6a0f-4fe8-b31d-24045a81ded6"))
+(global_label "CP_SPEED_POS1" (shape input) (at 50.8000 43.1800 0) (effects (font (size 1 1)) (justify left)) (uuid "272b1ffe-db68-413b-9369-9061b0564587"))
+(wire (pts (xy 45.7200 45.7200) (xy 50.8000 45.7200)) (stroke (width 0) (type default)) (uuid "8955bfe7-549c-477c-a69a-b7bb88883b6f"))
+(global_label "CP_SPEED_POS2" (shape input) (at 50.8000 45.7200 0) (effects (font (size 1 1)) (justify left)) (uuid "5de17880-9ae2-45b9-88c8-a04705c91a95"))
+(wire (pts (xy 45.7200 48.2600) (xy 50.8000 48.2600)) (stroke (width 0) (type default)) (uuid "159bd80d-1bea-4b9b-a2b2-85694bd902e4"))
+(global_label "CP_SPEED_POS3" (shape input) (at 50.8000 48.2600 0) (effects (font (size 1 1)) (justify left)) (uuid "f7629bb5-0eb2-4682-8874-1ab1df58d792"))
+(wire (pts (xy 45.7200 50.8000) (xy 50.8000 50.8000)) (stroke (width 0) (type default)) (uuid "19c29ca4-ce70-4847-aae8-9d81ecc8ef90"))
+(global_label "CP_SPEED_POS4" (shape input) (at 50.8000 50.8000 0) (effects (font (size 1 1)) (justify left)) (uuid "4341cc95-b209-4ed9-9650-61cb1e9841d2"))
+(symbol (lib_id "LEAN_Symbols:A10403RNCQ") (at 101.6 55.88 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "7e31daed-0299-4cd7-a546-e33efebc3af4") (property "Reference" "SW101" (at 101.6 39.88 0) (effects (font (size 1 1))))(property "Value" "A10403RNCQ" (at 101.6 42.38 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:SW_Rotary_CK_A10403RNCQ" (at 101.6 55.88 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 101.6 55.88 0) (effects (font (size 1 1)) (hide yes)))(pin "A" (uuid "53bbac55-21e6-4186-a93b-eb16a92c75fa"))(pin "1" (uuid "7148e161-2b63-40a5-8b4b-afc8b2060e18"))(pin "2" (uuid "3dc53469-a2d0-47c7-bed7-6bd7bd6faca9"))(pin "3" (uuid "524e7500-d9e6-4ae6-a3f4-e414ff91eefa"))(pin "4" (uuid "2d180be4-7cea-46cc-99a1-36049bd3ddd3"))(pin "9" (uuid "dcf93da6-ed77-41aa-9b2f-63d3c8626b60"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "SW101") (unit 1)))))
+(wire (pts (xy 91.4400 55.8800) (xy 86.3600 55.8800)) (stroke (width 0) (type default)) (uuid "a5cb5175-be55-4777-bf1f-7e26f7f37ed6"))
+(global_label "CP_SPEED_ADC" (shape input) (at 86.3600 55.8800 180) (effects (font (size 1 1)) (justify right)) (uuid "c7144c40-8e5f-49af-94a9-9e1c225e9b74"))
+(wire (pts (xy 111.7600 48.2600) (xy 116.8400 48.2600)) (stroke (width 0) (type default)) (uuid "1aca3037-8d17-4fa9-970a-a40bef3c8a31"))
+(global_label "CP_SPEED_POS1" (shape input) (at 116.8400 48.2600 0) (effects (font (size 1 1)) (justify left)) (uuid "0ab27ca1-b1e3-4b8a-a772-636581937cb9"))
+(wire (pts (xy 111.7600 53.3400) (xy 116.8400 53.3400)) (stroke (width 0) (type default)) (uuid "c08b367c-baab-4ee3-8638-1f7b43134a3f"))
+(global_label "CP_SPEED_POS2" (shape input) (at 116.8400 53.3400 0) (effects (font (size 1 1)) (justify left)) (uuid "2ebc0db6-8f89-48c5-8506-7d39c677835c"))
+(wire (pts (xy 111.7600 58.4200) (xy 116.8400 58.4200)) (stroke (width 0) (type default)) (uuid "f89d0bee-f89c-4372-ab69-2d469e4b68c9"))
+(global_label "CP_SPEED_POS3" (shape input) (at 116.8400 58.4200 0) (effects (font (size 1 1)) (justify left)) (uuid "a016d60f-70b1-4e52-b41c-67c2475c4c95"))
+(wire (pts (xy 111.7600 63.5000) (xy 116.8400 63.5000)) (stroke (width 0) (type default)) (uuid "3a4682c2-bbb7-4812-8664-c3b936430c64"))
+(global_label "CP_SPEED_POS4" (shape input) (at 116.8400 63.5000 0) (effects (font (size 1 1)) (justify left)) (uuid "ccd0f550-899c-42da-a71d-4d68e4a773c8"))
+(no_connect (at 101.6000 71.1200) (uuid "9eda1f49-904b-4eb7-9a88-1dc33bd1dec2"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x05_Pin") (at 165.1 45.72 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "e5e2a742-a4f8-4a7d-877a-4e2bef3ac3ba") (property "Reference" "J12" (at 165.1 29.72 0) (effects (font (size 1 1))))(property "Value" "TO MAIN J3" (at 165.1 32.22 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical" (at 165.1 45.72 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 165.1 45.72 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "675c44ce-b75e-493d-9e23-d3b516b53629"))(pin "2" (uuid "5ff89cac-08d1-4c17-97fe-266d4b50a0e2"))(pin "3" (uuid "689b4326-6806-483f-88e6-f99303a87ec7"))(pin "4" (uuid "aff96f89-7d0b-4700-9fa7-6a5b176a78cb"))(pin "5" (uuid "3b72d171-53cb-4f20-b9a7-e77ab1800a54"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J12") (unit 1)))))
+(wire (pts (xy 170.1800 40.6400) (xy 175.2600 40.6400)) (stroke (width 0) (type default)) (uuid "98ab2bf1-8be0-4a0d-95c2-6be5eac922b7"))
+(global_label "CP_ACCEL_ADC" (shape input) (at 175.2600 40.6400 0) (effects (font (size 1 1)) (justify left)) (uuid "e9ad9681-0f94-4186-89e6-0ae8e86d1e93"))
+(wire (pts (xy 170.1800 43.1800) (xy 175.2600 43.1800)) (stroke (width 0) (type default)) (uuid "b74d8341-1262-4623-af7c-6e9d9c74e78d"))
+(global_label "CP_ACCEL_POS1" (shape input) (at 175.2600 43.1800 0) (effects (font (size 1 1)) (justify left)) (uuid "45c51cf6-efa7-45d5-a371-9dfde80b3475"))
+(wire (pts (xy 170.1800 45.7200) (xy 175.2600 45.7200)) (stroke (width 0) (type default)) (uuid "8a0d4e79-7fe0-4739-ad7c-468ab553f615"))
+(global_label "CP_ACCEL_POS2" (shape input) (at 175.2600 45.7200 0) (effects (font (size 1 1)) (justify left)) (uuid "5aabbdb6-c345-494c-a9c4-0f897d100d9b"))
+(wire (pts (xy 170.1800 48.2600) (xy 175.2600 48.2600)) (stroke (width 0) (type default)) (uuid "2be45d75-fa0b-4f9f-8a7d-58e424cef17a"))
+(global_label "CP_ACCEL_POS3" (shape input) (at 175.2600 48.2600 0) (effects (font (size 1 1)) (justify left)) (uuid "f2a47ed9-02ec-4e7a-8936-fea2c1aa0c4b"))
+(wire (pts (xy 170.1800 50.8000) (xy 175.2600 50.8000)) (stroke (width 0) (type default)) (uuid "0c20f8f7-9fcd-4401-829b-d81968ace41e"))
+(global_label "CP_ACCEL_POS4" (shape input) (at 175.2600 50.8000 0) (effects (font (size 1 1)) (justify left)) (uuid "cda45e74-abe8-4d61-96a7-e3690bdedbdc"))
+(symbol (lib_id "LEAN_Symbols:A10403RNCQ") (at 226.06 55.88 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "784f5d7b-9115-4de7-9044-d1090b99c553") (property "Reference" "SW102" (at 226.06 39.88 0) (effects (font (size 1 1))))(property "Value" "A10403RNCQ" (at 226.06 42.38 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:SW_Rotary_CK_A10403RNCQ" (at 226.06 55.88 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 226.06 55.88 0) (effects (font (size 1 1)) (hide yes)))(pin "A" (uuid "cd22d506-dd95-4b6b-83ac-eaecc958c87b"))(pin "1" (uuid "89226647-6d02-434c-9a34-bb81e47a7254"))(pin "2" (uuid "9a189982-c97e-43ae-b40a-8e8dce3b0e78"))(pin "3" (uuid "c7bfc9f3-03ee-40d6-a745-b2ca8d076b8b"))(pin "4" (uuid "85f1addc-ecfc-4b57-a426-5da21661e910"))(pin "9" (uuid "b4879400-72c1-4351-bf36-925d97205d0c"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "SW102") (unit 1)))))
+(wire (pts (xy 215.9000 55.8800) (xy 210.8200 55.8800)) (stroke (width 0) (type default)) (uuid "7c5b1215-6a51-46a2-8694-35063ae55217"))
+(global_label "CP_ACCEL_ADC" (shape input) (at 210.8200 55.8800 180) (effects (font (size 1 1)) (justify right)) (uuid "fe6f2503-73da-4695-bb0f-6bf053915210"))
+(wire (pts (xy 236.2200 48.2600) (xy 241.3000 48.2600)) (stroke (width 0) (type default)) (uuid "ab2c5a85-e918-4b9a-9c75-686f18efdfe2"))
+(global_label "CP_ACCEL_POS1" (shape input) (at 241.3000 48.2600 0) (effects (font (size 1 1)) (justify left)) (uuid "7cdf110a-11e7-4132-98e7-4f69abe35ffc"))
+(wire (pts (xy 236.2200 53.3400) (xy 241.3000 53.3400)) (stroke (width 0) (type default)) (uuid "94c4bde7-3ea9-423d-a0ad-a702c7a5c5ec"))
+(global_label "CP_ACCEL_POS2" (shape input) (at 241.3000 53.3400 0) (effects (font (size 1 1)) (justify left)) (uuid "eb6bd0e0-4bfd-433f-be1d-7ada45d505b0"))
+(wire (pts (xy 236.2200 58.4200) (xy 241.3000 58.4200)) (stroke (width 0) (type default)) (uuid "0448ba7d-ed5d-45db-b163-78d465264da5"))
+(global_label "CP_ACCEL_POS3" (shape input) (at 241.3000 58.4200 0) (effects (font (size 1 1)) (justify left)) (uuid "4e9637ce-31c3-4dc3-a2f3-b84e0ef32d39"))
+(wire (pts (xy 236.2200 63.5000) (xy 241.3000 63.5000)) (stroke (width 0) (type default)) (uuid "16d10971-2ac0-43c7-a097-62c12bc556bd"))
+(global_label "CP_ACCEL_POS4" (shape input) (at 241.3000 63.5000 0) (effects (font (size 1 1)) (justify left)) (uuid "34a66eb2-330f-456c-8a67-094a6a268447"))
+(no_connect (at 226.0600 71.1200) (uuid "8b463c87-adeb-4413-95fa-dac9ae9aa753"))
+(text "Main-board resistor ladders retained. Contact 9 is isolated mechanical support.\nPins 2/3/4/5 = 25/50/75/100%; common reads A0 (speed) / A1 (accel)." (at 20.32 88.9 0) (effects (font (size 1.4 1.4)) (justify left)) (uuid "aecb5a0f-7378-4fde-80c5-0b3cef1261e2"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x02_Pin") (at 292.1 43.18 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "3d0c2dcb-65f4-4c72-8108-c199b314c62d") (property "Reference" "J13" (at 292.1 27.18 0) (effects (font (size 1 1))))(property "Value" "TO MAIN J5 / CAL" (at 292.1 29.68 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical" (at 292.1 43.18 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 292.1 43.18 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "fe4556b2-4a04-4266-951b-0eb7471ddccc"))(pin "2" (uuid "8dff1224-5f46-4565-8bba-c973a3cec00c"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J13") (unit 1)))))
+(wire (pts (xy 297.1800 43.1800) (xy 302.2600 43.1800)) (stroke (width 0) (type default)) (uuid "3ecdbb76-70f6-4f6e-9510-229426bb8b42"))
+(global_label "CP_GND" (shape input) (at 302.2600 43.1800 0) (effects (font (size 1 1)) (justify left)) (uuid "38148676-6ea6-4509-9e68-937f1fd8d1ac"))
+(wire (pts (xy 297.1800 45.7200) (xy 302.2600 45.7200)) (stroke (width 0) (type default)) (uuid "e54fc0e0-f911-49b8-84f4-7032624bb8e3"))
+(global_label "CP_BTN_CAL" (shape input) (at 302.2600 45.7200 0) (effects (font (size 1 1)) (justify left)) (uuid "674206aa-04b4-4d94-8af4-c4fe7daf40a8"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x10_Pin") (at 335.28 101.6 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "21b3dc25-ab61-4b6d-8b8d-91f41a6ad38a") (property "Reference" "J14" (at 335.28 85.6 0) (effects (font (size 1 1))))(property "Value" "TO MAIN J10 / IO" (at 335.28 88.1 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B10B-PH-K_1x10_P2.00mm_Vertical" (at 335.28 101.6 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 335.28 101.6 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "1628aaf9-2bb8-4d15-b5ef-611f9a1fa259"))(pin "2" (uuid "7c5c728e-2605-49f0-804b-aa72fcaa982f"))(pin "3" (uuid "addea704-0679-40e3-a0f8-002f81a9a6b5"))(pin "4" (uuid "5b6d03be-f799-43af-a10f-695358521b96"))(pin "5" (uuid "4aa6505b-e3eb-4749-a5f6-cb5751224be7"))(pin "6" (uuid "835c9bb0-3d7f-4634-809c-0e609201907e"))(pin "7" (uuid "fb755bfb-5c5e-4cec-aae1-a3bc0c7112b9"))(pin "8" (uuid "a360f3a2-7bcd-4e8d-a458-09a06a67e887"))(pin "9" (uuid "d6c64e19-6076-4c02-a15b-92bd5ee7ea45"))(pin "10" (uuid "e4c57525-3196-4390-a422-af1362585eda"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J14") (unit 1)))))
+(wire (pts (xy 340.3600 91.4400) (xy 345.4400 91.4400)) (stroke (width 0) (type default)) (uuid "8a30001e-c99a-4ee4-adc6-20faf141e5ac"))
+(global_label "CP_GND" (shape input) (at 345.4400 91.4400 0) (effects (font (size 1 1)) (justify left)) (uuid "52621d12-d453-4412-8a88-85915ee6f6a7"))
+(wire (pts (xy 340.3600 93.9800) (xy 345.4400 93.9800)) (stroke (width 0) (type default)) (uuid "729a3fe3-c20b-40a5-a6d0-1d7680c1c59f"))
+(global_label "CP_5V" (shape input) (at 345.4400 93.9800 0) (effects (font (size 1 1)) (justify left)) (uuid "44812d2f-20d2-45ac-a783-c7a1fb3ff2e8"))
+(wire (pts (xy 340.3600 96.5200) (xy 345.4400 96.5200)) (stroke (width 0) (type default)) (uuid "80de2586-6278-431b-ab4d-5aeaaaaa0e08"))
+(global_label "CP_BTN_LEAN" (shape input) (at 345.4400 96.5200 0) (effects (font (size 1 1)) (justify left)) (uuid "ef56873d-195b-4aba-bf73-b669409597c6"))
+(wire (pts (xy 340.3600 99.0600) (xy 345.4400 99.0600)) (stroke (width 0) (type default)) (uuid "b82d2494-6d60-4381-aa67-2c54a1a7b65e"))
+(global_label "CP_BTN_DISARM" (shape input) (at 345.4400 99.0600 0) (effects (font (size 1 1)) (justify left)) (uuid "219ee9f6-7ec0-4212-9e90-056e88087914"))
+(wire (pts (xy 340.3600 101.6000) (xy 345.4400 101.6000)) (stroke (width 0) (type default)) (uuid "5f781bdc-56f6-412b-85b8-ddf701277d05"))
+(global_label "CP_BTN_REMOTE" (shape input) (at 345.4400 101.6000 0) (effects (font (size 1 1)) (justify left)) (uuid "4cf7b5d9-94e7-40ed-a4d1-5e1ec36f4aa9"))
+(wire (pts (xy 340.3600 104.1400) (xy 345.4400 104.1400)) (stroke (width 0) (type default)) (uuid "fdccb773-fe51-41ff-8d6e-0698eb74e81d"))
+(global_label "CP_LED_CAL" (shape input) (at 345.4400 104.1400 0) (effects (font (size 1 1)) (justify left)) (uuid "3a274d3f-c226-41e9-884a-1edd2ea9b14b"))
+(wire (pts (xy 340.3600 106.6800) (xy 345.4400 106.6800)) (stroke (width 0) (type default)) (uuid "33bf3302-7d52-4674-8516-c978653f16af"))
+(global_label "CP_LED_LEAN" (shape input) (at 345.4400 106.6800 0) (effects (font (size 1 1)) (justify left)) (uuid "57aee8b0-6957-4dc1-b817-ece662371d96"))
+(wire (pts (xy 340.3600 109.2200) (xy 345.4400 109.2200)) (stroke (width 0) (type default)) (uuid "9adda711-8d7d-47ae-a33b-27924c62ebf3"))
+(global_label "CP_LED_DISARM" (shape input) (at 345.4400 109.2200 0) (effects (font (size 1 1)) (justify left)) (uuid "3e0403e2-bed2-4cbc-8b96-cb88ec32e094"))
+(wire (pts (xy 340.3600 111.7600) (xy 345.4400 111.7600)) (stroke (width 0) (type default)) (uuid "fa30e5c5-e321-4e41-905e-037a4226b4e1"))
+(global_label "CP_LED_REMOTE" (shape input) (at 345.4400 111.7600 0) (effects (font (size 1 1)) (justify left)) (uuid "777c52ba-34ae-40d7-875a-79993b9df87a"))
+(wire (pts (xy 340.3600 114.3000) (xy 345.4400 114.3000)) (stroke (width 0) (type default)) (uuid "757769b5-d3a2-4813-9651-f9ede2f9eef2"))
+(global_label "CP_LED_CONNECTED" (shape input) (at 345.4400 114.3000 0) (effects (font (size 1 1)) (justify left)) (uuid "d6d99262-7257-4ce9-ab8e-6b5951b81866"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(symbol (lib_id "LEAN_Symbols:LED") (at 124.46 213.36 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "7528dd98-effb-436d-a0fd-c8416d2398aa") (property "Reference" "D101" (at 124.46 197.36 90) (effects (font (size 1 1))))(property "Value" "WP7113LID / CAL" (at 124.46 199.86 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:LED_D5.0mm" (at 124.46 213.36 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 124.46 213.36 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "9474eb4e-85b3-4a0b-8149-90324de9958b"))(pin "2" (uuid "df64c093-d1f8-4824-96c2-d5cbb311fa73"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "D101") (unit 1)))))
+(wire (pts (xy 124.4600 217.1700) (xy 124.4600 222.2500)) (stroke (width 0) (type default)) (uuid "2fdff7d5-cbc3-4ee8-a4d6-0b51d30f0d46"))
+(global_label "CP_GND" (shape input) (at 124.4600 222.2500 0) (effects (font (size 1 1)) (justify left)) (uuid "f50f099f-c84d-483c-887e-3a9605107a2c"))
+(wire (pts (xy 124.4600 209.5500) (xy 124.4600 204.4700)) (stroke (width 0) (type default)) (uuid "52a6f745-d205-4ccf-a5d2-b766d28fbdb7"))
+(global_label "CP_LED_CAL" (shape input) (at 124.4600 204.4700 0) (effects (font (size 1 1)) (justify left)) (uuid "1066ee2f-0bf5-425d-9d48-bb8e3a2d81b2"))
+
+
+
+
+
+(symbol (lib_id "LEAN_Symbols:LED") (at 172.72 213.36 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "4ac98e1d-9f14-4810-9b4f-a5d0d1b06ae1") (property "Reference" "D102" (at 172.72 197.36 90) (effects (font (size 1 1))))(property "Value" "WP7113LID / LEAN" (at 172.72 199.86 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:LED_D5.0mm" (at 172.72 213.36 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 172.72 213.36 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "0f21a663-b58b-4412-9951-40d2bbb90554"))(pin "2" (uuid "2721610b-6de2-43ed-ac33-78644b8cc934"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "D102") (unit 1)))))
+(wire (pts (xy 172.7200 217.1700) (xy 172.7200 222.2500)) (stroke (width 0) (type default)) (uuid "7b0ef6b6-822a-4000-9b34-e83bf230760f"))
+(global_label "CP_GND" (shape input) (at 172.7200 222.2500 0) (effects (font (size 1 1)) (justify left)) (uuid "6b9e1237-4ef4-4aef-a528-01bd8edae425"))
+(wire (pts (xy 172.7200 209.5500) (xy 172.7200 204.4700)) (stroke (width 0) (type default)) (uuid "1d045d35-9ac8-420e-a7bc-c0f739c7bf24"))
+(global_label "CP_LED_LEAN" (shape input) (at 172.7200 204.4700 0) (effects (font (size 1 1)) (justify left)) (uuid "81d7b90c-4250-425c-8138-93918446126a"))
+
+
+
+
+
+(symbol (lib_id "LEAN_Symbols:LED") (at 220.98 213.36 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "c0bf269f-798a-44d4-8f30-2ad15906a1d3") (property "Reference" "D103" (at 220.98 197.36 90) (effects (font (size 1 1))))(property "Value" "WP7113LID / DISARM" (at 220.98 199.86 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:LED_D5.0mm" (at 220.98 213.36 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 220.98 213.36 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "8b9a7767-d2d4-411f-9a16-7d2b95f87df4"))(pin "2" (uuid "94cde719-04cc-4a34-b811-4c29a103232b"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "D103") (unit 1)))))
+(wire (pts (xy 220.9800 217.1700) (xy 220.9800 222.2500)) (stroke (width 0) (type default)) (uuid "4c5c5902-738b-4613-a2f6-67a085370ba1"))
+(global_label "CP_GND" (shape input) (at 220.9800 222.2500 0) (effects (font (size 1 1)) (justify left)) (uuid "168bbdbd-bc58-4c26-bc76-41622092598e"))
+(wire (pts (xy 220.9800 209.5500) (xy 220.9800 204.4700)) (stroke (width 0) (type default)) (uuid "915819b9-fb71-4fad-8c90-8306c0437e29"))
+(global_label "CP_LED_DISARM" (shape input) (at 220.9800 204.4700 0) (effects (font (size 1 1)) (justify left)) (uuid "a5e9551a-18bc-4e67-8b5a-7ad014ad5945"))
+
+
+
+
+
+(symbol (lib_id "LEAN_Symbols:LED") (at 269.24 213.36 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "8c263fb4-1d59-40ed-94de-fc174ca16a4b") (property "Reference" "D104" (at 269.24 197.36 90) (effects (font (size 1 1))))(property "Value" "WP7113LID / REMOTE" (at 269.24 199.86 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:LED_D5.0mm" (at 269.24 213.36 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 269.24 213.36 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "d31d5c16-0c17-4ce2-97af-6030b00ed1f2"))(pin "2" (uuid "871bf134-14b2-4ed9-81a8-e04667bf9a1c"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "D104") (unit 1)))))
+(wire (pts (xy 269.2400 217.1700) (xy 269.2400 222.2500)) (stroke (width 0) (type default)) (uuid "48e6d0eb-a621-47da-9943-7bf2725c62e5"))
+(global_label "CP_GND" (shape input) (at 269.2400 222.2500 0) (effects (font (size 1 1)) (justify left)) (uuid "cd82a6d5-9e77-4dbe-af11-40110a0bb62e"))
+(wire (pts (xy 269.2400 209.5500) (xy 269.2400 204.4700)) (stroke (width 0) (type default)) (uuid "2c00ca41-3c5a-4953-a6b7-9b7adce01b5e"))
+(global_label "CP_LED_REMOTE" (shape input) (at 269.2400 204.4700 0) (effects (font (size 1 1)) (justify left)) (uuid "79a5fa94-9815-4620-b5df-c55588e1025d"))
+
+
+
+
+
+(symbol (lib_id "LEAN_Symbols:LED") (at 317.5 213.36 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "0da56fc4-0206-4c4a-bcf4-06c1e78eb60e") (property "Reference" "D105" (at 317.5 197.36 90) (effects (font (size 1 1))))(property "Value" "WP7113LID / CONNECTED" (at 317.5 199.86 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:LED_D5.0mm" (at 317.5 213.36 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 317.5 213.36 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "f63c195f-41cf-4a9f-927b-b6cbfcf1b994"))(pin "2" (uuid "b4842c67-cac7-430d-a38d-7348f062f08c"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "D105") (unit 1)))))
+(wire (pts (xy 317.5000 217.1700) (xy 317.5000 222.2500)) (stroke (width 0) (type default)) (uuid "88e5b168-8ced-40f2-b3a2-b002b849e19d"))
+(global_label "CP_GND" (shape input) (at 317.5000 222.2500 0) (effects (font (size 1 1)) (justify left)) (uuid "1ecf93ae-a91e-4fcd-a484-d46f95539050"))
+(wire (pts (xy 317.5000 209.5500) (xy 317.5000 204.4700)) (stroke (width 0) (type default)) (uuid "333592e1-3470-4dc0-95d3-4eed3c41efdd"))
+(global_label "CP_LED_CONNECTED" (shape input) (at 317.5000 204.4700 0) (effects (font (size 1 1)) (justify left)) (uuid "a4f4190a-5297-4661-9e93-62d78e9e65ba"))
+(text "Five indicators driven directly by Teensy GPIO27..31 at 3.3 V.\nEach signal passes through its own 1 kohm resistor on the MAIN board.\nLED anodes connect to CP_LED_*; cathodes connect to CP_GND. HIGH = ON." (at 20.32 246.38 0) (effects (font (size 1.27 1.27)) (justify left)) (uuid "dff31ae6-d862-490b-a226-f217efc3ac80"))
+(sheet_instances (path "/" (page "2")))
+(symbol (lib_id "LEAN_Symbols:SW_Push") (at 45.72 114.3 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board no) (dnp no) (uuid "87a780f6-cbd4-43a2-b3cd-969dfe53073d")(property "Reference" "SW103" (at 45.72 104.14 0) (effects (font (size 1 1))))(property "Value" "DIRVCP NO / CAL" (at 45.72 106.67999999999999 0) (effects (font (size 1 1))))(property "Footprint" "" (at 45.72 114.3 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 45.72 114.3 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "6ef45e9c-047f-41f1-ad91-f0dcf364969f"))(pin "2" (uuid "e6b34e18-132e-44d6-8951-5dd4c46d2cb7"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "SW103") (unit 1)))))
+(wire (pts (xy 40.64 114.3) (xy 33.019999999999996 114.3)) (stroke (width 0) (type default)) (uuid "b73730bd-327a-4aa9-bbc9-8f25e79ef124"))
+(global_label "CP_BTN_CAL" (shape input) (at 33.019999999999996 114.3 180) (effects (font (size 1 1)) (justify right)) (uuid "4541dd49-44a3-46e0-87de-2b0003960af4"))
+(wire (pts (xy 50.8 114.3) (xy 58.42 114.3)) (stroke (width 0) (type default)) (uuid "1a64fb5a-c90d-4f18-b8f0-c5092b8e93bf"))
+(global_label "CP_GND" (shape input) (at 58.42 114.3 0) (effects (font (size 1 1)) (justify left)) (uuid "a34d334e-9ec8-47b8-bf1d-c2767eaa7fe1"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x02_Pin") (at 45.72 142.24 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "b9caf289-0912-48f6-8e30-56338b626fe5")(property "Reference" "J18" (at 45.72 132.08 0) (effects (font (size 1 1))))(property "Value" "REAR / CAL" (at 45.72 134.62 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical" (at 45.72 142.24 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 45.72 142.24 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "e195e6d7-5c40-4f12-99ff-21a2ec0e1a83"))(pin "2" (uuid "5ee58535-7bd8-4936-a73e-aee5330ca32c"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J18") (unit 1)))))
+(wire (pts (xy 50.8 142.24) (xy 58.42 142.24)) (stroke (width 0) (type default)) (uuid "5d306dcf-7c72-4ece-9a62-a84636b637d3"))
+(global_label "CP_BTN_CAL" (shape input) (at 58.42 142.24 0) (effects (font (size 1 1)) (justify left)) (uuid "e76ec5a4-1eda-467a-ae57-3e5fca62592c"))
+(wire (pts (xy 50.8 144.78) (xy 58.42 144.78)) (stroke (width 0) (type default)) (uuid "411720ab-0bd8-487d-88d2-b525fdc072da"))
+(global_label "CP_GND" (shape input) (at 58.42 144.78 0) (effects (font (size 1 1)) (justify left)) (uuid "5411dd21-5884-4e2e-b066-93839cb058c3"))
+(symbol (lib_id "LEAN_Symbols:SW_Push") (at 121.92 114.3 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board no) (dnp no) (uuid "cd37e412-6647-4fc8-a3fc-cbbbd6ff4414")(property "Reference" "SW104" (at 121.92 104.14 0) (effects (font (size 1 1))))(property "Value" "DIRVCP NO / LEAN" (at 121.92 106.67999999999999 0) (effects (font (size 1 1))))(property "Footprint" "" (at 121.92 114.3 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 121.92 114.3 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "b2f422a7-bec3-450c-bf96-8c7c0f3a7d50"))(pin "2" (uuid "e3a52921-61f7-4694-a2aa-f7d069abf861"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "SW104") (unit 1)))))
+(wire (pts (xy 116.84 114.3) (xy 109.22 114.3)) (stroke (width 0) (type default)) (uuid "3d9e6616-472e-48a5-bd34-afc0b7b826a3"))
+(global_label "CP_BTN_LEAN" (shape input) (at 109.22 114.3 180) (effects (font (size 1 1)) (justify right)) (uuid "c11859bd-abea-4130-b0f9-0844918be8db"))
+(wire (pts (xy 127.0 114.3) (xy 134.62 114.3)) (stroke (width 0) (type default)) (uuid "5655829a-b3ec-4976-aaa7-8087b26156f9"))
+(global_label "CP_GND" (shape input) (at 134.62 114.3 0) (effects (font (size 1 1)) (justify left)) (uuid "0fd3d8a3-f0b0-4ff9-96f0-43d31df475bb"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x02_Pin") (at 121.92 142.24 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "18b35969-4ffd-4689-9790-59d6157d840d")(property "Reference" "J19" (at 121.92 132.08 0) (effects (font (size 1 1))))(property "Value" "REAR / LEAN" (at 121.92 134.62 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical" (at 121.92 142.24 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 121.92 142.24 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "3efaaab4-465f-4822-849a-d960211176f0"))(pin "2" (uuid "72229bc3-b096-4edb-8219-7ca6fe89a9a2"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J19") (unit 1)))))
+(wire (pts (xy 127.0 142.24) (xy 134.62 142.24)) (stroke (width 0) (type default)) (uuid "5cc86fe2-a489-481d-aec2-a122413170fe"))
+(global_label "CP_BTN_LEAN" (shape input) (at 134.62 142.24 0) (effects (font (size 1 1)) (justify left)) (uuid "1681ed2f-8333-4676-b9f8-8fb882797451"))
+(wire (pts (xy 127.0 144.78) (xy 134.62 144.78)) (stroke (width 0) (type default)) (uuid "652ef534-ed5c-4cdb-a2e0-e5c2e905b09d"))
+(global_label "CP_GND" (shape input) (at 134.62 144.78 0) (effects (font (size 1 1)) (justify left)) (uuid "d6b76704-b7d5-4f8d-a168-6d08f23ebbdb"))
+(symbol (lib_id "LEAN_Symbols:SW_Push") (at 198.12 114.3 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board no) (dnp no) (uuid "96410263-c516-42c6-b213-128c088786dd")(property "Reference" "SW105" (at 198.12 104.14 0) (effects (font (size 1 1))))(property "Value" "DIRVCP NO / DISARM" (at 198.12 106.67999999999999 0) (effects (font (size 1 1))))(property "Footprint" "" (at 198.12 114.3 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 198.12 114.3 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "99de6548-9d88-4779-b27a-4318cde6966a"))(pin "2" (uuid "b06ca84c-38f9-4246-a0de-19a614a29ad6"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "SW105") (unit 1)))))
+(wire (pts (xy 193.04 114.3) (xy 185.42000000000002 114.3)) (stroke (width 0) (type default)) (uuid "6e8190d2-df10-4f26-b28c-f027b9a4a490"))
+(global_label "CP_BTN_DISARM" (shape input) (at 185.42000000000002 114.3 180) (effects (font (size 1 1)) (justify right)) (uuid "d4770170-1a00-4b7c-8b84-e3be0e853c74"))
+(wire (pts (xy 203.20000000000002 114.3) (xy 210.82 114.3)) (stroke (width 0) (type default)) (uuid "051bbbc9-860a-4bec-86c5-2f13e73af8f3"))
+(global_label "CP_GND" (shape input) (at 210.82 114.3 0) (effects (font (size 1 1)) (justify left)) (uuid "b894ec74-c07d-437d-9404-1abf0445f084"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x02_Pin") (at 198.12 142.24 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "f5bdd2ae-3ceb-461c-b3c0-8c937286d225")(property "Reference" "J20" (at 198.12 132.08 0) (effects (font (size 1 1))))(property "Value" "REAR / DISARM" (at 198.12 134.62 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical" (at 198.12 142.24 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 198.12 142.24 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "3358f542-d909-48a4-a7c5-399b1e3fd99f"))(pin "2" (uuid "9a860294-65db-49ee-860f-63e80d566436"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J20") (unit 1)))))
+(wire (pts (xy 203.20000000000002 142.24) (xy 210.82 142.24)) (stroke (width 0) (type default)) (uuid "ff6d870a-fe66-4643-ade4-53b6f6ed2bbd"))
+(global_label "CP_BTN_DISARM" (shape input) (at 210.82 142.24 0) (effects (font (size 1 1)) (justify left)) (uuid "35396d51-ebab-47c7-a3b3-b2c146d06fd7"))
+(wire (pts (xy 203.20000000000002 144.78) (xy 210.82 144.78)) (stroke (width 0) (type default)) (uuid "60f2f23a-e09a-4bab-95da-9c98deb13dc1"))
+(global_label "CP_GND" (shape input) (at 210.82 144.78 0) (effects (font (size 1 1)) (justify left)) (uuid "8f40a0d2-6b64-42ba-b153-0fbfb1308b8b"))
+(symbol (lib_id "LEAN_Symbols:SW_Push") (at 274.32000000000005 114.3 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board no) (dnp no) (uuid "61f25271-e3dd-4dc2-b8a1-d9e0116527f7")(property "Reference" "SW106" (at 274.32000000000005 104.14 0) (effects (font (size 1 1))))(property "Value" "DIRVCP NO / REMOTE" (at 274.32000000000005 106.67999999999999 0) (effects (font (size 1 1))))(property "Footprint" "" (at 274.32000000000005 114.3 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 274.32000000000005 114.3 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "fc97b8a2-dab2-4b2e-b804-d5ba59179ba9"))(pin "2" (uuid "317fa632-1d6a-4a77-b7a7-df4396a2af6f"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "SW106") (unit 1)))))
+(wire (pts (xy 269.24000000000007 114.3) (xy 261.62000000000006 114.3)) (stroke (width 0) (type default)) (uuid "1858fe03-7c79-4955-aacd-45ee5efe4bb4"))
+(global_label "CP_BTN_REMOTE" (shape input) (at 261.62000000000006 114.3 180) (effects (font (size 1 1)) (justify right)) (uuid "7c15273f-b9e2-4bf4-b148-dd2756ea08d8"))
+(wire (pts (xy 279.40000000000003 114.3) (xy 287.02000000000004 114.3)) (stroke (width 0) (type default)) (uuid "59353f51-d123-4f24-aa91-79d067d26d6d"))
+(global_label "CP_GND" (shape input) (at 287.02000000000004 114.3 0) (effects (font (size 1 1)) (justify left)) (uuid "4f447b59-2268-4231-8830-1bda8a9dd275"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x02_Pin") (at 274.32000000000005 142.24 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "ab0b3e5d-b1b8-4ca3-a6e2-4f4e6ac2f1c1")(property "Reference" "J21" (at 274.32000000000005 132.08 0) (effects (font (size 1 1))))(property "Value" "REAR / REMOTE" (at 274.32000000000005 134.62 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical" (at 274.32000000000005 142.24 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 274.32000000000005 142.24 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "57b33307-1907-409e-89ea-496c01844926"))(pin "2" (uuid "690d8a9a-7486-4f62-8d73-ece2fa33a9be"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/62c65ec1-fff8-4106-b7b9-003b037b9949" (reference "J21") (unit 1)))))
+(wire (pts (xy 279.40000000000003 142.24) (xy 287.02000000000004 142.24)) (stroke (width 0) (type default)) (uuid "53052f43-928a-4866-9abc-140ec58b6152"))
+(global_label "CP_BTN_REMOTE" (shape input) (at 287.02000000000004 142.24 0) (effects (font (size 1 1)) (justify left)) (uuid "6d7ccead-c71d-47e3-a024-03ee1b4f2db4"))
+(wire (pts (xy 279.40000000000003 144.78) (xy 287.02000000000004 144.78)) (stroke (width 0) (type default)) (uuid "4adcf54d-4383-4315-a758-1639bffe3298"))
+(global_label "CP_GND" (shape input) (at 287.02000000000004 144.78 0) (effects (font (size 1 1)) (justify left)) (uuid "932d1712-8af3-498d-9efc-e6d903a8257e"))
+(text "SW103-SW106 are enclosure-mounted, prewired buttons (Dirvcp ASIN B0FM8QKSM1). Not PCB solder parts. All J11-J21 panel headers mount on BACK. No polarity on button contact pair." (at 20.32 154.94 0) (effects (font (size 1.15 1.15)) (justify left)) (uuid "b11ef9f6-3ba4-4f9b-9917-27a743120cbb"))
+)

@@ -13,6 +13,10 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - **Every test:** catalogue it in `../experiments/README.md` (setup, protocol with wall times, data file, results, interpretation).
 - **Showing data:** interpretation first, a compact raw table (Mason reads raw counts), and a chart that compares on the same axes (Charles).
 - **High trust:** for coding agents on this branch.
+- **During live tests:** answer first in one line ("yes, it uploaded"), then do longer work. Hand anything over a few minutes to a subagent so the main thread stays free to talk.
+- **Odd tuned constants** (e.g. the -0.3 reverse-turn threshold, VESC IDs left=2 / right=26) were set on the real chair. Don't "fix" them unasked. When someone explains one, write the reason as a code comment next to it.
+- **No basic electrical warnings.** The team switches the chair off before USB programming; live data comes over Bluetooth.
+- **Hip-thrust artifact:** leaning back can pivot the torso on the backrest and lift the hips, moving load onto the front sensors, so a back lean reads as forward. The rider can't use their hips, so a design that relies on hip shifts fails.
 
 ## Bluetooth telemetry (the chair's live data)
 - **Module:** HC-06 on Teensy `Serial1`; shows in Windows as **"LEANReciever"**, PIN **8976**.
@@ -81,7 +85,7 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - **Facts:**
   - Zero force ≈ **372** raw on every sensor (amplifier offset).
   - Centre of pressure = Σ(force·position)/Σforce, using raw − 372.
-  - Riders: Mason ≈ Parker's size; Charles is heavier.
+  - Riders: Mason ≈ the rider's size; Charles is heavier.
 
 ## Uploading firmware
 - `pio run` builds; `pio run -t upload` uploads. `wsl_upload.py` hands off to the Windows Teensy tools.
@@ -104,10 +108,13 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - **Sensors:** FlexiForce A502 force sensors in a plus, each through an MCP6004 transimpedance amp. Readings depend strongly on contact area.
 - **Top plate:** sits on 1/4" hollow rubber stoppers. Tightening bolts are off; they made no difference.
 - **Coordinates:** (0,0) is the plus centre. First hole 2.5" out, then 1" apart. Front/back holes 1–6, left/right 1–5. Current config **F5 B6 L5 R5**; B5 is equivalent.
-- **Lean names** to call out: `passive-neutral`, `active-neutral`, `forward`, `back-min`, `back-touch`, `back-pivot`, `left`, `right`, `reseat`. Riders keep their hips passive (Parker is paralyzed from the waist down).
+- **Lean names** to call out: `passive-neutral`, `active-neutral`, `forward`, `back-min`, `back-touch`, `back-pivot`, `left`, `right`, `reseat`. Riders keep their hips passive (the rider is paralyzed from the waist down).
 - **Planned:** a square (corner) layout centred ≈1.2" behind the current centre. Do a plate-on known-weight test first. Record footrest and backrest-strap heights in every test: both shift the rider's weight.
 
 ## Other context
-- PCB (KiCad, plain text): `../../pcb/` (README has the pin/net table).
-- Design doc text (partly stale): `../../cdr/cdr.txt`.
+- PCB (KiCad, plain text): `../pcb/` (README has the pin/net table).
+- Design doc text (partly stale, rider and sponsor names redacted): `../docs/cdr/critical-design-review.txt`.
+- VESC firmware source excerpts (CAN, FOC): `../docs/vesc-firmware-ref/`.
+- Meeting notes and the detailed scrubbed meeting summary: `../notes/`.
+- Full chair telemetry from every session (gzipped tap logs): `logs/sessions/`, indexed in its README.
 - Issues: `MasonNelson1/lean-control-firmware`, filed as FriChaFri (`GH_TOKEN=$(gh auth token --user FriChaFri) gh ...`; the default gh account is enterprise-blocked).

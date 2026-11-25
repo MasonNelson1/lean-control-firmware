@@ -1,0 +1,99 @@
+Reference,Board,Side,Pad,Function,KiCad_net
+J1,Main controller,Front,1,UNUSED - leave cavity empty,unconnected-(J1-Pin_1-Pad1)
+J1,Main controller,Front,2,CANH,CANH
+J1,Main controller,Front,3,CANL,CANL
+J1,Main controller,Front,4,UNUSED - leave cavity empty,unconnected-(J1-Pin_4-Pad4)
+J2,Main controller,Front,1,5 V INPUT,5V
+J2,Main controller,Front,2,CANH,CANH
+J2,Main controller,Front,3,CANL,CANL
+J2,Main controller,Front,4,GND,GND
+J3,Main controller,Front,1,Switch A common: Acceleration A1 / GPIO 15,ACCEL_ADC
+J3,Main controller,Front,2,Switch terminal 1: 25% acceleration selection,ACCEL_POS1
+J3,Main controller,Front,3,Switch terminal 2: 50% acceleration selection,ACCEL_POS2
+J3,Main controller,Front,4,Switch terminal 3: 75% acceleration selection,ACCEL_POS3
+J3,Main controller,Front,5,Switch terminal 4: 100% acceleration selection,ACCEL_POS4
+J4,Main controller,Front,1,Switch A common: Maximum-speed A0 / GPIO 14,SPEED_ADC
+J4,Main controller,Front,2,Switch terminal 1: 25% speed selection,SPEED_POS1
+J4,Main controller,Front,3,Switch terminal 2: 50% speed selection,SPEED_POS2
+J4,Main controller,Front,4,Switch terminal 3: 75% speed selection,SPEED_POS3
+J4,Main controller,Front,5,Switch terminal 4: 100% speed selection,SPEED_POS4
+J5,Main controller,Front,1,GND,GND
+J5,Main controller,Front,2,Calibration button: GPIO 4,Net-(J5-Pin_2)
+J6,Main controller,Front,1,GND,GND
+J6,Main controller,Front,2,FSR 1 input; conditioned output to A17,Net-(J6-Pin_2)
+J7,Main controller,Front,1,GND,GND
+J7,Main controller,Front,2,FSR 2 input; conditioned output to A16,Net-(J7-Pin_2)
+J8,Main controller,Front,1,GND,GND
+J8,Main controller,Front,2,FSR 3 input; conditioned output to A15,Net-(J8-Pin_2)
+J9,Main controller,Front,1,GND,GND
+J9,Main controller,Front,2,FSR 4 input; conditioned output to A14,Net-(J9-Pin_2)
+J10,Main controller,Front,1,GND,GND
+J10,Main controller,Front,2,5V,5V
+J10,Main controller,Front,3,PANEL_LEAN_RAW,PANEL_LEAN_RAW
+J10,Main controller,Front,4,PANEL_DISARM_RAW,PANEL_DISARM_RAW
+J10,Main controller,Front,5,PANEL_REMOTE_RAW,PANEL_REMOTE_RAW
+J10,Main controller,Front,6,LED CAL; 3.3 V GPIO through main-board 1k resistor,PANEL_LED_CAL
+J10,Main controller,Front,7,LED LEAN; 3.3 V GPIO through main-board 1k resistor,PANEL_LED_LEAN
+J10,Main controller,Front,8,LED DISARM; 3.3 V GPIO through main-board 1k resistor,PANEL_LED_DISARM
+J10,Main controller,Front,9,LED REMOTE; 3.3 V GPIO through main-board 1k resistor,PANEL_LED_REMOTE
+J10,Main controller,Front,10,LED CONNECTED; 3.3 V GPIO through main-board 1k resistor,PANEL_LED_CONNECTED
+J11,Control panel,Back,1,SPEED_ADC,CP_SPEED_ADC
+J11,Control panel,Back,2,SPEED_POS1,CP_SPEED_POS1
+J11,Control panel,Back,3,SPEED_POS2,CP_SPEED_POS2
+J11,Control panel,Back,4,SPEED_POS3,CP_SPEED_POS3
+J11,Control panel,Back,5,SPEED_POS4,CP_SPEED_POS4
+J12,Control panel,Back,1,ACCEL_ADC,CP_ACCEL_ADC
+J12,Control panel,Back,2,ACCEL_POS1,CP_ACCEL_POS1
+J12,Control panel,Back,3,ACCEL_POS2,CP_ACCEL_POS2
+J12,Control panel,Back,4,ACCEL_POS3,CP_ACCEL_POS3
+J12,Control panel,Back,5,ACCEL_POS4,CP_ACCEL_POS4
+J13,Control panel,Back,1,GND,CP_GND
+J13,Control panel,Back,2,BTN_CAL,CP_BTN_CAL
+J14,Control panel,Back,1,GND,CP_GND
+J14,Control panel,Back,2,5V,CP_5V
+J14,Control panel,Back,3,BTN_LEAN,CP_BTN_LEAN
+J14,Control panel,Back,4,BTN_DISARM,CP_BTN_DISARM
+J14,Control panel,Back,5,BTN_REMOTE,CP_BTN_REMOTE
+J14,Control panel,Back,6,LED CAL; 3.3 V GPIO through main-board 1k resistor,CP_LED_CAL
+J14,Control panel,Back,7,LED LEAN; 3.3 V GPIO through main-board 1k resistor,CP_LED_LEAN
+J14,Control panel,Back,8,LED DISARM; 3.3 V GPIO through main-board 1k resistor,CP_LED_DISARM
+J14,Control panel,Back,9,LED REMOTE; 3.3 V GPIO through main-board 1k resistor,CP_LED_REMOTE
+J14,Control panel,Back,10,LED CONNECTED; 3.3 V GPIO through main-board 1k resistor,CP_LED_CONNECTED
+J16,Control panel,Back,1,Switch dry contact A / GND,CP_GND
+J16,Control panel,Back,2,Switch dry contact B / PWR_SW,CP_PWR_SW
+J16,Control panel,Back,3,Owned switch LED positive / direct 5 V,CP_5V
+J16,Control panel,Back,4,Owned switch LED negative / GND,CP_GND
+J17,Control panel,Back,1,To main J23.1 / switch signal,CP_PWR_SW
+J17,Control panel,Back,2,To main J23.2 / ground return,CP_GND
+J18,Control panel,Back,1,BTN_CAL,CP_BTN_CAL
+J18,Control panel,Back,2,GND,CP_GND
+J19,Control panel,Back,1,BTN_LEAN,CP_BTN_LEAN
+J19,Control panel,Back,2,GND,CP_GND
+J20,Control panel,Back,1,BTN_DISARM,CP_BTN_DISARM
+J20,Control panel,Back,2,GND,CP_GND
+J21,Control panel,Back,1,BTN_REMOTE,CP_BTN_REMOTE
+J21,Control panel,Back,2,GND,CP_GND
+J22,Main controller,Front,1,Optional EN via R65 DNP to GPIO2; leave unwired now,BT_EN_AUX
+J22,Main controller,Front,2,"Module VCC, 5 V",5V
+J22,Main controller,Front,3,Module GND,GND
+J22,Main controller,Front,4,Module TXD output to Teensy GPIO0 / Serial1 RX / U7 pad2,BT_TXD_TO_TEENSY_RX0
+J22,Main controller,Front,5,Module RXD input from Teensy GPIO1 / Serial1 TX / U7 pad3,BT_RXD_FROM_TEENSY_TX1
+J22,Main controller,Front,6,Optional STATE via R66 DNP to GPIO32; leave unwired now,BT_STATE_AUX
+J23,Main controller,Front,1,From panel J17.1 / switch signal,VESC_PWR_SW
+J23,Main controller,Front,2,From panel J17.2 / ground return,GND
+J24,Main controller,Front,1,UNUSED - leave cavity empty,unconnected-(J24-Pin_1-Pad1)
+J24,Main controller,Front,2,UNUSED - leave cavity empty,unconnected-(J24-Pin_2-Pad2)
+J24,Main controller,Front,3,GND - primary VESC only,GND
+J24,Main controller,Front,4,UNUSED - leave cavity empty,unconnected-(J24-Pin_4-Pad4)
+J24,Main controller,Front,5,UNUSED - leave cavity empty,unconnected-(J24-Pin_5-Pad5)
+J24,Main controller,Front,6,UNUSED - leave cavity empty,unconnected-(J24-Pin_6-Pad6)
+J24,Main controller,Front,7,UNUSED - leave cavity empty,unconnected-(J24-Pin_7-Pad7)
+J24,Main controller,Front,8,POWER SWITCH,VESC_PWR_SW
+J25,Main controller,Front,1,UNUSED - leave cavity empty,unconnected-(J25-Pin_1-Pad1)
+J25,Main controller,Front,2,UNUSED - leave cavity empty,unconnected-(J25-Pin_2-Pad2)
+J25,Main controller,Front,3,UNUSED - leave cavity empty,unconnected-(J25-Pin_3-Pad3)
+J25,Main controller,Front,4,UNUSED - leave cavity empty,unconnected-(J25-Pin_4-Pad4)
+J25,Main controller,Front,5,UNUSED - leave cavity empty,unconnected-(J25-Pin_5-Pad5)
+J25,Main controller,Front,6,UNUSED - leave cavity empty,unconnected-(J25-Pin_6-Pad6)
+J25,Main controller,Front,7,UNUSED - leave cavity empty,unconnected-(J25-Pin_7-Pad7)
+J25,Main controller,Front,8,POWER SWITCH,VESC_PWR_SW

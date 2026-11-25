@@ -1,9 +1,9 @@
 # LEAN chair: Claude hookup, corner sensor layout, VESC settings over CAN, first court ride
 
-Charles and Mason (Sage around). Two sittings, one recording (6:40 of audio):
-- **Fri 11/21, 19:38 – 00:02, Charles's living room:** Claude hookup, firmware audit, plus-layout experiments E1–E8.
+Charles and Mason. Two sittings, one recording (6:40 of audio):
+- **Fri 11/21, 19:38 – 00:02, indoors:** Claude hookup, firmware audit, plus-layout experiments E1–E8.
 - **Sat 11/22, from 14:24:** corner layout E9–E12, VESC settings read and written over CAN, full logging. The recording paused at 16:45 (laptop on battery).
-- **Sat 11/22, ~16:49 – 18:33, pickleball court at the rec center:** first ride on the corner layout, tuned live. The recording was paused, so this part comes from the thread and the chair logs.
+- **Sat 11/22, ~16:49 – 18:33, outdoor pickleball court:** first ride on the corner layout, tuned live. The recording was paused, so this part comes from the thread and the chair logs.
 - **Sat 11/22, evening:** wheels off and a bench-test build.
 
 Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are below; the experiments are in `experiments/`.
@@ -99,7 +99,7 @@ Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are bel
   - Refactoring band-aids is OK; fix root causes first.
 - **The corner (rectangle) layout is the layout.** The plus math stays in the code behind a switch. Gains stay at 1.0.
 - **Calibrate in active neutral**, per rider.
-- The VESC changes above were approved by Charles. The brake after timeout **starts at 5 A**, to be raised after testing. Parker can still use his hands on the wheels at low speed.
+- The VESC changes above were approved by Charles. The brake after timeout **starts at 5 A**, to be raised after testing. The rider can still use their hands on the wheels at low speed.
 - **The dashboard only shows VESC settings; it never changes them.**
 - Log everything measurable, to a file.
 - **An automatic disarm must brake**; a DISARM press frees the wheels.
@@ -141,9 +141,9 @@ Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are bel
 
 ## Corrections to the live transcript and live notes
 - "Clark", "Cloud", "Clyde", "Claudia", "Clod" = Claude. "Vesque"/"Vasque" = VESC. "TNC", "teen C" = Teensy. "HCO6" = HC-06. "ESOP" = e-stop. "Counsel" = council (the review skill). "CAN tram receiver" = CAN transceiver. "Flexi-force" = FlexiForce.
-- "Adriann Romero" (11/21) = Sage. SPEAKER_4 (≈6:01–6:05) is a personal phone call, not meeting content.
+- SPEAKER_4 (≈6:01–6:05) is off-topic, not meeting content.
 - The grad student behind the plus layout is **Ant** (recommended by Higgins). **Caleb** is the teammate who added the 50-RPM clamp.
-- Parker is about Mason's size or a little smaller.
+- The rider is about Mason's size or a little smaller.
 - **Plate:** 15.25" × 16.625". Charles measured the chamfered back edge at **9⅛"** (live notes said ≈9.875"). The old plus first holes were 2⅜" left, 2⅛" right, 2¼" front and 2³⁄₁₆" back, at 1¹⁄₁₆" spacing (11/21's "2.5" + 1"" was a few % off).
 - **Claude got these wrong live and corrected them:**
   - 11/21: "back sensor stuck ~200 high" (it was posture) and "B5 beats B2" (it was a deeper lean).
@@ -168,7 +168,7 @@ Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are bel
 - Contradiction: CLAUDE.md "Hardware" says left VESC = ID 26, while "Status" says ID 1, and it still lists the deleted `can_test` env.
 
 ## [11:00] PCB zip check (Mason's KiCad project, Rev M, 2026-10-19)
-- Zip: /home/charlesfriley/LEAN/_PCBs-already-in-cad-folder-*.zip (136 MB), extracted to /home/charlesfriley/LEAN/pcb/. About 100 MB of it is KiCad backup zips.
+- Zip: the team Drive's `_PCBs-already-in-cad-folder-*.zip` (136 MB), extracted and trimmed into `pcb/` (now in this repo). About 100 MB of it is KiCad backup zips.
 - KiCad files are plain-text S-expressions. I parsed LEAN_Controller.kicad_pcb directly and read every Teensy (U7) pad's net. No kicad-cli needed.
 - Teensy pin → net, from the board copper, compared with firmware `src/common.h`: ALL MATCH.
   - Sensors: A14/A15/A16/A17 ✓. Knobs: A0 SPEED_ADC, A1 ACCEL_ADC ✓. CAN1: 22/23 → MCP2562 ✓.
@@ -184,7 +184,7 @@ Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are bel
 - VESC IDs were backwards in the old CLAUDE.md: it said left=26, but DriveSettings.cpp defaults to left=2, right=26.
 - The second knob (A1, "ACCEL" on the PCB) now selects a settings profile, not the acceleration limit.
 - Rewrote CLAUDE.md: 180 → ~70 lines, uncommitted on charles/dev-setup.
-- PCB: deleted the 136 MB zip; kept 11 MB in /home/charlesfriley/LEAN/pcb (kicad/, docs/, csv/, previews/, datasheets/, vesc-reference/) plus a README with the pin table. Added it to the live project's context, and added vocab.
+- PCB: deleted the 136 MB zip; kept 11 MB in `pcb/` (kicad/, docs/, csv/, previews/, datasheets/, vesc-reference/) plus a README with the pin table. Added it to the live project's context, and added vocab.
 
 ## [15:34] CLAUDE.md stripped to ~10 lines
 - Charles: "just strip claude md completely". Mason [15:51]: left = ID 2, right = ID 26 (matches the DriveSettings.cpp defaults). The motors are taped to show which is which.
@@ -194,7 +194,6 @@ Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are bel
 ## [18:06] Explanations of hard-coded numbers go in code comments, not CLAUDE.md
 - Removed the "odd numbers are deliberate" line and the VESC ID line from CLAUDE.md. Added a comment above leftVesc in src/config/DriveSettings.cpp: left=2, right=26, confirmed by Mason.
 - [18:24] Charles asked which safety rule I kept: "Ask before uploading code that commands a motor."
-- Transcript note: "Adriann Romero" at [17:40] is a voice-roster misfire. The voice was probably Sage.
 
 ## [18:35–25:00] Commit OK, reverse-turn constant, chair weaknesses
 - Commit freely on charles/dev-setup (Charles [18:35]). Committed 5a74fdd: stripped CLAUDE.md, VESC ID comment, -0.3 comment.
@@ -205,13 +204,13 @@ Branch `charles/dev-setup`, all pushed 11/23 at `31e7fd5`. Full findings are bel
   2. Tuning is too hard: too many knobs at once (accel curve, turn curve, per-sensor gains and sensitivity). The response is exponential: lean, lean, lean, nothing, then everything. In code: `powf(|x|, exponent)` shaping in LeanDriveMode.cpp.
   3. Not consistent: get up, sit back down, and the chair feels completely different with nothing changed.
   4. Caleb's dynamic calibration (cal button, commit 7e90334) "worked and then didn't".
-- CDR from last semester dropped at /home/charlesfriley/LEAN/Critical Design Review.docx (117 MB). Last edited by Braxton on 11/18. Partly out of date for the control system (Mason).
+- CDR from last semester `Critical Design Review.docx` (117 MB, too big for GitHub; on the team Drive). Last edited by Braxton on 11/18. Partly out of date for the control system (Mason).
 - Charles asked: is Fable 5.2 a leap for Teensy/embedded coding? And run a deep review with Fable 5.2 + Opus 5.5.
 
 ## [25:00–27:30] Fable 5.2 question, council audit started, live-dashboard plan
 - Fable 5.2 (released 2026-11-09): there's no firmware-specific benchmark. Anthropic's hardware-design score (BenchCAD 2.1, max effort): Fable 5.2 83.5, Opus 5.5 65.3, Fable 5.1 44.4. Diode's PCB Gym: 69% vs 25% for Fable 5 (Diode has a commercial tie to Anthropic). There's a demo in which it designed 3 devices including firmware, all working with no electrical rework. Coding: FrontierCode 2.0 49.1 vs Opus 5.5 45.5. Short version: a real leap for hardware design, a modest edge for code. Sources: anthropic.com/claude-fable-and-mythos-5-2, rdworldonline.com, magica.com.
 - Council audit launched ~20:10: Fable 5.2 and Opus 5.5, high effort, read-only, whole wheelchair-firmware/src.
-- CDR text extracted to /home/charlesfriley/LEAN/cdr/cdr.txt (31k words). It barely covers Bluetooth or the dashboard.
+- CDR text extracted to `docs/cdr/critical-design-review.txt` (31k words, rider and sponsor names redacted). It barely covers Bluetooth or the dashboard.
 - How the dashboard links to the chair: an **HC-06 (classic Bluetooth SPP)** on Teensy Serial1, NOT BLE. The browser uses Web Serial on the HC-06's Windows COM port. The firmware writes telemetry to BOTH USB Serial and Serial1 (src/telemetry/Telemetry.cpp:19-23).
 - Real Windows Python 3.14.7 is available from WSL (python.exe). pyserial isn't confirmed yet.
 - Plan:
@@ -339,14 +338,14 @@ Opus's fix order: disarm button → sensor fault → VESC-silent/watchdog → st
 - Battery/usage-based adaptation idea: dropped (the Teensy can't know when it's charged). Ignore it.
 - Logistics: Mason, Braxton and Daniel are rewiring the 32 signal wires into one connector on Monday (2026-11-23). The chair may go home with Mason tomorrow.
 - Charles: yes to checking all four readings after every plate reinstall. Mason: fold it into the sensor-position test (lots of plate off/on).
-- Tonight's options (living room, wheels off; it sits on casters): sensor positions, seated data, wheels-off motor spin.
+- Tonight's options (indoors, wheels off; it sits on casters): sensor positions, seated data, wheels-off motor spin.
 - **Backward lean is the core problem.**
   - Leaning back pivots the torso on the backrest, the hips thrust up, and load goes onto the FRONT sensor, so Charles (bigger) leaned back and the chair went forward.
   - Mason never saw that. For him, leaning back did nothing, unless he used his trick of calibrating zero while leaning slightly forward, which gave good backward control.
   - Earlier, with the back sensor all the way back, they got nothing. Removing the backrest allowed reversing, but the ratchet seatbelt needs the backrest, and without it the rider wobbles. A sensor in the backrest was debated; it needs a rigid surface, which hurts comfort.
 - Mason: the hip-thrust artifact is probably why Caleb's dynamic-cal routine (forward/back/left/right) got rejected.
 - Charles on calibration: start with a super thorough ("annoying") calibration, get it as accurate as possible, then work backwards to the simplest one that keeps the same accuracy.
-- **End user: Parker, paralyzed from the waist down. Upper-body lean only, no hip shifting.** Caleb "cheats" by using his lower body when testing.
+- **End user (the rider): paralyzed from the waist down. Upper-body lean only, no hip shifting.** Caleb "cheats" by using his lower body when testing.
 
 ## [1:32:30–1:42:12] Plate coordinates, the bolt discovery, e-stop
 - Sensor pads are flexible (Mason doesn't want them flexed). Taping a sensor to the backrest was tried yesterday: inconsistent or nothing. It needs a rigid backing.
@@ -375,7 +374,7 @@ Wall time = 19:38:10 + recording offset. Data from logs/live/2026-11-21-212106.c
 Findings (interpretation; verify with the loose-bolt run):
 1. **With a rider at passive neutral, the front sensor reads ~zero force.** It only senses forward lean and gives no information about backward lean, so the whole back signal is the back sensor.
 2. **The back sensor DOES see a back lean with these bolts:** +120 to +330 counts over neutral.
-3. **Minimal back lean gives MORE back-sensor load than a full lean into the backrest** (≈970 vs ≈815). The backrest steals load. Tell Parker to lean back only until the backrest starts pushing back.
+3. **Minimal back lean gives MORE back-sensor load than a full lean into the backrest** (≈970 vs ≈815). The backrest steals load. Tell the rider to lean back only until the backrest starts pushing back.
 4. **Hysteresis or sticking:** after the back leans, the back sensor stayed ~200 counts above its starting neutral (≈870–920 vs ≈660) for ~2 minutes, including during "active neutral", until Mason shifted at 21:27:59. Either the plate binds on the bolts and stays tilted, or the sensor/rubber creeps.
    - **If calibration is taken while the back reading is still elevated, most of the back-lean range is gone**, so leaning back "does nothing". This explains Mason's trick (calibrating while leaning forward resets the back floor low) and the session-to-session inconsistency (neutral depends on what you did just before).
 5. Bluetooth: 3 damaged rows during the session (handling spikes), no link drops.
@@ -392,7 +391,7 @@ Findings (interpretation; verify with the loose-bolt run):
 - Mason misread the rail fault as "stuck for a long time". It's an instantaneous reading at ADC ≤100 / ≥4000. Valid concern anyway: a heavy rider could saturate the amp (RF 47k) legitimately.
 - Charles: not confident. Track it as an issue; enable only if riding data shows the sensors never hit max. Charles: "we don't need to worry about safety in the code too much because we have an e-stop". Mason wants to keep some features, e.g. disarm on seat exit (already exists).
 - Done: rail disarm switched OFF (SENSOR_RAIL_DISARM=false, 708c1c9); detection reported as railed= in DBG SENSORS. Issue #18. Max raw tonight 1285, min 363.
-- Filed #19: easy DISARM↔LEAN switching / button placement (Parker relaxing during games).
+- Filed #19: easy DISARM↔LEAN switching / button placement (the rider relaxing during games).
 
 ## [2:20–2:30] Rail fault approved, wheels on, bolts off, run order
 - Charles reversed: fine with the rail-fault safety code. Re-enabled (9512abb), commented on #18.
@@ -489,7 +488,7 @@ Findings (interpretation; verify with the loose-bolt run):
   - Assist faults just drop the boost; an open sensor wire isn't detected (only shorts are).
   - The watchdog restarts after 0.5 s but doesn't brake during a freeze; the VESC timeout decides.
   - Stops miss the 0.5 s spec on knobs 2–4. The branch's own tests pass (12 suites, run in /tmp).
-- E7 Charles sweeps (23:38–23:48): Parker ≈ Mason size or smaller (Charles corrected me). Feet hanging moves neutral CoP ~1.5" forward (−2.0 → −0.3") and forward leans then cross the side line → footrest height is a big lever. Back lean only ≈0.3–0.5" of CoP travel. Both riders are right-biased → suspect sensor gains (jug test next). Square across riders: centre ≈(+0.4, −1.2)", corners ≈5" out.
+- E7 Charles sweeps (23:38–23:48): the rider ≈ Mason size or smaller (Charles corrected me). Feet hanging moves neutral CoP ~1.5" forward (−2.0 → −0.3") and forward leans then cross the side line → footrest height is a big lever. Back lean only ≈0.3–0.5" of CoP travel. Both riders are right-biased → suspect sensor gains (jug test next). Square across riders: centre ≈(+0.4, −1.2)", corners ≈5" out.
 - Charles on the IMU: it would help label calibration poses; Mason prefers to rely on the sensors. Not a priority.
 
 ## [4:10–4:15] Known-weight test (7.2 lb water jug on a 7/16" wrench ring, plate off)
@@ -548,7 +547,7 @@ Findings (interpretation; verify with the loose-bolt run):
 - **15:46 merged corner-math firmware uploaded** (f40e301: corner CoP, two-posture calibration, empty-seat zero, rail 340, 0.75" jump disarm, profile reset, dashboard plate view, plus the VESC probe). Bench only, wheels off the ground.
 - **Battery (Charles's link + CDR):** Bioenno 48 V 30 Ah LiFePO4 (16S), charger 58.2 V/4 A, 30 A continuous / 60 A 30 s peak. **Correction:** the regen −3 A is deliberate (CDR caps regen at the 4 A charge rating); 2 VESCs × 3 A = 6 A total. **Over-voltage:** VESC 6 hardware limit 57 V (hw_60_core.h HW_LIM_VIN) vs 58.2 V charger. LFP falls below 57 V within minutes of use, which explains why Mason has never seen a cutout; the residual risk is regen braking on a fresh charge. Enable STATUS_5 to watch it. Also 2 × 30 A battery draw = the battery's 30 s peak; the VESC doesn't time-limit it (watch item). Explainer: wheelchair-firmware/docs/vesc-settings.html (42/319 settings differ from factory, 24 differ L/R).
 - Charles 5:44: the dashboard should only *show* VESC settings, not change them.
-- **5:49–5:57 Charles approved the VESC changes** with brake-after-timeout at **5 A** (start low, feel it, raise later). Parker can still use his hands on the wheels, but not at speed. Approved: timeout 250 ms + 5 A; s_pid_min_erpm 300; current limits both 32.68/−32.68; battery info 16 LiFePO4; STATUS_5 at 5 Hz. Uploaded the one-shot apply firmware at ~16:05 (e405dd0). It writes only if a VESC holds exactly the reviewed bytes, then reads back. Needs battery on + USB off to run.
+- **5:49–5:57 Charles approved the VESC changes** with brake-after-timeout at **5 A** (start low, feel it, raise later). The rider can still use their hands on the wheels, but not at speed. Approved: timeout 250 ms + 5 A; s_pid_min_erpm 300; current limits both 32.68/−32.68; battery info 16 LiFePO4; STATUS_5 at 5 Hz. Uploaded the one-shot apply firmware at ~16:05 (e405dd0). It writes only if a VESC holds exactly the reviewed bytes, then reads back. Needs battery on + USB off to run.
 - How 300 ERPM ≈ 0.16 m/s: firmware constant 14.5454 gear × 4 pole pairs = 58.18 ERPM per wheel RPM (vesc_can.h); wheel 0.61 m from the VESC's si_wheel_diameter (team to confirm 24"). 300/58.18 = 5.2 wheel RPM × π × 0.61 m = 0.165 m/s.
 - Mason: the left motor "gave out" on full forward → brake two days ago; the team added MAX_RPM_COMMAND_DIFF = 50 (drive_constants.h) to stop overcurrent faults. Hypothesis: left l_abs_current_max 49.03 A (vs right 52.22) trips first on a hard reversal (the speed PID with ramp 25000 ERPM/s demands full current). Confirm with VESC fault codes (COMM_GET_VALUES) once logging is in. Charles: OK to refactor band-aids on his branch; root causes first.
 - Charles 5:56: log everything measurable to a file. CDR currents: 12 A average, 42–44 A peak (battery side, theoretical); no braking-current figure in the CDR. Actual currents not yet measured while driving.
@@ -558,7 +557,7 @@ Findings (interpretation; verify with the loose-bolt run):
 
 - **Second VESC write (16:14): app settings WRITTEN and VERIFIED on both VESCs:** timeout 250 ms, 5 A brake after timeout, STATUS_5 at 5 Hz. **Battery voltage now measured: 53.4 V (left) / 53.6 V (right)** at 16:14:42, matching Mason's "≈52 V". Motor-config jobs aborted safely: the configs differed at bytes 281/282 = foc_offsets_current, which the VESC re-measures at every boot. Fix c32de4d: compare ignoring the foc_offsets_* bytes, patch only the approved fields (min ERPM 300, right current ±32.68, battery info) onto the live config, then verify. Checked offline: live configs from another boot differ from the reviewed copy only in those bytes. In-order frame sending worked (41 fill frames, 0 write failures).
 - **Third VESC write (16:21:50–16:21:52): DONE and VERIFIED, all four.** Left and right motor configs written and read back equal to the approved values (min ERPM 300, right current ±32.68 to match the left, 16S LiFePO4 info); app configs already applied (timeout 250 ms, 5 A brake, STATUS_5). 75 fill frames per motor config, 0 write failures. Battery 53.4/53.6 V. The originals are saved in docs/vesc-config-2026-11-22.txt. The applier stays in firmware (idempotent: reports "already applied").
-- 6:15 Charles: ~1.5 h of outdoor testing at a pickleball court (rec center); asked for a full test plan. Expect big code changes after.
+- 6:15 Charles: ~1.5 h of outdoor testing at a pickleball court; asked for a full test plan. Expect big code changes after.
 - **16:28 logging firmware uploaded** (merge 3d4f3f2): all VESC status frames, COMM_GET_VALUES at 10 Hz (fault codes; a VESC holds a fault only 500 ms), Teensy health/IO/events, the 1 Hz lines spread over ticks (the old 1 Hz burst dropped 12–18% of DBG VESC lines). Verified live: VVAL/VESC/SYS/IO/M/COP lines arriving. With the battery off, the right VESC shows fault 3 (under-voltage, expected); motor temp reads nonsense (no thermistor). Dashboard VESC panel merged afterwards (dashboard only; firmware on the chair unchanged).
 - B3 (unplug sensors) postponed: the team rewires the 32 signal wires on Monday.
 - 6:39 Charles paused the recording and asked for NO Whisper pass while the laptop is on battery. The live server would start it once ~21.7 GB of RAM is free (20.2 GB was free, on battery). **Held it by setting final_pending=false** in the session.json for 2026-11-21-1938. **TODO: set it back to true when the laptop is on AC** (or when Charles says), then the summary follows via live wait-final.

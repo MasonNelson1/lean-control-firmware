@@ -1,0 +1,623 @@
+(kicad_sch (version 20250114) (generator "eeschema") (uuid "89e188b2-defb-4a99-9481-69fc6a8e1b38") (paper "A3") (title_block (title "LEAN Bluetooth") (date "2026-10-12") (rev "H prototype")) (lib_symbols (symbol "LEAN_Symbols:C"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "C"
+				(at 0.635 2.54 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "C"
+				(at 0.635 -2.54 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 0.9652 -3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Unpolarized capacitor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "cap capacitor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "C_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "C_0_1"
+				(polyline
+					(pts
+						(xy -2.032 0.762) (xy 2.032 0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.032 -0.762) (xy 2.032 -0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "C_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 2.794)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 2.794)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+(symbol "LEAN_Symbols:Conn_01x06_Pin"
+		(pin_names
+			(offset 1.016)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "J"
+			(at 0 7.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Conn_01x06_Pin"
+			(at 0 -10.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x06, script generated"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_locked" ""
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "connector"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ki_fp_filters" "Connector*:*_1x??_*"
+			(at 0 0 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(symbol "Conn_01x06_Pin_1_1"
+			(rectangle
+				(start 0.8636 5.207)
+				(end 0 4.953)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 2.667)
+				(end 0 2.413)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 0.127)
+				(end 0 -0.127)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -2.413)
+				(end 0 -2.667)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -4.953)
+				(end 0 -5.207)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(rectangle
+				(start 0.8636 -7.493)
+				(end 0 -7.747)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 5.08) (xy 0.8636 5.08)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 2.54) (xy 0.8636 2.54)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 0) (xy 0.8636 0)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -2.54) (xy 0.8636 -2.54)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -5.08) (xy 0.8636 -5.08)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 1.27 -7.62) (xy 0.8636 -7.62)
+				)
+				(stroke
+					(width 0.1524)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(pin passive line
+				(at 5.08 5.08 180)
+				(length 3.81)
+				(name "Pin_1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 2.54 180)
+				(length 3.81)
+				(name "Pin_2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 0 180)
+				(length 3.81)
+				(name "Pin_3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -2.54 180)
+				(length 3.81)
+				(name "Pin_4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -5.08 180)
+				(length 3.81)
+				(name "Pin_5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 5.08 -7.62 180)
+				(length 3.81)
+				(name "Pin_6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+(symbol "LEAN_Symbols:R"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "R"
+				(at 2.032 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "R"
+				(at 0 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at -1.778 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Resistor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "R res resistor"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "R_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R_0_1"
+				(rectangle
+					(start -1.016 -2.54)
+					(end 1.016 2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "R_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 1.27)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 1.27)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		))
+(text "MAIN BOARD - REMOTE HC-06 / ZS-040 BLUETOOTH CONNECTOR" (at 25.4 20.32 0) (effects (font (size 2 2)) (justify left)) (uuid "ea695b47-7d37-4c98-915b-af27daffcb16"))
+(symbol (lib_id "LEAN_Symbols:Conn_01x06_Pin") (at 68.58 78.74 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "1f4e8d88-0bbb-4845-b0e8-3b18726d3299") (property "Reference" "J22" (at 68.58 62.739999999999995 0) (effects (font (size 1 1))))(property "Value" "BLUETOOTH / B6B-PH-K-S" (at 68.58 65.24 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:JST_PH_B6B-PH-K_1x06_P2.00mm_Vertical" (at 68.58 78.74 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 68.58 78.74 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "9b04e0e7-aeff-46ca-bc54-5187eea228fc"))(pin "2" (uuid "c7484cd7-1e9a-4f61-a69c-ef07eaf370b8"))(pin "3" (uuid "3d82fa8c-26fe-47ab-8342-43b0450d5de8"))(pin "4" (uuid "69d10020-14cb-4b69-8e1a-a7b841670b2f"))(pin "5" (uuid "9a6add45-6855-4774-81fe-63207a28eb96"))(pin "6" (uuid "4f6e7e3b-dfa2-49dd-ad98-bdf00be754b0"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/89e188b2-defb-4a99-9481-69fc6a8e1b38" (reference "J22") (unit 1)))))
+(wire (pts (xy 73.6600 73.6600) (xy 78.7400 73.6600)) (stroke (width 0) (type default)) (uuid "0953a784-6590-44e9-9a65-12997d71dbd2"))
+(global_label "BT_EN_AUX" (shape input) (at 78.7400 73.6600 0) (effects (font (size 1 1)) (justify left)) (uuid "c267e605-5fff-4dd9-82c3-ada7ea733539"))
+(wire (pts (xy 73.6600 76.2000) (xy 78.7400 76.2000)) (stroke (width 0) (type default)) (uuid "75bad028-799e-4968-b0ce-29b0e3eae8e4"))
+(global_label "5V" (shape input) (at 78.7400 76.2000 0) (effects (font (size 1 1)) (justify left)) (uuid "e9ec349a-4c79-4094-85da-a24a99550863"))
+(wire (pts (xy 73.6600 78.7400) (xy 78.7400 78.7400)) (stroke (width 0) (type default)) (uuid "c6325df2-131c-4250-809d-56b11b4e904e"))
+(global_label "GND" (shape input) (at 78.7400 78.7400 0) (effects (font (size 1 1)) (justify left)) (uuid "2160774a-d43d-441b-b805-d8935dce82ae"))
+(wire (pts (xy 73.6600 81.2800) (xy 78.7400 81.2800)) (stroke (width 0) (type default)) (uuid "d44693eb-25d9-49b5-942d-928607805868"))
+(global_label "BT_TXD_TO_TEENSY_RX0" (shape input) (at 78.7400 81.2800 0) (effects (font (size 1 1)) (justify left)) (uuid "05b7c317-e2d6-41ff-ba94-a2155d5ef716"))
+(wire (pts (xy 73.6600 83.8200) (xy 78.7400 83.8200)) (stroke (width 0) (type default)) (uuid "447396b7-3ddd-4fb0-b52e-22b65cc2a782"))
+(global_label "BT_RXD_FROM_TEENSY_TX1" (shape input) (at 78.7400 83.8200 0) (effects (font (size 1 1)) (justify left)) (uuid "5a02a07b-0d4b-47d8-b169-a5f1c2b76a40"))
+(wire (pts (xy 73.6600 86.3600) (xy 78.7400 86.3600)) (stroke (width 0) (type default)) (uuid "64049059-8ab5-4785-9cac-495c7c0a2aef"))
+(global_label "BT_STATE_AUX" (shape input) (at 78.7400 86.3600 0) (effects (font (size 1 1)) (justify left)) (uuid "b523af11-bb09-433c-83b0-3ea6865ad4ac"))
+(symbol (lib_id "LEAN_Symbols:C") (at 172.72 78.74 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "ed4eb6b5-e9ba-4964-9923-7ac8800047b6") (property "Reference" "C17" (at 172.72 62.739999999999995 0) (effects (font (size 1 1))))(property "Value" "100nF" (at 172.72 65.24 0) (effects (font (size 1 1))))(property "Footprint" "LEAN:C_Disc_D5.0mm_W2.5mm_P5.00mm" (at 172.72 78.74 0) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 172.72 78.74 0) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "898cf4d9-5be6-4564-be4c-5aaea204e27d"))(pin "2" (uuid "97eb736a-3e38-4fcf-9fd7-0b0c29363164"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/89e188b2-defb-4a99-9481-69fc6a8e1b38" (reference "C17") (unit 1)))))
+(wire (pts (xy 172.7200 74.9300) (xy 172.7200 69.8500)) (stroke (width 0) (type default)) (uuid "05964415-1622-4678-8a45-8a6c471fc895"))
+(global_label "5V" (shape input) (at 172.7200 69.8500 0) (effects (font (size 1 1)) (justify left)) (uuid "d3b22425-ef26-4107-bc9e-de92f50a8489"))
+(wire (pts (xy 172.7200 82.5500) (xy 172.7200 87.6300)) (stroke (width 0) (type default)) (uuid "7bd31f18-18e4-43ba-b9cd-1e0f295024b7"))
+(global_label "GND" (shape input) (at 172.7200 87.6300 0) (effects (font (size 1 1)) (justify left)) (uuid "ada2ebf2-0c5b-4c5f-9dd4-fa07831bd1b7"))
+(symbol (lib_id "LEAN_Symbols:R") (at 101.6 139.7 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp yes) (uuid "c94def71-e6dd-4f88-9267-3e28f5a1a4af") (property "Reference" "R65" (at 101.6 132.07999999999998 90) (effects (font (size 1 1))))(property "Value" "1k" (at 101.6 134.61999999999998 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal" (at 101.6 139.7 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 101.6 139.7 90) (effects (font (size 1 1)) (hide yes)))(property "Notes" "DNP. Optional EN interface; fit only after module pin function/voltage is verified." (at 101.6 139.7 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "b69b4afa-47a3-44b5-9bd0-2ae0ca9af596"))(pin "2" (uuid "6faca608-dda0-4b90-b251-911f128e40b2"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/89e188b2-defb-4a99-9481-69fc6a8e1b38" (reference "R65") (unit 1)))))
+(wire (pts (xy 97.7900 139.7000) (xy 92.7100 139.7000)) (stroke (width 0) (type default)) (uuid "f82608f1-f372-4baa-8f92-aff628b1456e"))
+(global_label "BT_EN_GPIO2" (shape input) (at 92.7100 139.7000 180) (effects (font (size 1 1)) (justify right)) (uuid "4476bf67-a32c-49a8-be1c-00bcf7728838"))
+(wire (pts (xy 105.4100 139.7000) (xy 110.4900 139.7000)) (stroke (width 0) (type default)) (uuid "a5266f41-0b43-42d1-8600-15e03cf218f9"))
+(global_label "BT_EN_AUX" (shape input) (at 110.4900 139.7000 0) (effects (font (size 1 1)) (justify left)) (uuid "e141366c-e279-4a31-b4e1-a6fb6834077a"))
+(symbol (lib_id "LEAN_Symbols:R") (at 269.24 139.7 90) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp yes) (uuid "cf0a384b-a9ef-481d-86da-91ab7aa8f41c") (property "Reference" "R66" (at 269.24 132.07999999999998 90) (effects (font (size 1 1))))(property "Value" "1k" (at 269.24 134.61999999999998 90) (effects (font (size 1 1))))(property "Footprint" "LEAN:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal" (at 269.24 139.7 90) (effects (font (size 1 1)) (hide yes)))(property "Datasheet" "" (at 269.24 139.7 90) (effects (font (size 1 1)) (hide yes)))(property "Notes" "DNP. Optional STATE input; fit only after module pin function/voltage is verified." (at 269.24 139.7 90) (effects (font (size 1 1)) (hide yes)))(pin "1" (uuid "cd421bb3-86ed-4cb4-b32f-0c54eda0c2dd"))(pin "2" (uuid "7abcc234-3076-4c79-9d1f-51e72a00fa9e"))(instances (project "LEAN_Controller" (path "/717927a6-7a8a-4ac2-9ca0-4ef52b8a44db/89e188b2-defb-4a99-9481-69fc6a8e1b38" (reference "R66") (unit 1)))))
+(wire (pts (xy 265.4300 139.7000) (xy 260.3500 139.7000)) (stroke (width 0) (type default)) (uuid "da8d3cae-2be5-459c-8c04-615d97cba17e"))
+(global_label "BT_STATE_GPIO32" (shape input) (at 260.3500 139.7000 180) (effects (font (size 1 1)) (justify right)) (uuid "51037751-f0fb-4082-b488-6ba3e5597140"))
+(wire (pts (xy 273.0500 139.7000) (xy 278.1300 139.7000)) (stroke (width 0) (type default)) (uuid "a5458f8a-8e1a-47a8-970e-1dd3b1d63ff7"))
+(global_label "BT_STATE_AUX" (shape input) (at 278.1300 139.7000 0) (effects (font (size 1 1)) (justify left)) (uuid "c0e206ab-983a-40e7-9bfa-9d111bdb2c3b"))
+(text "J22 pins match the module labels from EN end: EN, VCC, GND, TXD, RXD, STATE.\nNormal four-wire harness uses pins 2-5 only. J22 is a cabled connector, not a module socket.\nVCC is 5 V; every signal is 3.3 V. The Arduino Uno divider is not needed for Teensy 4.1.\nModule TXD -> Teensy GPIO0/RX1 (U7 pad2); module RXD <- GPIO1/TX1 (U7 pad3)." (at 25.4 185.42 0) (effects (font (size 1.4 1.4)) (justify left)) (uuid "2f59b81d-005a-485c-ae36-e215ef33dc6a"))
+(text "R65 and R66 are DO NOT POPULATE. GPIO2 (U7 pad4) and GPIO32 (pad24) are reserved.\nThe photographed module has only four header pins fitted; EN/STATE labels do not establish functionality.\nLeave J22 pins1/6 unwired and GPIO2/32 as inputs with no pull until the exact module is verified.\nEN behavior varies by module and is not assumed to be a reliable power-disable control." (at 25.4 218.44 0) (effects (font (size 1.4 1.4)) (justify left)) (uuid "d7324122-4ae5-4f58-be51-7818795c4234"))
+(text "Firmware must use Serial1 at the module's configured baud rate. USB Serial is separate.\nNo firmware or radio link has been tested. Keep the external antenna clear of metal and motor wiring." (at 25.4 248.92 0) (effects (font (size 1.4 1.4)) (justify left)) (uuid "fb937382-1e69-44f9-bb14-4b886f42c3a8"))
+(sheet_instances (path "/" (page "5"))))

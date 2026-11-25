@@ -36,7 +36,7 @@ back have holes 1–6, left and right 1–5. A configuration is written as `F5 B
 
 Older names in E2/E3 notes: slouch = passive-neutral, tall = active-neutral, back-push / back-full = back-pivot. In E2, "back-min" meant back-touch.
 
-Riders keep their hips passive (upper body only): the end user, Parker, is
+Riders keep their hips passive (upper body only): the end user (the rider) is
 paralyzed from the waist down.
 
 ## Index
@@ -194,7 +194,7 @@ Charts: `E2-E3-compare.html` (E2 vs E3 by lean type, same axes) and `E2-E3-leans
 6. Forward is still the weakest axis: CoP y swing +0.33 forward vs −0.16 back from passive-neutral, but the forward reading needs a big lean.
 
 ## Plan: sensitivity sweeps (Charles, 2026-11-21)
-**Goal:** know how sensitive the sensors are at *every* lean position, not just the held end points. Ideally Parker can make micro-movements anywhere in the range and the chair responds.
+**Goal:** know how sensitive the sensors are at *every* lean position, not just the held end points. Ideally the rider can make micro-movements anywhere in the range and the chair responds.
 
 **Data:** `DBG R` lines give raw counts for all four sensors at 20 Hz (firmware after commit "Telemetry: 20 Hz raw sensor line"). Query the `raw` table in `chair_sql.py`.
 
@@ -312,7 +312,7 @@ With four point supports, the centre of pressure in plate coordinates is exact b
 - Check that it fits the plate and seat before drilling, and repeat with a heavier rider (Charles).
 
 ## E7: Charles (bigger rider), feet on footrest vs feet hanging (2026-11-21, 23:38:50–23:48:40)
-**Setup:** F5 B6 L5 R5, no plate bolts. Backrest strap raised and the backrest loosened partway through (≈23:41–23:42), because Charles is bigger and the backrest fought him early. Data: `data/2026-11-21-E7-charles-sweeps.csv`; centre of pressure in inches via `tools/cop_inches.py`. Parker is about Mason's size or a little smaller (Charles); Charles is noticeably heavier (seat total ≈1500–2400 counts vs Mason's ≈1000–1500).
+**Setup:** F5 B6 L5 R5, no plate bolts. Backrest strap raised and the backrest loosened partway through (≈23:41–23:42), because Charles is bigger and the backrest fought him early. Data: `data/2026-11-21-E7-charles-sweeps.csv`; centre of pressure in inches via `tools/cop_inches.py`. The rider is about Mason's size or a little smaller (Charles); Charles is noticeably heavier (seat total ≈1500–2400 counts vs Mason's ≈1000–1500).
 
 **Protocol:**
 - Feet on footrest (knees up), 23:38:58–23:44:30: passive, active, forward ×2, right ×2, left ×3, back several (some redone after the strap and backrest changes; one with legs tense, then "legs deactivated").
@@ -328,8 +328,8 @@ With four point supports, the centre of pressure in plate coordinates is exact b
 | left peak x | −0.6 | −0.5 |
 
 **Interpretation:**
-1. **Foot position moves the rider's neutral about 1.5" forward** (legs' weight lands on the thighs and front of the seat). With feet hanging, the centre of pressure reaches the side line and forward leans load the front sensor. **Footrest height is a big lever on the seesaw problem**, and Parker's legs will be passive dead weight, so set the footrest deliberately and record its height.
-2. Charles's back lean moves the centre of pressure only ≈0.3–0.5", against ≈1.3–1.5" forward. Back is the weakest axis for a bigger rider too. He noted his legs tense up when leaning back; with legs relaxed (closer to Parker) he pivots on the backrest.
+1. **Foot position moves the rider's neutral about 1.5" forward** (legs' weight lands on the thighs and front of the seat). With feet hanging, the centre of pressure reaches the side line and forward leans load the front sensor. **Footrest height is a big lever on the seesaw problem**, and the rider's legs will be passive dead weight, so set the footrest deliberately and record its height.
+2. Charles's back lean moves the centre of pressure only ≈0.3–0.5", against ≈1.3–1.5" forward. Back is the weakest axis for a bigger rider too. He noted his legs tense up when leaning back; with legs relaxed (closer to the rider) he pivots on the backrest.
 3. **Both riders lean further right than left** (Charles +1.9" vs −0.6"; Mason was right-heavy too). Two different riders sharing a bias points to a sensor/amplifier gain difference or seat geometry, not posture. The known-weight test will tell which.
 4. Square sizing across both riders and both foot positions: centre-of-pressure envelope x −1.6"…+2.4", y −3.5"…+1.1". Centre ≈(+0.4", −1.2"); corners ≈5" out → x ≈ −4.6"/+5.4", y ≈ +3.8" (front pair) / −6.2" (back pair). Re-check after the gain test.
 

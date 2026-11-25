@@ -1,0 +1,25 @@
+Reference,Board,Side,Quantity,Header,Housing,Pitch_mm,Contact_family,Purpose
+J1,Main controller,Front,1,B4B-XH-A,XHP-4,2.5,SXH - match wire gauge,"Secondary VESC CAN only: 1=NC, 2=CANH, 3=CANL, 4=NC"
+J2,Main controller,Front,1,B4B-XH-A,XHP-4,2.5,SXH - match wire gauge,B4B-XH-A
+J3,Main controller,Front,1,B5B-PH-K-S,PHR-5,2,SPH - match wire gauge,B5B-PH-K-S
+J4,Main controller,Front,1,B5B-PH-K-S,PHR-5,2,SPH - match wire gauge,B5B-PH-K-S
+J5,Main controller,Front,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,B2B-PH-K-S
+J6,Main controller,Front,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,B2B-PH-K-S
+J7,Main controller,Front,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,B2B-PH-K-S
+J8,Main controller,Front,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,B2B-PH-K-S
+J9,Main controller,Front,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,B2B-PH-K-S
+J10,Main controller,Front,1,B10B-PH-K-S,PHR-10,2,SPH - match wire gauge,PANEL_IO / B10B-PH-K-S
+J11,Control panel,Back,1,B5B-PH-K-S,PHR-5,2,SPH - match wire gauge,TO MAIN J4
+J12,Control panel,Back,1,B5B-PH-K-S,PHR-5,2,SPH - match wire gauge,TO MAIN J3
+J13,Control panel,Back,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,TO MAIN J5 / CAL
+J14,Control panel,Back,1,B10B-PH-K-S,PHR-10,2,SPH - match wire gauge,TO MAIN J10 / IO
+J16,Control panel,Back,1,B4B-XH-A,XHP-4,2.5,SXH - match wire gauge,POWER SWITCH / B4B-XH-A
+J17,Control panel,Back,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,TO MAIN J23 / PWR; pin 2 now GND
+J18,Control panel,Back,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,REAR / CAL
+J19,Control panel,Back,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,REAR / LEAN
+J20,Control panel,Back,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,REAR / DISARM
+J21,Control panel,Back,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,REAR / REMOTE
+J22,Main controller,Front,1,B6B-PH-K-S,PHR-6,2,SPH - match wire gauge,HC-06 Bluetooth: 4 active wires and 2 future options
+J23,Main controller,Front,1,B2B-PH-K-S,PHR-2,2,SPH - match wire gauge,FROM PANEL J17 / PWR
+J24,Main controller,Front,1,B8B-PH-K-S,PHR-8,2,SPH - match wire gauge,"Primary VESC COMM: 3=GND, 8=POWER SWITCH; all other pins NC"
+J25,Main controller,Front,1,B8B-PH-K-S,PHR-8,2,SPH - match wire gauge,Secondary VESC COMM: 8=POWER SWITCH only; all other pins NC; omit secondary ground

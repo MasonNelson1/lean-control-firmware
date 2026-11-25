@@ -1,0 +1,90 @@
+Reference,Board,Side,Value,Footprint,Assembly,Tolerance,Notes
+C1,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C2,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C3,Main controller,Front,10nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C4,Main controller,Front,10nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C5,Main controller,Front,10nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C6,Main controller,Front,10nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C7,Main controller,Front,1nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C8,Main controller,Front,1nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C9,Main controller,Front,1nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C10,Main controller,Front,1nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C11,Main controller,Front,0.1uF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C12,Main controller,Front,0.1uF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C13,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C14,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C15,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C16,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+C17,Main controller,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,100 nF 5 V supply bypass beside Bluetooth connector; lab stock suitable.
+C107,Control panel,Front,100nF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,Local 100 nF bypass across panel 5 V and GND.
+Cb1,Main controller,Front,1uF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+Cdecup1,Main controller,Front,0.1uF,C_Disc_D5.0mm_W2.5mm_P5.00mm,Fit,,
+D101,Control panel,Front,WP7113LID / CAL,LED_D5.0mm,Fit,,5 mm low-current red indicator; WP7113LID or lab-stock equivalent verified for brightness at about 1-2 mA and matching polarity/footprint.
+D102,Control panel,Front,WP7113LID / LEAN,LED_D5.0mm,Fit,,5 mm low-current red indicator; WP7113LID or lab-stock equivalent verified for brightness at about 1-2 mA and matching polarity/footprint.
+D103,Control panel,Front,WP7113LID / DISARM,LED_D5.0mm,Fit,,5 mm low-current red indicator; WP7113LID or lab-stock equivalent verified for brightness at about 1-2 mA and matching polarity/footprint.
+D104,Control panel,Front,WP7113LID / REMOTE,LED_D5.0mm,Fit,,5 mm low-current red indicator; WP7113LID or lab-stock equivalent verified for brightness at about 1-2 mA and matching polarity/footprint.
+D105,Control panel,Front,WP7113LID / CONNECTED,LED_D5.0mm,Fit,,5 mm low-current red indicator; WP7113LID or lab-stock equivalent verified for brightness at about 1-2 mA and matching polarity/footprint.
+J1,Main controller,Front,B4B-XH-A,JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical,Fit,,"1=NC, 2=CANH, 3=CANL, 4=NC; same header as J2; no secondary supply/ground"
+J2,Main controller,Front,B4B-XH-A,JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical,Fit,,
+J3,Main controller,Front,B5B-PH-K-S,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,Fit,,
+J4,Main controller,Front,B5B-PH-K-S,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,Fit,,
+J5,Main controller,Front,B2B-PH-K-S,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,
+J6,Main controller,Front,B2B-PH-K-S,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,
+J7,Main controller,Front,B2B-PH-K-S,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,
+J8,Main controller,Front,B2B-PH-K-S,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,
+J9,Main controller,Front,B2B-PH-K-S,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,
+J10,Main controller,Front,PANEL_IO / B10B-PH-K-S,JST_PH_B10B-PH-K_1x10_P2.00mm_Vertical,Fit,,
+J11,Control panel,Back,TO MAIN J4,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J12,Control panel,Back,TO MAIN J3,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J13,Control panel,Back,TO MAIN J5 / CAL,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J14,Control panel,Back,TO MAIN J10 / IO,JST_PH_B10B-PH-K_1x10_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J16,Control panel,Back,POWER SWITCH / B4B-XH-A,JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J17,Control panel,Back,TO MAIN J23 / PWR,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,Pin 1 switch signal; pin 2 GND. Straight-through cable to main J23.
+J18,Control panel,Back,REAR / CAL,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J19,Control panel,Back,REAR / LEAN,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J20,Control panel,Back,REAR / DISARM,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J21,Control panel,Back,REAR / REMOTE,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,MOUNT ON BACK. Use pad numbers and keyed housing; rear view mirrors the front.
+J22,Main controller,Front,BLUETOOTH / B6B-PH-K-S,JST_PH_B6B-PH-K_1x06_P2.00mm_Vertical,Fit,,Bluetooth cable header. Pins 2-5 used now; 1 and 6 reserved. Mating housing PHR-6.
+R36,Main controller,Front,120,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit if CAN endpoint requires termination,,
+R37,Main controller,Front,120,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,DO NOT FIT,,
+R41,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R42,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R43,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R44,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R45,Main controller,Front,47k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R46,Main controller,Front,47k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R47,Main controller,Front,47k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R48,Main controller,Front,47k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+R49,Main controller,Front,4.7k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R50,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R51,Main controller,Front,2.2k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R52,Main controller,Front,4.7k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R53,Main controller,Front,10k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R54,Main controller,Front,4.7k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R55,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R56,Main controller,Front,2.2k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R57,Main controller,Front,4.7k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R58,Main controller,Front,10k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,"0.25 W axial, 7.62 mm lead spacing; rotary input network"
+R59,Main controller,Front,10k 1%,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,3.3 V button pull-up.
+R60,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,Button input series resistor; paired with 100 nF filter.
+R61,Main controller,Front,10k 1%,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,3.3 V button pull-up.
+R62,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,Button input series resistor; paired with 100 nF filter.
+R63,Main controller,Front,10k 1%,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,1%,3.3 V button pull-up.
+R64,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,Button input series resistor; paired with 100 nF filter.
+R65,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,DNP - optional future interface,,DNP: optional 1k series resistor between GPIO2 and EN connector pin. Verify module first.
+R66,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,DNP - optional future interface,,DNP: optional 1k series resistor between GPIO32 and STATE connector pin. Verify module first.
+R101,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,"1 kohm series LED resistor on main board, before interboard cable. Teensy 3.3 V GPIO directly drives one LED. 0.25 W axial; 1% acceptable."
+R102,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,"1 kohm series LED resistor on main board, before interboard cable. Teensy 3.3 V GPIO directly drives one LED. 0.25 W axial; 1% acceptable."
+R103,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,"1 kohm series LED resistor on main board, before interboard cable. Teensy 3.3 V GPIO directly drives one LED. 0.25 W axial; 1% acceptable."
+R104,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,"1 kohm series LED resistor on main board, before interboard cable. Teensy 3.3 V GPIO directly drives one LED. 0.25 W axial; 1% acceptable."
+R105,Main controller,Front,1k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,"1 kohm series LED resistor on main board, before interboard cable. Teensy 3.3 V GPIO directly drives one LED. 0.25 W axial; 1% acceptable."
+Ra1,Main controller,Front,100k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+Rb1,Main controller,Front,10k,R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal,Fit,,
+SW101,Control panel,Front,A10403RNCQ,SW_Rotary_CK_A10403RNCQ,Fit,,"User-owned C&K A10403RNCQ; solder all 6 terminals, isolated terminal 9 has no net."
+SW102,Control panel,Front,A10403RNCQ,SW_Rotary_CK_A10403RNCQ,Fit,,"User-owned C&K A10403RNCQ; solder all 6 terminals, isolated terminal 9 has no net."
+U1,Main controller,Front,MCP6004,DIP-14_W7.62mm,Fit,,
+U7,Main controller,Front,~,Teensy41,Fit,,Solder directly to carrier; verify VIN/VUSB isolation before combining USB and external 5 V.
+U9,Main controller,Front,MCP2562,DIP-8_W7.62mm,Fit,,
+J23,Main controller,Front,FROM PANEL J17 / PWR,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,Fit,,New revision J: panel J17 signal and ground return
+J24,Main controller,Front,VESC1 COMM / B8B-PH-K-S,JST_PH_B8B-PH-K_1x08_P2.00mm_Vertical,Fit,,"Primary VESC COMM: 3=GND, 8=POWER SWITCH; all other pins NC"
+J25,Main controller,Front,VESC2 COMM / B8B-PH-K-S,JST_PH_B8B-PH-K_1x08_P2.00mm_Vertical,Fit,,Secondary VESC COMM: 8=POWER SWITCH only; all other pins NC; omit secondary ground

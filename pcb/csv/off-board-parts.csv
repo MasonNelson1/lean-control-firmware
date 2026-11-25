@@ -1,0 +1,12 @@
+Quantity,Part,Purpose,Notes
+4,Dirvcp B0FM8QKSM1,Cal / LEAN / Disarm / Remote,User-selected M12 prewired normally-open momentary; mount in enclosure. Leads to J18/J19/J20/J21; not a PCB-solder part.
+1,Owned Gebildet M12 latching illuminated switch,Power control,Reuse owned switch. Separate dry-contact and LED pairs. LED supplied with 5 V at user request; verify current and usable brightness. Identify terminals from markings/continuity.
+4,PHR-5 plus compatible crimps,Two 5-wire interboard rotary harnesses,"J4-J11 and J3-J12, every pin straight through."
+2,PHR-10 plus compatible crimps,10-wire interboard I/O harness,"J10-J14, every pin straight through."
+2,PHR-2 plus compatible crimps,Calibration interboard harness,"J5-J13, every pin straight through."
+4,PHR-2 plus compatible crimps,Four wired buttons,"J18-J21: pin 1 signal, pin 2 GND; dry contacts have no polarity."
+4,PHR-8 plus compatible PH crimps,Two straight-through VESC COMM switch cables,"J24 to primary COMM: cavities 3=GND and 8=SW. J25 to secondary COMM: cavity 8=SW only. Four housings, six contacts. Leave all other cavities empty; no secondary signal ground."
+1,XHP-4 plus compatible crimps,Owned illuminated power switch,J16; 4 separate conductors. See POWER_SWITCH.md.
+6,M3 hardware and insulating spacers,Six panel mounting holes matched to V3 casing,3.2 mm PCB holes. Spacer length and LED lead heights must match enclosure and actual buttons.
+1,Owned HC-06 / ZS-040 Bluetooth module,Bluetooth module at J22,"Reuse owned module. 5 V to VCC, 3.3 V UART. Use existing four-pin header; EN/STATE pads unverified."
+2,PHR-2 plus compatible crimps,Power-switch panel-to-main harness,New 2-wire cable J17-J23: pin 1 to pin 1 signal; pin 2 to pin 2 GND. Two housings and four contacts total.

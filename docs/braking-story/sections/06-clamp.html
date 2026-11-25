@@ -25,23 +25,23 @@
 const { line, legend, data, C } = Story;
 data("fault-1708.json").then(d => {
   const P = d.points, f = d.faults.find(x => x.code !== "NONE");
-  const marks = [{ x: 1.1, color: "var(--ink-3)", label: "lean back" }, { x: 1.42, color: "var(--ink-3)", label: "clamp", dy: 14 }, { x: 2.93, color: "var(--cmd)", label: "setpoint → 0", left: true }, { x: f.t, color: "var(--fault)", label: "right VESC faults", dy: 14 }];
+  const marks = [{ x: 1.1, color: "var(--ink-3)", label: "lean back" }, { x: 1.42, color: "var(--ink-3)", label: "clamp", dy: 14 }, { x: 2.93, color: "var(--cmd)", label: "setpoint → 0", left: true }, { x: f.t, color: "var(--fault)", label: "right VESC faults", dy: 28 }];
   const xt = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
   const near = t => P.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
-  const h1 = root.querySelector("#cl-rpm");
+  const h1 = document.querySelector("#cl-rpm");
   const c1 = line(h1, { xMax: 4.3, yMin: -10, yMax: 150, h: 240, xTicks: xt, yTicks: [0, 50, 100, 150], xFmt: v => v + "s", yFmt: v => v + " rpm", marks,
     series: [{ color: "var(--ink)", width: 2.5 }, { color: "var(--cmd)", width: 2 }, { color: "var(--cmd)", dash: "2 4", width: 1.2, opacity: .8 }],
     tip: t => { const p = near(t); return { x: p.t, ys: [p.actL, p.cmdL, p.actL - 50], html: `t ${p.t.toFixed(2)} s<br>measured ${p.actL.toFixed(0)} rpm (${(p.actL * C.RPM_TO_MPS).toFixed(2)} m/s)<br><span style="color:var(--cmd)">setpoint ${p.cmdL.toFixed(0)} rpm</span>` }; } });
   c1.draw([P.map(p => [p.t, p.actL]), P.map(p => [p.t, p.cmdL]), P.map(p => [p.t, p.actL - 50])]);
   legend(h1, [{ color: "var(--ink)", label: "measured wheel speed" }, { color: "var(--cmd)", label: "setpoint sent by the Teensy" }, { color: "var(--cmd)", dash: 1, label: "measured − 50 (the clamp)" }]);
-  const h2 = root.querySelector("#cl-amp");
+  const h2 = document.querySelector("#cl-amp");
   const c2 = line(h2, { xMax: 4.3, yMin: -45, yMax: 25, h: 240, xTicks: xt, yTicks: [-40, -30, -20, -10, 0, 10, 20], xFmt: v => v + "s", yFmt: v => v + " A", marks,
     hbands: [{ y0: -3.3, y1: -2.7, fill: "var(--batt-soft)" }],
     refs: [{ y: -32.68, label: "−32.7 A motor setting (target ceiling)", color: "var(--cap)", right: true, below: true }],
     series: [{ color: "var(--motor)", width: 2.5 }, { color: "var(--batt)", width: 2 }],
     tip: t => { const p = near(t); return { x: p.t, ys: [p.curL, p.iinL], html: `t ${p.t.toFixed(2)} s<br><span style="color:var(--motor)">motor ${p.curL.toFixed(1)} A</span><br><span style="color:var(--batt)">battery ${p.iinL.toFixed(1)} A</span><br>duty ${p.dutyL.toFixed(3)}` }; } });
   c2.draw([P.map(p => [p.t, p.curL]), P.map(p => [p.t, p.iinL])]);
-  c2.el("text", { x: c2.X(1.9), y: c2.Y(-3) + 16, "text-anchor": "middle", class: "lbl", style: "fill:var(--batt);font-weight:600" }).textContent = "battery pinned at −3 A";
+  c2.el("text", { x: c2.X(1.9), y: c2.Y(6), "text-anchor": "middle", class: "lbl", style: "fill:var(--batt);font-weight:600" }).textContent = "battery pinned at −3 A";
   legend(h2, [{ color: "var(--motor)", label: "motor current (force)" }, { color: "var(--batt)", label: "battery current" }]);
 });
 </script>

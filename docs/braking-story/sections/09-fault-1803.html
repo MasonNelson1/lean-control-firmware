@@ -20,16 +20,16 @@ data("fault-1803.json").then(d => {
   const P = d.points, f = d.faults.find(x => x.code !== "NONE"), r = d.faults.find(x => x.code === "NONE");
   const near = t => P.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
   const firstNeg = P.find(p => p.cmdL < 0 && p.actL > 20);
-  const marks = [{ x: firstNeg.t, color: "var(--cmd)", label: "setpoint goes below 0", left: true }, { x: f.t, color: "var(--fault)", label: "left VESC faults" }, { x: r.t, color: "var(--ink-3)", label: "back on", left: true }];
+  const marks = [{ x: firstNeg.t, color: "var(--cmd)", label: "setpoint goes below 0", left: true }, { x: f.t, color: "var(--fault)", label: "left VESC faults" }, { x: r.t, color: "var(--ink-3)", label: "back on", left: true, dy: 14 }];
   const xt = [0, 0.5, 1, 1.5, 2, 2.5];
   const band = [{ x0: f.t, x1: r.t, fill: "var(--fault-soft)" }];
-  const h1 = root.querySelector("#f2-rpm");
+  const h1 = document.querySelector("#f2-rpm");
   const c1 = line(h1, { xMax: 2.6, yMin: -40, yMax: 120, h: 240, xTicks: xt, yTicks: [-40, 0, 40, 80, 120], xFmt: v => v + "s", yFmt: v => v + " rpm", marks, bands: band,
     series: [{ color: "var(--ink)", width: 2.5 }, { color: "var(--cmd)", width: 2 }],
     tip: t => { const p = near(t); return { x: p.t, ys: [p.actL, p.cmdL], html: `t ${p.t.toFixed(2)} s<br>measured ${p.actL.toFixed(0)} rpm (${(p.actL * C.RPM_TO_MPS).toFixed(2)} m/s)<br><span style="color:var(--cmd)">setpoint ${p.cmdL.toFixed(1)} rpm</span><br>turn ${p.turn.toFixed(2)}` }; } });
   c1.draw([P.map(p => [p.t, p.actL]), P.map(p => [p.t, p.cmdL])]);
   legend(h1, [{ color: "var(--ink)", label: "measured left wheel" }, { color: "var(--cmd)", label: "left setpoint" }]);
-  const h2 = root.querySelector("#f2-amp");
+  const h2 = document.querySelector("#f2-amp");
   const c2 = line(h2, { xMax: 2.6, yMin: -60, yMax: 20, h: 220, xTicks: xt, yTicks: [-60, -40, -20, 0, 20], xFmt: v => v + "s", yFmt: v => v + " A", marks, bands: band,
     refs: [{ y: -49.03, label: "−49 A trip wire (left)", color: "var(--fault)", right: true, below: true }, { y: -32.68, label: "−32.7 A target ceiling", color: "var(--cap)", right: true, below: true }],
     series: [{ color: "var(--motor)", width: 2.5 }],

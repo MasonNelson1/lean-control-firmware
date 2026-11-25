@@ -40,7 +40,7 @@
 
 <script>
 const { el } = Story;
-const host = root.querySelector("#ladder");
+const host = document.querySelector("#ladder");
 const W = Math.round(Math.max(320, Math.min(900, host.clientWidth || 600))), H = 200, ml = 12, mr = 12, top = 50, barH = 34;
 const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Current levels ladder" }, host);
 const X = a => ml + a / 60 * (W - ml - mr);

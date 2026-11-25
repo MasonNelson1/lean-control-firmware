@@ -34,16 +34,16 @@
 const { line, legend } = Story;
 const soc = [0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100];
 const cell = [2.50, 3.00, 3.20, 3.25, 3.28, 3.30, 3.31, 3.32, 3.33, 3.34, 3.36, 3.40, 3.45];
-const host = root.querySelector("#volt");
+const host = document.querySelector("#volt");
 const vAt = x => { let i = 0; while (i < soc.length - 2 && soc[i + 1] < x) i++; const f = (x - soc[i]) / (soc[i + 1] - soc[i]); return 16 * (cell[i] + f * (cell[i + 1] - cell[i])); };
 const ch = line(host, {
   xMax: 100, yMin: 38, yMax: 60, h: 300, xTicks: [0, 20, 40, 60, 80, 100], yTicks: [40, 44, 48, 52, 56, 60], xFmt: v => v + "%", xLabel: "% charged", yFmt: v => v + " V",
   bands: [{ x0: 20, x1: 90, fill: "var(--batt-soft)" }],
   hbands: [{ y0: 55, y1: 57, fill: "var(--cap-soft)" }],
   refs: [
-    { y: 58.2, label: "58.2 V charger fills to", color: "var(--ink-2)", dash: "2 3" },
-    { y: 57, label: "57 V VESC faults · regen fully off", color: "var(--fault)", dash: "6 3", right: true, below: true },
-    { y: 55, label: "55 V regen starts backing off", color: "var(--cap)", dash: "6 3", right: true, below: true },
+    { y: 58.2, label: "58.2 V charger fills to", color: "var(--ink-2)", dash: "2 3", right: true },
+    { y: 57, label: "57 V VESC faults · regen fully off", color: "var(--fault)", dash: "6 3", below: true },
+    { y: 55, label: "55 V regen starts backing off", color: "var(--cap)", dash: "6 3", below: true },
     { y: 51.2, label: "51.2 V official (16 × 3.2 V)", color: "var(--ink-3)", dash: "2 3", right: true, below: true },
     { y: 48, label: "48 V name on the label · VESC starts cutting drive", color: "var(--ink-3)", dash: "2 3", right: true, below: true },
     { y: 44, label: "44 V drive fully off", color: "var(--ink-3)", dash: "2 3", right: true, below: true },

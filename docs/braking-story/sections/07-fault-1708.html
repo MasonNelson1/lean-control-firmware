@@ -33,9 +33,9 @@ const { line, legend, data } = Story;
 data("fault-1708.json").then(d => {
   const P = d.points.filter(p => p.t >= 2.4 && p.t <= 3.9), f = d.faults.find(x => x.code !== "NONE"), r = d.faults.find(x => x.code === "NONE");
   const near = t => P.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
-  const marks = [{ x: 2.93, color: "var(--cmd)", label: "setpoint → 0", left: true }, { x: f.t, color: "var(--fault)", label: "right VESC faults: releases motor" }, { x: r.t, color: "var(--ink-3)", label: "back on", left: true }];
+  const marks = [{ x: 2.93, color: "var(--cmd)", label: "setpoint → 0", left: true }, { x: f.t, color: "var(--fault)", label: "right VESC faults" }, { x: r.t, color: "var(--ink-3)", label: "back on", left: true, dy: 14 }];
   const xt = [2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8];
-  const h1 = root.querySelector("#f1-amp");
+  const h1 = document.querySelector("#f1-amp");
   const c1 = line(h1, { xMin: 2.4, xMax: 3.9, yMin: -60, yMax: 5, h: 280, xTicks: xt, yTicks: [-60, -50, -40, -30, -20, -10, 0], xFmt: v => v.toFixed(1) + "s", yFmt: v => v + " A", marks,
     bands: [{ x0: f.t, x1: r.t, fill: "var(--fault-soft)" }],
     refs: [{ y: -32.68, label: "−32.7 A target ceiling", color: "var(--cap)", right: true, below: true }, { y: -52.22, label: "−52.2 A trip wire (right)", color: "var(--fault)", right: true, below: true }, { y: -49.03, label: "−49.0 A trip wire (left)", color: "var(--fault)", dash: "2 3" }],
@@ -45,7 +45,7 @@ data("fault-1708.json").then(d => {
   const pk = P.reduce((a, b) => b.curR < a.curR ? b : a);
   c1.dots([{ x: pk.t, y: pk.curR, color: "var(--motor)", label: `${pk.curR.toFixed(1)} A sample`, left: true }]);
   legend(h1, [{ color: "var(--motor)", label: "right motor (faulted)" }, { color: "var(--motor)", dash: 1, label: "left motor" }, { color: "var(--fault)", label: "trip wire" }, { color: "var(--cap)", label: "target ceiling" }]);
-  const h2 = root.querySelector("#f1-duty");
+  const h2 = document.querySelector("#f1-duty");
   const c2 = line(h2, { xMin: 2.4, xMax: 3.9, yMin: -6, yMax: 6, h: 200, xTicks: xt, yTicks: [-6, -3, 0, 3, 6], xFmt: v => v.toFixed(1) + "s", marks,
     bands: [{ x0: f.t, x1: r.t, fill: "var(--fault-soft)" }],
     series: [{ color: "var(--ink)", width: 2 }, { color: "var(--batt)", width: 2 }],

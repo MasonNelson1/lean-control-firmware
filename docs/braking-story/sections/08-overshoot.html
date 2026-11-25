@@ -38,23 +38,23 @@ function sim(target, rampS) {
   }
   return { out, pk };
 }
-const host = root.querySelector("#os-chart");
+const host = document.querySelector("#os-chart");
 const ch = line(host, { xMax: T, yMax: 70, h: 260, xTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5], yTicks: [0, 10, 20, 30, 40, 50, 60, 70], xFmt: v => (v * 1000).toFixed(0) + " ms", yFmt: v => v + " A",
   hbands: [{ y0: TRIP, y1: 70, fill: "var(--fault-soft)" }],
   refs: [{ y: TRIP, label: "49 A trip wire: VESC faults", color: "var(--fault)", right: true }],
   series: [{ color: "var(--cmd)", dash: "5 4", width: 1.8 }, { color: "var(--motor)", width: 2.5 }] });
 legend(host, [{ color: "var(--cmd)", dash: 1, label: "target the VESC is given" }, { color: "var(--motor)", label: "current that actually flows" }]);
-const tS = root.querySelector("#os-t"), rS = root.querySelector("#os-r");
+const tS = document.querySelector("#os-t"), rS = document.querySelector("#os-r");
 function upd() {
   const tg = +tS.value, rp = +rS.value / 1000, s = sim(tg, rp);
-  root.querySelector("#os-tv").textContent = tg.toFixed(1) + " A";
-  root.querySelector("#os-rv").textContent = (+rS.value).toFixed(0) + " ms";
+  document.querySelector("#os-tv").textContent = tg.toFixed(1) + " A";
+  document.querySelector("#os-rv").textContent = (+rS.value).toFixed(0) + " ms";
   ch.draw([s.out.map(p => [p[0], p[2]]), s.out.map(p => [p[0], p[1]])]);
   const pkT = s.out.reduce((a, b) => b[1] > a[1] ? b : a);
   ch.dots([{ x: pkT[0], y: pkT[1], color: s.pk > TRIP ? "var(--fault)" : "var(--motor)", label: s.pk.toFixed(1) + " A peak" }]);
-  root.querySelector("#os-pk").textContent = s.pk.toFixed(1) + " A";
-  root.querySelector("#os-mg").textContent = (TRIP - s.pk).toFixed(1) + " A";
-  const res = root.querySelector("#os-res");
+  document.querySelector("#os-pk").textContent = s.pk.toFixed(1) + " A";
+  document.querySelector("#os-mg").textContent = (TRIP - s.pk).toFixed(1) + " A";
+  const res = document.querySelector("#os-res");
   res.textContent = s.pk > TRIP ? "Trips: wheel released" : "Clears the trip wire";
   res.style.color = s.pk > TRIP ? "var(--fault)" : "var(--ok)";
 }

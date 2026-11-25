@@ -12,11 +12,16 @@
 <body>
 <div class="shell">
   <nav class="toc" aria-label="Sections">
-    <div class="brand">LEAN Braking Story</div>
+    <div class="brand-row"><div class="brand">LEAN Braking Story</div><button id="nav-hide" class="icon-btn" type="button" title="Hide the section list" aria-label="Hide the section list">⟨</button></div>
     <div class="list" style="display:contents"></div>
     <div class="meta">Sections live in <code>sections/</code>; order in <code>story.json</code>. Saving any file reloads this page.</div>
   </nav>
   <main></main>
+</div>
+<button id="nav-show" class="nav-show btn ghost" type="button">☰ Sections</button>
+<div id="dock" class="dock" hidden>
+  <div class="dock-head"><span class="grip" aria-hidden="true">⠿</span><span class="dock-title">Pinned figure</span><button class="dock-close icon-btn" type="button" aria-label="Unpin">✕</button></div>
+  <div class="dock-body"></div>
 </div>
 <script src="story.js"></script>
 </body>

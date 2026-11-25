@@ -58,7 +58,7 @@ function line(host, o) {
     (o.series || []).forEach((s, i) => {
       let d = "", pen = false;
       for (const p of data[i] || []) {
-        if (p[1] == null || p[1] > o.yMax * 1.5 || p[1] < yMin - (o.yMax - yMin) * 0.5) { pen = false; continue; }
+        if (p[1] == null || p[1] > o.yMax || p[1] < yMin) { pen = false; continue; }
         d += (pen ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(clampY(p[1])).toFixed(1); pen = true;
       }
       paths[i].setAttribute("d", d);
@@ -95,7 +95,7 @@ function line(host, o) {
 
 function legend(host, items) {
   const d = document.createElement("div"); d.className = "legend";
-  d.innerHTML = items.map(i => `<span style="color:${i.color}"><i class="${i.dash ? "dash" : ""}" style="background:${i.color}"></i><span style="color:var(--ink-2)">${i.label}</span></span>`).join("");
+  d.innerHTML = items.map(i => `<span style="color:${i.color}"><i class="${i.dash ? "dash" : ""}${i.dot ? " dot" : ""}" style="background:${i.color}"></i><span style="color:var(--ink-2)">${i.label}</span></span>`).join("");
   host.appendChild(d); return d;
 }
 
@@ -111,7 +111,7 @@ async function boot() {
   for (const item of list.sections) {
     if (item.hidden) continue;
     n++;
-    const id = item.file.replace(/\.html$/, "").replace(/^\d+-/, "");
+    const id = item.file.replace(/\.html$/, "").replace(/^\d+[a-z]?-/, "");
     const only = new URLSearchParams(location.search).get("only");
     if (only && !only.split(",").includes(id)) continue;
     const sec = document.createElement("section"); sec.className = "s"; sec.id = id;
@@ -128,11 +128,79 @@ async function boot() {
   const links = [...nav.querySelectorAll("a")];
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle("on", l.getAttribute("href") === "#" + e.target.id)); }), { rootMargin: "-30% 0px -60% 0px" });
   main.querySelectorAll("section.s").forEach(s => io.observe(s));
+  setupPins(main);
   if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
   // keep the scroll position across live reloads
   try { const y = sessionStorage.getItem("story-y"); if (y && !location.hash) window.scrollTo(0, +y); } catch (e) {}
 }
 addEventListener("beforeunload", () => { try { sessionStorage.setItem("story-y", scrollY); } catch (e) {} });
+
+// ---- theme override (?theme=dark|light), mainly for checking both themes ----
+const th = new URLSearchParams(location.search).get("theme");
+if (th) document.documentElement.setAttribute("data-theme", th);
+
+// ---- collapsible section list ----
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  sget(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+  sset(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} },
+};
+function setNav(hidden) { document.body.classList.toggle("nav-hidden", hidden); store.set("story-nav-hidden", hidden ? "1" : "0"); }
+document.getElementById("nav-hide").addEventListener("click", () => setNav(true));
+document.getElementById("nav-show").addEventListener("click", () => setNav(false));
+setNav(store.get("story-nav-hidden") === "1");
+
+// ---- pin a figure to a floating, resizable, movable dock ----
+const dock = document.getElementById("dock"), dockBody = dock.querySelector(".dock-body"), dockTitle = dock.querySelector(".dock-title");
+let pinned = null; // { panel, placeholder }
+function unpin() {
+  if (!pinned) return;
+  pinned.placeholder.replaceWith(pinned.panel);
+  pinned.panel.querySelector(".pin-btn").textContent = "Pin";
+  pinned = null; dock.hidden = true; store.sset("story-pin", "");
+}
+function pin(panel) {
+  if (pinned && pinned.panel === panel) { unpin(); return; }
+  unpin();
+  const ph = document.createElement("div"); ph.className = "pin-placeholder";
+  ph.style.height = panel.offsetHeight + "px";
+  ph.innerHTML = `<span>Pinned to the floating window.</span> <button class="btn ghost">Unpin</button>`;
+  ph.querySelector("button").addEventListener("click", unpin);
+  panel.replaceWith(ph); dockBody.appendChild(panel);
+  panel.querySelector(".pin-btn").textContent = "Unpin";
+  const t = panel.querySelector(".ttl, h3"); dockTitle.textContent = t ? t.textContent : "Pinned figure";
+  pinned = { panel, placeholder: ph }; dock.hidden = false; store.sset("story-pin", panel.id);
+}
+function setupPins(main) {
+  const counts = {};
+  main.querySelectorAll("section.s .panel").forEach(p => {
+    if (!p.querySelector(".chart, svg.scene, canvas")) return;
+    const sid = p.closest("section").id; counts[sid] = (counts[sid] || 0) + 1;
+    p.id = p.id || `fig-${sid}-${counts[sid]}`;
+    p.classList.add("pinnable");
+    const b = document.createElement("button"); b.className = "pin-btn"; b.type = "button"; b.textContent = "Pin";
+    b.title = "Keep this figure in a floating window while you scroll"; b.addEventListener("click", () => pin(p));
+    p.prepend(b);
+  });
+  const saved = store.sget("story-pin"); if (saved && document.getElementById(saved)) pin(document.getElementById(saved));
+}
+dock.querySelector(".dock-close").addEventListener("click", unpin);
+// geometry: drag by the header, resize from the corner (CSS resize), remembered for the session
+function saveGeo() { store.sset("story-dock", JSON.stringify({ l: dock.offsetLeft, t: dock.offsetTop, w: dock.offsetWidth, h: dock.offsetHeight })); }
+try { const g = JSON.parse(store.sget("story-dock") || "null"); if (g) Object.assign(dock.style, { left: g.l + "px", top: g.t + "px", width: g.w + "px", height: g.h + "px", right: "auto" }); } catch (e) {}
+new ResizeObserver(() => { if (!dock.hidden) saveGeo(); }).observe(dock);
+dock.querySelector(".dock-head").addEventListener("pointerdown", e => {
+  if (e.target.closest("button")) return;
+  const sx = e.clientX, sy = e.clientY, l0 = dock.offsetLeft, t0 = dock.offsetTop;
+  const move = ev => {
+    const l = Math.min(Math.max(0, l0 + ev.clientX - sx), innerWidth - 80), t = Math.min(Math.max(0, t0 + ev.clientY - sy), innerHeight - 40);
+    Object.assign(dock.style, { left: l + "px", top: t + "px", right: "auto" });
+  };
+  const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); saveGeo(); };
+  addEventListener("pointermove", move); addEventListener("pointerup", up);
+});
+addEventListener("keydown", e => { if (e.key === "Escape" && pinned) unpin(); });
 if (window.EventSource && !/[?&]static/.test(location.search)) { const es = new EventSource("/__reload"); es.onmessage = () => location.reload(); }
 boot();
 })();

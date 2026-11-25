@@ -1,0 +1,23 @@
+<div class="prose">
+  <span class="eyebrow">What I need</span>
+  <h2>Context that would sharpen every number here</h2>
+  <p>Most estimates on this site lean on one assumption. These items would turn them into facts. They're in order of how much they'd change the decisions.</p>
+</div>
+<div class="panel tablewrap">
+  <table>
+    <thead><tr><th>Item</th><th>Why it matters</th><th>Where it probably is</th></tr></thead>
+    <tbody>
+      <tr><td><b>Motor datasheet</b>: exact DB87 part (label says DB87-K3V5-3193?)</td><td>Rated current (RMS or peak?), peak current and how long, thermal time constant, whether it has a temperature sensor wire.</td><td>Nanotec website, or whoever ordered it</td></tr>
+      <tr><td><b>Gearbox datasheet</b></td><td>The 60 N·m rating sets the current ceiling. Peak vs. continuous, and how it handles shock from sudden braking.</td><td>Order records, Mason</td></tr>
+      <tr><td><b>Real mass</b>: chair, battery, Parker</td><td>Every acceleration and stop-time number uses 120 kg.</td><td>A scale</td></tr>
+      <tr><td><b>How hard Parker wants to stop</b></td><td>The hard-stop decel limit in the profile. Ask Parker, and an OT/PT if one is involved.</td><td>Parker</td></tr>
+      <tr><td><b>Braking specs in the CDR</b> beyond Spec P</td><td>Stopping distance, stability on slopes, anything about tipping.</td><td>CDR</td></tr>
+      <tr><td><b>Bioenno's reply</b></td><td>How far fix 2 can go.</td><td>Email</td></tr>
+      <tr><td><b>Full VESC Tool XML export</b> from both VESCs</td><td>Confirms every setting, including the ones the Teensy doesn't read.</td><td>VESC Tool, chair on</td></tr>
+      <tr><td><b>A timed top-speed stop</b> on the court</td><td>Checks the Spec P estimate directly.</td><td>Next session</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="prose">
+  <p>Drop datasheets (PDFs are fine) into <code>docs/datasheets/</code> and tell me. I'll pull the numbers into <code>story.js</code>, and every chart that uses them updates.</p>
+</div>

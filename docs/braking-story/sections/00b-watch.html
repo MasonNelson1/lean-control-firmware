@@ -1,0 +1,168 @@
+<div class="prose">
+  <span class="eyebrow">Watch a stop</span>
+  <h2>One hard stop from 4.3 m/s, three ways</h2>
+  <p>This replays the 17:08 stop: the chair at 4.3 m/s, the rider leans back. The first part, braking against the battery cap, follows the measured logs. The fault spike is <span class="badge ill">illustration</span>: shaped like the 17:08 data, but the real instant peak can't be seen at 20 samples a second. Press play, or drag the scrubber.</p>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <button class="btn" id="w-play" type="button">▶ Play</button>
+    <button class="btn ghost" id="w-reset" type="button">Reset</button>
+    <div class="seg" role="group" aria-label="Settings">
+      <button data-k="today" aria-pressed="true" type="button">Today (11/22)</button>
+      <button data-k="fix1" aria-pressed="false" type="button">Fix 1: −20 A</button>
+      <button data-k="all" aria-pressed="false" type="button">Fix 1 + 2 + braking profile</button>
+    </div>
+  </div>
+  <div class="tablewrap" style="min-width:0">
+  <svg class="scene" id="w-scene" viewBox="0 0 900 280" role="img" aria-label="Battery, VESC and right wheel with currents flowing between them" style="min-width:560px">
+    <defs><marker id="w-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-3)"/></marker></defs>
+    <text x="105" y="40" text-anchor="middle" class="lbl ink" style="font-size:13px">BATTERY</text>
+    <rect x="20" y="56" width="170" height="120" rx="10" fill="var(--panel)" stroke="var(--batt)" stroke-width="2"/>
+    <rect x="190" y="91" width="10" height="50" rx="3" fill="var(--batt)"/>
+    <g id="w-cells"></g>
+    <text x="105" y="204" text-anchor="middle" style="font:500 19px var(--f-mono);fill:var(--batt)">53.5 V</text>
+    <text x="105" y="224" text-anchor="middle" class="lbl">"48 V" pack, 16 cells</text>
+    <path d="M200 101 H360 M200 131 H360" stroke="var(--line)" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path id="w-b1" d="M360 101 H200" stroke="var(--batt)" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <path id="w-b2" d="M200 131 H360" stroke="var(--batt)" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <text x="280" y="82" text-anchor="middle" class="lbl">battery current</text>
+    <text x="280" y="162" text-anchor="middle" style="font:600 17px var(--f-mono);fill:var(--batt)" id="w-ib">0.0 A</text>
+    <rect x="360" y="66" width="150" height="100" rx="8" fill="var(--panel)" stroke="var(--ink-2)" stroke-width="2"/>
+    <rect id="w-fault" x="360" y="66" width="150" height="100" rx="8" fill="var(--fault-soft)" stroke="var(--fault)" stroke-width="3" opacity="0"/>
+    <text x="435" y="106" text-anchor="middle" style="font:700 18px var(--f-display);fill:var(--ink)">VESC (right)</text>
+    <text x="435" y="128" text-anchor="middle" class="lbl" id="w-mode">driving</text>
+    <text x="435" y="148" text-anchor="middle" class="lbl" id="w-set">–</text>
+    <path d="M510 101 H660 M510 131 H660" stroke="var(--line)" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path id="w-m1" d="M660 101 H510" stroke="var(--motor)" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <path id="w-m2" d="M510 131 H660" stroke="var(--motor)" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <text x="585" y="82" text-anchor="middle" class="lbl">motor current</text>
+    <text x="585" y="162" text-anchor="middle" style="font:600 17px var(--f-mono);fill:var(--motor)" id="w-im">0.0 A</text>
+    <g transform="translate(775 116)">
+      <circle r="92" fill="none" stroke="var(--ink-2)" stroke-width="7"/>
+      <circle r="38" fill="var(--panel)" stroke="var(--motor)" stroke-width="3"/>
+      <g id="w-spokes"></g>
+      <text y="5" text-anchor="middle" style="font:700 11px var(--f-mono);fill:var(--motor)">MOTOR</text>
+    </g>
+    <text x="775" y="242" text-anchor="middle" style="font:500 15px var(--f-mono);fill:var(--motor)" id="w-vm">– V</text>
+    <text x="775" y="262" text-anchor="middle" class="lbl">motor voltage (6.6 V per m/s)</text>
+    <path id="w-earrow" d="M640 24 H230" stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#w-arr)"/>
+    <text x="435" y="16" text-anchor="middle" class="lbl ink" id="w-etext">energy flows this way while braking</text>
+  </svg>
+  </div>
+  <div id="w-banner" class="callout fault" hidden><b>Right VESC faulted.</b> The current crossed the 52 A trip wire, so the VESC let go of the right motor for 0.6 s. Only the left wheel is braking, and the chair swerves.</div>
+  <div class="readouts">
+    <div class="ro"><span class="l">Time</span><span class="v" id="w-t">0.00 s</span><span class="s">rider leans back at 0.3 s</span></div>
+    <div class="ro"><span class="l">Chair speed</span><span class="v" id="w-v">4.30 m/s</span><span class="s" id="w-vs">&nbsp;</span></div>
+    <div class="ro"><span class="l">Braking force</span><span class="v" id="w-f">0 N</span><span class="s">both wheels</span></div>
+    <div class="ro"><span class="l">Stopped at</span><span class="v" id="w-stop">–</span><span class="s">time and distance</span></div>
+  </div>
+  <div class="row"><span class="mono src">0 s</span><input type="range" id="w-scrub" min="0" max="1000" value="0" aria-label="Scrub through the stop" style="flex:1;accent-color:var(--ink)"><span class="mono src">4 s</span></div>
+  <div class="two">
+    <div class="chart" id="w-c1"><div class="ttl">Chair speed</div><div class="sub">m/s</div></div>
+    <div class="chart" id="w-c2"><div class="ttl">Right motor: the two currents</div><div class="sub">amps of braking (positive = braking here)</div></div>
+  </div>
+</div>
+
+<script>
+const { line, legend, C, el } = Story;
+const T = 4, V0 = 4.3, T_LEAN = 0.3, RR = 0.1, MPS50 = 50 * C.RPM_TO_MPS;
+const SC = {
+  today: { cap: 3, lim: 32.68, step: true, trip: 52.22, name: "today" },
+  fix1: { cap: 3, lim: 20, step: true, trip: 52.22, name: "fix 1" },
+  all: { cap: 7.5, lim: 20, step: false, trip: 52.22, name: "all" },
+};
+// Second-order "springy" current response, same as the Overshoot section (illustration).
+const ZETA = 0.13, WN = 2 * Math.PI * 9;
+function simulate(sc) {
+  const dt = 0.001, pts = [];
+  let v = V0, t = 0, x = 0, stopT = null, stopX = null, t0 = null, y = 0, dy = 0, faultAt = null, ramp = 0;
+  while (t <= T + 1e-9) {
+    let imL = 0, imR = 0, phase = "driving", set = "", fault = false;
+    if (t < T_LEAN) { imL = imR = -19; phase = "driving"; set = "≈ wheel speed"; }
+    else if (v > 0) {
+      const cap = Math.min(C.allowed(v, sc.cap), sc.lim);
+      if (sc.step) {
+        if (v > MPS50 && t0 === null) { ramp = Math.min(1, ramp + dt / 0.25); imL = imR = cap * ramp; phase = "battery-cap braking"; set = "wheel − 50 rpm"; }
+        else {
+          if (t0 === null) { t0 = t; y = 0; dy = 0; } // the logs show current dipping toward 0 as the VESC switches modes, then spiking
+          const ddy = WN * WN * (sc.lim - y) - 2 * ZETA * WN * dy; dy += ddy * dt; y += dy * dt;
+          imL = Math.min(sc.lim, cap + (sc.lim - cap) * Math.min(1, (t - t0) / 0.08)); imR = Math.max(0, y);
+          phase = "duty-zero brake"; set = "0 rpm: stop now";
+          if (faultAt === null && imR > sc.trip) faultAt = t;
+          if (faultAt !== null && t - faultAt < 0.6) { imR = 0; fault = true; phase = "FAULT: released"; }
+          else if (faultAt !== null) { imR = imL; }
+        }
+      } else {
+        ramp = Math.min(1, ramp + dt / 0.25);
+        const taper = Math.min(1, v / 0.6);               // profile eases off near a stop
+        imL = imR = Math.max(cap * ramp * taper, v > 0.05 ? 3 : 0);
+        phase = v > 0.6 ? "profile braking" : "easing into stop"; set = "smooth profile";
+      }
+    }
+    const a = t < T_LEAN ? 0 : (C.N_PER_A * (imL + imR)) / C.MASS + (v > 0 ? RR : 0);
+    if (t % 0.01 < dt) pts.push({ t: +t.toFixed(2), v: Math.max(v, 0), imR, imL, ib: v > 0 ? imR * v / C.MOTOR_A_PER_BATT_A : 0, fault, phase, set, f: C.N_PER_A * (imL + imR) });
+    if (t >= T_LEAN && v > 0) { v -= a * dt; if (v <= 0) { v = 0; stopT = t; stopX = x; } }
+    if (t < T_LEAN) v = V0;
+    x += Math.max(v, 0) * dt; t += dt;
+  }
+  return { pts, stopT, stopX, faultAt };
+}
+const RES = {}; for (const k in SC) RES[k] = simulate(SC[k]);
+let cur = "today", time = 0, playing = false, last = null, dashB = 0, dashM = 0, ang = 0;
+const at = t => RES[cur].pts[Math.min(RES[cur].pts.length - 1, Math.max(0, Math.round(t / 0.01)))];
+const $ = id => document.getElementById(id);
+for (let i = 0; i < 8; i++) el("rect", { x: 32 + i * 19.5, y: 70, width: 15, height: 92, rx: 3, fill: "var(--batt-soft)", stroke: "var(--batt)" }, $("w-cells"));
+for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; el("line", { x1: 38 * Math.cos(a), y1: 38 * Math.sin(a), x2: 88 * Math.cos(a), y2: 88 * Math.sin(a), stroke: "var(--ink-3)", "stroke-width": 3, "stroke-linecap": "round" }, $("w-spokes")); }
+const xt = [0, 1, 2, 3, 4];
+const c1 = line($("w-c1"), { xMax: T, yMax: 4.6, h: 200, xTicks: xt, yTicks: [0, 1, 2, 3, 4], xFmt: v => v + "s", series: [{ color: "var(--ink)", width: 2.5 }],
+  tip: t => { const p = at(t); return { x: p.t, ys: [p.v], html: `t ${p.t.toFixed(2)} s<br>${p.v.toFixed(2)} m/s` }; }, onLeave: () => render(time) });
+const c2 = line($("w-c2"), { xMax: T, yMax: 60, h: 200, xTicks: xt, yTicks: [0, 20, 40, 60], xFmt: v => v + "s", yFmt: v => v + " A",
+  refs: [{ y: 52.22, label: "52 A trip (right)", color: "var(--fault)" }],
+  series: [{ color: "var(--motor)", width: 2.5 }, { color: "var(--batt)", width: 2 }],
+  tip: t => { const p = at(t); return { x: p.t, ys: [p.imR, p.ib], html: `t ${p.t.toFixed(2)} s<br><span style="color:var(--motor)">motor ${p.imR.toFixed(1)} A</span><br><span style="color:var(--batt)">battery ${p.ib.toFixed(1)} A</span>` }; }, onLeave: () => render(time) });
+legend($("w-c2"), [{ color: "var(--motor)", label: "motor current (force)" }, { color: "var(--batt)", label: "battery current" }]);
+function drawCharts() {
+  const P = RES[cur].pts.filter(p => p.t >= T_LEAN || true);
+  c1.draw([P.map(p => [p.t, p.v])]);
+  c2.draw([P.map(p => [p.t, p.t < T_LEAN ? null : p.imR]), P.map(p => [p.t, p.t < T_LEAN ? null : p.ib])]);
+  const r = RES[cur];
+  $("w-stop").textContent = r.stopT ? `${(r.stopT - T_LEAN).toFixed(2)} s · ${r.stopX.toFixed(1)} m` : "–";
+}
+function render(t, dtReal) {
+  const p = at(t), braking = t >= T_LEAN;
+  $("w-t").textContent = t.toFixed(2) + " s"; $("w-v").textContent = p.v.toFixed(2) + " m/s";
+  $("w-vs").textContent = (p.v / C.RPM_TO_MPS).toFixed(0) + " wheel rpm";
+  $("w-f").textContent = braking ? Math.round(p.f) + " N" : "driving";
+  $("w-im").textContent = (braking ? -p.imR : 19).toFixed(1) + " A";
+  $("w-ib").textContent = (braking ? -p.ib : 10).toFixed(1) + " A";
+  $("w-vm").textContent = (p.v * C.V_PER_MPS).toFixed(1) + " V";
+  $("w-mode").textContent = p.phase; $("w-mode").style.fill = p.fault ? "var(--fault)" : "";
+  $("w-set").textContent = braking ? p.set : "≈ wheel speed";
+  const im = braking ? p.imR : 19, ib = braking ? p.ib : 10;
+  for (const id of ["w-m1", "w-m2"]) $(id).setAttribute("stroke-width", im > 0.05 ? 2 + Math.min(im, 55) / 55 * 9 : 0);
+  for (const id of ["w-b1", "w-b2"]) $(id).setAttribute("stroke-width", ib > 0.05 ? 2 + Math.min(ib, 12) / 12 * 9 : 0);
+  const dir = braking ? 1 : -1;
+  if (dtReal) { dashM -= dir * im * dtReal * 14; dashB -= dir * ib * dtReal * 14; ang += p.v / 0.305 * dtReal * 57.3; }
+  for (const id of ["w-m1", "w-m2"]) $(id).setAttribute("stroke-dashoffset", dashM);
+  for (const id of ["w-b1", "w-b2"]) $(id).setAttribute("stroke-dashoffset", dashB);
+  $("w-spokes").setAttribute("transform", `rotate(${ang})`);
+  $("w-earrow").setAttribute("transform", braking ? "" : "rotate(180 435 24)");
+  $("w-etext").textContent = braking ? "energy flows this way while braking" : "energy flows this way while driving";
+  $("w-fault").setAttribute("opacity", p.fault ? 1 : 0); $("w-banner").hidden = !p.fault;
+  c1.setCursor(p.t, [p.v]); c2.setCursor(p.t, braking ? [p.imR, p.ib] : [null, null]);
+  $("w-scrub").value = Math.round(t / T * 1000);
+}
+function frame(ts) {
+  if (!playing) { last = null; return; }
+  if (last == null) last = ts; const dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+  time += dt * 0.5; if (time >= T) { time = T; playing = false; $("w-play").textContent = "▶ Play again"; }
+  render(time, dt * 0.5); if (playing) requestAnimationFrame(frame);
+}
+$("w-play").addEventListener("click", () => { if (playing) { playing = false; $("w-play").textContent = "▶ Resume"; return; } if (time >= T) time = 0; playing = true; $("w-play").textContent = "❚❚ Pause"; requestAnimationFrame(frame); });
+$("w-reset").addEventListener("click", () => { playing = false; time = 0; $("w-play").textContent = "▶ Play"; render(0); });
+$("w-scrub").addEventListener("input", e => { playing = false; $("w-play").textContent = "▶ Resume"; time = e.target.value / 1000 * T; render(time); });
+const seg = [...root.querySelectorAll(".seg button")];
+seg.forEach(b => b.addEventListener("click", () => { cur = b.dataset.k; seg.forEach(x => x.setAttribute("aria-pressed", x === b)); drawCharts(); render(time); }));
+drawCharts(); time = 1.2; render(time); // resting frame mid-stop, so the still page already shows braking
+</script>

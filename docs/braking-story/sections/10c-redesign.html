@@ -1,0 +1,53 @@
+<div class="prose">
+  <span class="eyebrow">Proposal</span>
+  <h2>Rebuild braking around force, not speed</h2>
+  <p>Goals, in order: <b>control first</b>, then <b>hard braking at speed</b> when the rider asks for it, then feel. Today's design can't deliver any of them well, because the Teensy only sends speed setpoints and the VESC's speed controller decides the force. When the setpoint jumps, the VESC brakes as hard as it's allowed to. "As hard as allowed" is both the over-current fault and the jerky feel.</p>
+  <p>The proposal: <b>the Teensy decides the force, and the VESC only delivers it.</b> Motor current is force, so the Teensy sends current commands instead of speed setpoints.</p>
+</div>
+
+<div class="panel">
+  <svg class="scene" viewBox="0 0 900 230" role="img" aria-label="Proposed control chain from lean to motor current">
+    <defs><marker id="rd-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-3)"/></marker></defs>
+    <g font-family="var(--f-body)">
+      <rect x="10" y="40" width="150" height="70" rx="8" fill="var(--panel)" stroke="var(--ink-2)"/>
+      <text x="85" y="70" text-anchor="middle" style="font:600 14px var(--f-body);fill:var(--ink)">Lean</text>
+      <text x="85" y="90" text-anchor="middle" class="lbl">desired speed + turn</text>
+      <rect x="200" y="40" width="190" height="70" rx="8" fill="var(--panel)" stroke="var(--cmd)" stroke-width="2"/>
+      <text x="295" y="66" text-anchor="middle" style="font:600 14px var(--f-body);fill:var(--ink)">Motion profile</text>
+      <text x="295" y="84" text-anchor="middle" class="lbl">limits accel, decel, jerk</text>
+      <text x="295" y="98" text-anchor="middle" class="lbl">→ desired acceleration</text>
+      <rect x="430" y="40" width="190" height="70" rx="8" fill="var(--panel)" stroke="var(--motor)" stroke-width="2"/>
+      <text x="525" y="66" text-anchor="middle" style="font:600 14px var(--f-body);fill:var(--ink)">Force → current</text>
+      <text x="525" y="84" text-anchor="middle" class="lbl">I = m·a ÷ (2 × 5.1 N/A)</text>
+      <text x="525" y="98" text-anchor="middle" class="lbl">+ small speed correction</text>
+      <rect x="660" y="40" width="230" height="70" rx="8" fill="var(--panel)" stroke="var(--ink-2)"/>
+      <text x="775" y="66" text-anchor="middle" style="font:600 14px var(--f-body);fill:var(--ink)">VESC current mode</text>
+      <text x="775" y="84" text-anchor="middle" class="lbl">drive: SET_CURRENT</text>
+      <text x="775" y="98" text-anchor="middle" class="lbl">brake: SET_CURRENT_BRAKE</text>
+      <path d="M160 75 H196 M390 75 H426 M620 75 H656" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#rd-a)"/>
+      <rect x="200" y="140" width="420" height="70" rx="8" fill="var(--fault-soft)" stroke="var(--fault)" stroke-dasharray="5 4"/>
+      <text x="410" y="166" text-anchor="middle" style="font:600 13px var(--f-body);fill:var(--fault)">Hard limits the Teensy enforces, every cycle</text>
+      <text x="410" y="186" text-anchor="middle" class="lbl">current ≤ gearbox and motor limits · decel ≤ what Parker can take</text>
+      <text x="410" y="200" text-anchor="middle" class="lbl">never a near-zero speed command to a rolling wheel</text>
+    </g>
+  </svg>
+</div>
+
+<div class="prose">
+  <h3>What each piece does</h3>
+  <ul>
+    <li><b>Motion profile.</b> Turns the lean into a desired acceleration, with separate limits for speeding up, normal slowing, and a hard stop. A full lean back means "the hard-stop limit", maybe 2–2.5 m/s² (0.2–0.25 g), to be tuned with Parker. A jerk limit makes braking build up over 0.2–0.3 s instead of slamming on.</li>
+    <li><b>Force → current.</b> The required force divided by 5.1 N per amp gives the current. A small correction term fixes the leftover error from friction, slopes and model error. This is "feedforward plus feedback": most of the work is done by physics we already measured.</li>
+    <li><b>VESC current mode.</b> The VESC's fast current loop is the part that works well. We keep it, and stop using its speed controller, which is the part that saturates.</li>
+    <li><b>Near a stop.</b> Below about 0.3 m/s, the profile eases braking down to a gentle hold current. The chair never goes into the duty-zero "stop now" brake while rolling.</li>
+  </ul>
+  <p class="callout ok">Why this is the right call: every number Parker feels (how fast the chair speeds up, how hard it stops, how smooth the transition is) becomes one setting in the profile. Today they're side effects of PID gains in two different devices. It also makes the over-current fault impossible by design, instead of avoiding it with margins.</p>
+  <h3>The physical limits it has to respect</h3>
+  <ul>
+    <li><b>Braking at speed</b> is capped by the battery (fix 2). At 4.3 m/s with 7.5 A per side, the most the battery side can absorb is about 20 A per motor. Hard braking at top speed needs fix 2 no matter which control design we pick.</li>
+    <li><b>Peak current</b> ≤ the gearbox limit (about 32 A, to be confirmed from its datasheet).</li>
+    <li><b>Heat:</b> the 5-minute RMS stays under the motor's continuous rating.</li>
+    <li><b>Traction:</b> braking harder than the tires can grip locks a wheel. Unknown yet; worth one test on the court floor.</li>
+  </ul>
+  <p>This is a firmware rewrite of the drive loop, roughly a week of careful work including a bench rig with the wheels off. It doesn't need new hardware. I'd do it on a branch, with the same logging, and keep the old mode behind a switch for comparison.</p>
+</div>

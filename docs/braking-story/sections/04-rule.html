@@ -44,7 +44,7 @@ iq_target = clamp(iq_target, l_current_min, l_current_max);</pre>
 const { line, legend, C, data } = Story;
 const SET = { today: { cap: 3, lim: 32.68 }, fix1: { cap: 3, lim: 20 }, both: { cap: 7.5, lim: 20 } };
 let k = "today";
-const host = root.querySelector("#rule-chart");
+const host = document.querySelector("#rule-chart");
 const vs = []; for (let v = 0.2; v <= 4.9001; v += 0.02) vs.push(v);
 const ch = line(host, {
   xMax: 5, yMax: 60, h: 300, xTicks: [0, 1, 2, 3, 4, 5], yTicks: [0, 10, 20, 30, 40, 50, 60], xLabel: "chair speed (m/s)", yFmt: v => v + " A",
@@ -62,6 +62,7 @@ legend(host, [
   { color: "var(--cap)", dash: 1, label: "motor ceiling (motor-current setting)" },
   { color: "var(--motor)", label: "what the VESC aims for (the lower one)" },
   { color: "var(--fault)", label: "trip wire: the VESC faults if measured current crosses it" },
+  { color: "var(--ink)", dot: 1, label: "real court samples, 11/22 17:08, braking at the 3 A cap" },
 ]);
 const dotLayer = ch.el("g", {});
 data("fault-1708.json").then(d => {
@@ -78,21 +79,22 @@ function redraw() {
   ch.draw([vs.map(v => [v, C.allowed(v, s.cap)]), [[0, s.lim], [5, s.lim]], vs.map(v => [v, Math.min(C.allowed(v, s.cap), s.lim)])]);
   setV(+slider.value);
 }
-const slider = root.querySelector("#rule-v");
+const slider = document.querySelector("#rule-v");
 function setV(v) {
   const s = SET[k], a = C.allowed(v, s.cap), m = Math.min(a, s.lim);
-  root.querySelector("#rule-vv").textContent = v.toFixed(2) + " m/s";
-  root.querySelector("#rule-a").textContent = a.toFixed(1) + " A";
-  root.querySelector("#rule-b").textContent = s.lim.toFixed(1) + " A";
-  root.querySelector("#rule-c").textContent = m.toFixed(1) + " A";
-  root.querySelector("#rule-who").textContent = a < s.lim ? "battery ceiling wins" : "motor ceiling wins";
+  document.querySelector("#rule-vv").textContent = v.toFixed(2) + " m/s";
+  document.querySelector("#rule-a").textContent = a.toFixed(1) + " A";
+  document.querySelector("#rule-b").textContent = s.lim.toFixed(1) + " A";
+  document.querySelector("#rule-c").textContent = m.toFixed(1) + " A";
+  document.querySelector("#rule-who").textContent = a < s.lim ? "battery ceiling wins" : "motor ceiling wins";
   const acc = 2 * C.N_PER_A * m / C.MASS;
-  root.querySelector("#rule-d").textContent = acc.toFixed(2) + " m/s²";
+  document.querySelector("#rule-d").textContent = acc.toFixed(2) + " m/s²";
   ch.setCursor(v, [a, s.lim, m]);
 }
 slider.addEventListener("input", e => setV(+e.target.value));
-root.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
-  k = b.dataset.k; root.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b)); redraw();
+const segBtns = [...root.querySelectorAll(".seg button")];
+segBtns.forEach(b => b.addEventListener("click", () => {
+  k = b.dataset.k; segBtns.forEach(x => x.setAttribute("aria-pressed", x === b)); redraw();
 }));
 redraw();
 </script>

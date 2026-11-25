@@ -1,0 +1,45 @@
+<div class="prose">
+  <span class="eyebrow">Motor heat</span>
+  <h2>Are we cooking the motors?</h2>
+  <p>Not from what the logs show. The motor's rated current (10.8 A, from the design review) is a <b>continuous</b> rating: the current it can carry forever without overheating. Short bursts far above it are normal and expected. That's what the 32 A peak torque rating is for.</p>
+  <p>Heat in the coils goes as current squared, and a motor this size takes minutes to warm up. So what matters for heat is the <b>average of current squared over minutes</b> (the RMS), not the peaks. Over the 11/22 court sessions <span class="badge meas">measured</span>:</p>
+</div>
+
+<div class="panel tablewrap">
+  <table>
+    <thead><tr><th>Session (11/22)</th><th>Length</th><th>RMS, whole session</th><th>Worst 5 minutes</th><th>Worst 1 minute</th><th>Highest sample</th></tr></thead>
+    <tbody>
+      <tr><td>16:26</td><td class="num">14 min</td><td class="num">4.4–4.6 A</td><td class="num">5.5–6.2 A</td><td class="num">7.7–8.9 A</td><td class="num">32 A</td></tr>
+      <tr><td>17:03 (includes the 17:08 fault)</td><td class="num">15 min</td><td class="num">4.8–5.0 A</td><td class="num">5.9–6.2 A</td><td class="num">11.6–12.0 A</td><td class="num">42 A</td></tr>
+      <tr><td>17:19</td><td class="num">18 min</td><td class="num">4.7–4.9 A</td><td class="num">6.7–6.9 A</td><td class="num">8.2–8.4 A</td><td class="num">33 A</td></tr>
+    </tbody>
+  </table>
+  <p class="src">Ranges cover the left and right motors. From the 20 Hz VESC motor-current samples.</p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="heat"><div class="ttl">Left motor, 17:03 session: current vs. 5-minute RMS</div><div class="sub">Grey: motor current, 2 samples a second shown. Orange: rolling 5-minute RMS, the number that tracks heat. <span class="badge meas">measured</span></div></div>
+</div>
+
+<div class="prose">
+  <p>The 5-minute RMS stays around half the rated current. The worst single minute touches it. So the motors are fine for court testing. Three reasons not to relax:</p>
+  <ul>
+    <li><b>A basketball game is harder than a test session:</b> more starts, stops and turns, for 40+ minutes. Raising braking (fix 2) adds heat too. Log a real practice before trusting this.</li>
+    <li><b>The units may not match.</b> The VESC reports current as the peak of each phase's sine wave. Motor datasheets usually rate current as RMS, which would make 10.8 A RMS about <b>15.3 A</b> in VESC units, and we'd have even more margin. We need the DB87 datasheet to know which. <span class="badge est">estimate</span></li>
+    <li><b>Nothing watches motor temperature.</b> Both VESCs are set up to read a 10 kΩ thermistor on the motor, but nothing is connected (they read −77 °C). If the DB87 has a temperature sensor wire, connecting it lets the VESC cut power before the motor overheats. Otherwise the Teensy can track the rolling RMS and warn.</li>
+  </ul>
+</div>
+
+<script>
+const { line, legend, data } = Story;
+data("motor-heat.json").then(d => {
+  const P = d["170317"].L;
+  const host = document.getElementById("heat");
+  const ch = line(host, { xMax: P[P.length - 1][0], yMax: 40, h: 240, xTicks: [0, 120, 240, 360, 480, 600, 720, 840], xFmt: v => (v / 60) + " min", yTicks: [0, 10, 20, 30, 40], yFmt: v => v + " A",
+    refs: [{ y: 10.8, label: "10.8 A rated (continuous)", color: "var(--ok)" }],
+    series: [{ color: "var(--ink-3)", width: 1, opacity: .55 }, { color: "var(--motor)", width: 3 }],
+    tip: t => { const p = P.reduce((a, b) => Math.abs(b[0] - t) < Math.abs(a[0] - t) ? b : a); return { x: p[0], ys: [p[1], p[2]], html: `${(p[0] / 60).toFixed(1)} min<br>current ${p[1].toFixed(1)} A<br><span style="color:var(--motor)">5-min RMS ${p[2].toFixed(1)} A</span>` }; } });
+  ch.draw([P.map(p => [p[0], p[1]]), P.map(p => [p[0], p[0] < 60 ? null : p[2]])]);
+  legend(host, [{ color: "var(--ink-3)", label: "motor current (size only)" }, { color: "var(--motor)", label: "rolling 5-minute RMS" }, { color: "var(--ok)", label: "rated continuous current" }]);
+});
+</script>

@@ -46,7 +46,7 @@ const rows = [
   { n: "Fix 1 + 2: 7.5 A, 20 A", cap: 7.5, lim: 20 },
   { n: "7.5 A, 25 A (after profile)", cap: 7.5, lim: 25 },
 ].map(r => ({ ...r, hi: stop(4.92, r.cap, r.lim, 0), lo: stop(4.92, r.cap, r.lim, 0.1) }));
-const host = root.querySelector("#sp-chart");
+const host = document.querySelector("#sp-chart");
 const W = Math.round(Math.max(320, Math.min(900, host.clientWidth || 600))), lw = Math.min(230, W * 0.42), H = rows.length * 46 + 44, mr = 56;
 const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Stop time estimates" }, host);
 const X = s => lw + s / 5 * (W - lw - mr);

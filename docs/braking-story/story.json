@@ -1,17 +1,72 @@
 {
   "sections": [
-    { "file": "00-start.html", "nav": "The story" },
-    { "file": "01-battery.html", "nav": "48 V vs 53 V" },
-    { "file": "02-motor-current.html", "nav": "Motor current is force" },
-    { "file": "03-regen.html", "nav": "Yes, we regen" },
-    { "file": "04-rule.html", "nav": "Two limits" },
-    { "file": "05-limits.html", "nav": "Target vs trip wire" },
-    { "file": "06-clamp.html", "nav": "The 50 RPM clamp" },
-    { "file": "07-fault-1708.html", "nav": "The 17:08 fault" },
-    { "file": "08-overshoot.html", "nav": "Overshoot" },
-    { "file": "09-fault-1803.html", "nav": "The 18:03 fault" },
-    { "file": "10-fixes.html", "nav": "Fixes" },
-    { "file": "11-battery-state.html", "nav": "Battery state" },
-    { "file": "12-open.html", "nav": "Still open" }
+    {
+      "file": "00-start.html",
+      "nav": "The story"
+    },
+    {
+      "file": "00b-watch.html",
+      "nav": "Watch a stop"
+    },
+    {
+      "file": "01-battery.html",
+      "nav": "48 V vs 53 V"
+    },
+    {
+      "file": "02-motor-current.html",
+      "nav": "Motor current is force"
+    },
+    {
+      "file": "03-regen.html",
+      "nav": "Yes, we regen"
+    },
+    {
+      "file": "04-rule.html",
+      "nav": "Two limits"
+    },
+    {
+      "file": "05-limits.html",
+      "nav": "Target vs trip wire"
+    },
+    {
+      "file": "06-clamp.html",
+      "nav": "The 50 RPM clamp"
+    },
+    {
+      "file": "07-fault-1708.html",
+      "nav": "The 17:08 fault"
+    },
+    {
+      "file": "08-overshoot.html",
+      "nav": "Overshoot"
+    },
+    {
+      "file": "09-fault-1803.html",
+      "nav": "The 18:03 fault"
+    },
+    {
+      "file": "10-fixes.html",
+      "nav": "Fixes"
+    },
+    {
+      "file": "10b-motor-heat.html",
+      "nav": "Motor heat"
+    },
+    {
+      "file": "10c-redesign.html",
+      "nav": "Proposal: force control"
+    },
+    {
+      "file": "11-battery-state.html",
+      "nav": "Battery state"
+    },
+    {
+      "file": "12-open.html",
+      "nav": "Still open"
+    },
+    {
+      "file": "12b-context.html",
+      "nav": "What I need"
+    }
   ]
 }

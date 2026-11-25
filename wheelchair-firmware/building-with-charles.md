@@ -102,7 +102,7 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
   - A press with any corner carrying almost nothing (< 50 counts or < 5% of the load) is rejected: check that sensor. The LED stays on.
 - **Sensor faults disarm LEAN:** a raw reading ≤ 340 or ≥ 4000 on any channel (both layouts), or, on the corner layout, the CoP stepping more than 0.75" between control ticks (a sensor dropping out).
 - **Empty-plate baseline:** configured under "Corner layout sensors" (with per-channel gains, all 1.0). While DISARMED with the seat empty and steady for 3 s, the firmware re-zeroes it in RAM (logs "Empty plate re-zeroed"), if within 30 counts of the configured value. Reseating the plate moved it ≈10 counts (391/406/427/400 → 383/396/420/404).
-- **Accuracy (E11, plate on):** 28.2 lb at four known spots located within 0.4" (typically 0.25") with gains 1.0. See `../experiments/README.md`.
+- **Accuracy (E12, plate on):** 28.2 lb at four known spots located within 0.4" (typically 0.25") with gains 1.0. See `../experiments/README.md`.
 
 ## Plate and sensors (as of 2026-11-21, plus layout)
 - **Sensors:** FlexiForce A502 force sensors in a plus, each through an MCP6004 transimpedance amp. Readings depend strongly on contact area.
@@ -115,6 +115,6 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
 - PCB (KiCad, plain text): `../pcb/` (README has the pin/net table).
 - Design doc text (partly stale, rider and sponsor names redacted): `../docs/cdr/critical-design-review.txt`.
 - VESC firmware source excerpts (CAN, FOC): `../docs/vesc-firmware-ref/`.
-- Meeting notes and the detailed scrubbed meeting summary: `../notes/`.
+- Meeting notes: `../notes/` (`2026-11-21-meeting-detailed.md` is the full chronological summary of the 11/21-22 sessions).
 - Full chair telemetry from every session (gzipped tap logs): `logs/sessions/`, indexed in its README.
 - Issues: `MasonNelson1/lean-control-firmware`, filed as FriChaFri (`GH_TOKEN=$(gh auth token --user FriChaFri) gh ...`; the default gh account is enterprise-blocked).

@@ -363,8 +363,10 @@ The first left attempt (23:52:29–51) was unstable because the jug wasn't sitti
 - **Front vs back gains are unknown** (equal in one run, 2:1 in the other). That matters for fore-aft centre of pressure and the square's front/back placement.
 - **Better test (tomorrow):** with the plate and its rubber stoppers on, the real contact, put a known weight at marked spots directly over each sensor and at (0,0). That measures the system as it's actually used, and gives each sensor's gain plus a centre-of-pressure accuracy check in one go.
 
-## E11: plate-on known weight, rectangle layout (2026-11-22)
-**Setup:** rectangle (corner) layout, plate and seat on. A 28.2 lb weight set at four marked spots in plate inches (origin at the old plus centre, x right, y forward). Gains all 1.0. Wall times and the data file are not in this branch; the results below are as reported by the team.
+## E12: plate-on known weight, rectangle layout (2026-11-22)
+Data: `data/2026-11-22-E12-plate-on-28lb.csv` (the bare-sensor weight repeat is E11, `data/2026-11-22-E11-weight-repeat.csv`; it isn't written up here yet).
+
+**Setup:** rectangle (corner) layout, plate and seat on. A 28.2 lb weight set at four marked spots in plate inches (origin at the old plus centre, x right, y forward). Gains all 1.0. Wall times are not in this write-up; the results below are as reported by the team.
 
 | True spot | Measured CoP | Error |
 |---|---|---|

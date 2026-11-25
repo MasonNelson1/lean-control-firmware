@@ -8,5 +8,5 @@ the code; the docs can be stale.
 - Weird sensor data: investigate the hardware first (plate, bolts, preload, wiring). Prefer an easy hardware fix over a software workaround.
 - Chair experiments are catalogued in `../experiments/README.md` (setup, protocol, data, results).
 - PCB (KiCad, plain text): `../pcb/`, see its README.
-- Meeting history and decisions: `../notes/` (start with the detailed meeting summary). Session telemetry: `logs/sessions/`.
+- Meeting history and decisions: `../notes/` (`2026-11-21-summary.md` for the short version, `2026-11-21-meeting-detailed.md` for every decision and number). Session telemetry: `logs/sessions/`.
 - Live chair setup (Bluetooth telemetry, tools, upload rules, experiments): `building-with-charles.md`.

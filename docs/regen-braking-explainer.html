@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LEAN Regen Braking</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~44rem) with full-width figure panels; the bench-schematic animation opens the page. */
+:root{
+  --bg:#f3f6f8; --panel:#ffffff; --ink:#15202b; --ink-2:#4d5b69; --ink-3:#7c8996; --line:#d6dee5; --grid:#e8edf1;
+  --batt:#257de0; --motor:#f47230; --fault:#d03b3c; --ok:#0a7d33; --cap:#6a4ce2;
+  --batt-soft:rgba(37,125,224,.12); --motor-soft:rgba(244,114,48,.14); --fault-soft:rgba(208,59,60,.10);
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151b; --panel:#161e26; --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98; --line:#2a3642; --grid:#1f2933;
+  --batt:#338ced; --motor:#e76624; --fault:#eb6263; --ok:#2fb457; --cap:#9887ef;
+  --batt-soft:rgba(51,140,237,.16); --motor-soft:rgba(231,102,36,.18); --fault-soft:rgba(235,98,99,.14); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151b; --panel:#161e26; --ink:#e7edf2; --ink-2:#a9b6c2; --ink-3:#7d8b98; --line:#2a3642; --grid:#1f2933;
+  --batt:#338ced; --motor:#e76624; --fault:#eb6263; --ok:#2fb457; --cap:#9887ef;
+  --batt-soft:rgba(51,140,237,.16); --motor-soft:rgba(231,102,36,.18); --fault-soft:rgba(235,98,99,.14); color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:400 1.02rem/1.62 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:2rem 4rem}
+.wrap{max-width:60rem;margin:0 auto;display:flex;flex-direction:column;gap:3.25rem}
+.prose{max-width:44rem;display:flex;flex-direction:column;gap:.9rem}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(2rem,5vw,3rem);font-weight:800;letter-spacing:-.02em}
+h2{font-size:clamp(1.45rem,3.2vw,1.9rem);font-weight:700;letter-spacing:-.01em}
+h3{font-size:1.1rem;font-weight:700}
+p{margin:0}
+.eyebrow{font:500 .74rem/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.lede{font-size:1.12rem;color:var(--ink-2)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.b{color:var(--batt);font-weight:600}.m{color:var(--motor);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.1rem}
+.formula{font:500 1.05rem/1.5 var(--f-mono);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;overflow-x:auto}
+.callout{border-left:3px solid var(--motor);padding:.2rem 0 .2rem 1rem;color:var(--ink)}
+.callout.fault{border-color:var(--fault)}
+.callout.blue{border-color:var(--batt)}
+/* sim */
+.controls{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:500 .86rem/1.2 var(--f-body);background:transparent;color:var(--ink-2);border:0;border-right:1px solid var(--line);padding:.55rem .8rem;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.btn{font:600 .9rem/1 var(--f-body);background:var(--ink);color:var(--bg);border:0;border-radius:8px;padding:.62rem 1rem;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--batt);outline-offset:2px}
+.scene{width:100%;height:auto;display:block}
+.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.6rem}
+.ro{border:1px solid var(--line);border-radius:8px;padding:.55rem .7rem;display:flex;flex-direction:column;gap:.15rem;min-width:0}
+.ro .l{font:500 .7rem/1.2 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.ro .v{font:500 1.3rem/1.2 var(--f-mono);font-variant-numeric:tabular-nums}
+.ro .s{font-size:.78rem;color:var(--ink-3)}
+.banner{font:600 .92rem/1.35 var(--f-body);padding:.55rem .8rem;border-radius:8px;background:var(--fault-soft);color:var(--fault);border:1px solid var(--fault)}
+.scrub{display:flex;gap:.7rem;align-items:center}
+.scrub input{flex:1;min-width:0;accent-color:var(--ink)}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr));gap:1rem}
+.chart{position:relative;min-width:0}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart .ttl{font:600 .92rem/1.3 var(--f-body);margin-bottom:.15rem}
+.chart .sub{font-size:.8rem;color:var(--ink-3);margin-bottom:.4rem}
+.legend{display:flex;flex-wrap:wrap;gap:.9rem;font-size:.8rem;color:var(--ink-2);margin-top:.3rem}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:.35rem}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:.4rem .55rem;font:400 .78rem/1.4 var(--f-mono);box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap;z-index:2}
+.axis text,.lbl{font:400 11px var(--f-mono);fill:var(--ink-3)}
+.lbl.ink{fill:var(--ink-2)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:32rem}
+th,td{text-align:left;padding:.55rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 .72rem/1.2 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font:600 .74rem/1 var(--f-body);padding:.3rem .5rem;border-radius:999px;white-space:nowrap}
+.pill.bad{background:var(--fault-soft);color:var(--fault)}.pill.good{color:var(--ok);border:1px solid var(--ok)}
+.pill.meh{color:var(--ink-2);border:1px solid var(--line)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:1rem}
+.two .panel{display:flex;flex-direction:column;gap:.6rem;min-width:0}
+.tag{font:500 .72rem/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase}
+.slider-row{display:flex;gap:.8rem;align-items:center;flex-wrap:wrap}
+.slider-row input{flex:1;min-width:10rem;accent-color:var(--motor)}
+.fine{font-size:.82rem;color:var(--ink-3)}
+ul.tight{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35rem}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+</head><body>
+<div class="wrap">
+
+<header class="prose">
+  <span class="eyebrow">LEAN chair · braking, explained from scratch</span>
+  <h1>LEAN Regen Braking</h1>
+  <p class="lede">Why the chair brakes too gently when it's fast, why a VESC faults right at the end of a hard stop, and why the battery reads 53 V when it says 48 V on the label. Press play and watch one hard stop from 3 m/s.</p>
+</header>
+
+<!-- ============ THE ANIMATION ============ -->
+<section class="panel" style="display:flex;flex-direction:column;gap:.9rem" aria-label="Animated hard stop">
+  <div class="controls">
+    <button class="btn" id="play">▶ Play the stop</button>
+    <button class="btn ghost" id="reset">Reset</button>
+    <div class="seg" role="group" aria-label="Which settings">
+      <button id="sc-today" aria-pressed="true">Today (−3 A cap)</button>
+      <button id="sc-cap20" aria-pressed="false">Fix 1: −20 A motor cap</button>
+      <button id="sc-regen" aria-pressed="false">Fix 1 + 2: also −7.5 A regen</button>
+    </div>
+  </div>
+
+  <svg class="scene" id="scene" viewBox="0 0 900 270" role="img" aria-label="Battery, VESC and wheel with current flowing between them">
+    <defs>
+      <pattern id="cellpat" width="22" height="10" patternUnits="userSpaceOnUse"><rect width="20" height="10" fill="var(--batt-soft)"/></pattern>
+    </defs>
+    <!-- battery -->
+    <g>
+      <rect x="20" y="60" width="170" height="120" rx="10" fill="var(--panel)" stroke="var(--batt)" stroke-width="2"/>
+      <rect x="190" y="95" width="10" height="50" rx="3" fill="var(--batt)"/>
+      <g id="cells"></g>
+      <text x="105" y="44" text-anchor="middle" class="lbl ink" style="font-size:13px">BATTERY</text>
+      <text x="105" y="206" text-anchor="middle" style="font:500 20px var(--f-mono);fill:var(--batt)" id="t-vb">53.5 V</text>
+      <text x="105" y="226" text-anchor="middle" class="lbl">"48 V" pack, 16 LiFePO4 cells</text>
+    </g>
+    <!-- battery wire -->
+    <path d="M200 105 H360" stroke="var(--line)" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path d="M200 135 H360" stroke="var(--line)" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path id="wb1" d="M200 105 H360" stroke="var(--batt)" stroke-width="5" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <path id="wb2" d="M360 135 H200" stroke="var(--batt)" stroke-width="5" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <text x="280" y="86" text-anchor="middle" class="lbl" id="t-ibl">battery current</text>
+    <text x="280" y="164" text-anchor="middle" style="font:600 17px var(--f-mono);fill:var(--batt)" id="t-ib">0.0 A</text>
+    <!-- VESC -->
+    <rect x="360" y="70" width="150" height="100" rx="8" fill="var(--panel)" stroke="var(--ink-2)" stroke-width="2"/>
+    <text x="435" y="112" text-anchor="middle" style="font:700 18px var(--f-display);fill:var(--ink)">VESC</text>
+    <text x="435" y="134" text-anchor="middle" class="lbl">motor controller</text>
+    <text x="435" y="152" text-anchor="middle" class="lbl" id="t-mode">braking</text>
+    <rect id="faultbox" x="360" y="70" width="150" height="100" rx="8" fill="var(--fault-soft)" stroke="var(--fault)" stroke-width="3" opacity="0"/>
+    <!-- motor wire -->
+    <path d="M510 105 H660" stroke="var(--line)" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path d="M510 135 H660" stroke="var(--line)" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path id="wm1" d="M660 105 H510" stroke="var(--motor)" stroke-width="5" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <path id="wm2" d="M510 135 H660" stroke="var(--motor)" stroke-width="5" stroke-dasharray="2 14" stroke-linecap="round" fill="none"/>
+    <text x="585" y="86" text-anchor="middle" class="lbl">motor current</text>
+    <text x="585" y="164" text-anchor="middle" style="font:600 17px var(--f-mono);fill:var(--motor)" id="t-im">0.0 A</text>
+    <!-- wheel -->
+    <g transform="translate(770 120)">
+      <circle r="92" fill="none" stroke="var(--ink-2)" stroke-width="7"/>
+      <circle r="38" fill="var(--panel)" stroke="var(--motor)" stroke-width="3"/>
+      <g id="spokes"></g>
+      <text y="5" text-anchor="middle" style="font:700 11px var(--f-mono);fill:var(--motor)">MOTOR</text>
+    </g>
+    <text x="770" y="246" text-anchor="middle" style="font:500 15px var(--f-mono);fill:var(--motor)" id="t-vm">23.8 V</text>
+    <text x="770" y="264" text-anchor="middle" class="lbl">motor voltage (from spinning)</text>
+    <!-- energy arrow -->
+    <g id="energy">
+      <path d="M640 30 H230" stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+      <text x="435" y="22" text-anchor="middle" class="lbl ink" id="t-energy">energy flows this way while braking</text>
+    </g>
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink-3)"/></marker></defs>
+  </svg>
+
+  <div id="banner" class="banner" hidden>Right VESC faulted. Motor current jumped past ~50 A, so the VESC let go of the right motor for 0.6 s. Only the left wheel is braking now, and the chair swerves.</div>
+
+  <div class="readouts">
+    <div class="ro"><span class="l">Time</span><span class="v" id="r-t">0.00 s</span><span class="s">since the stop began</span></div>
+    <div class="ro"><span class="l">Chair speed</span><span class="v" id="r-v">3.00 m/s</span><span class="s">starts at 3 m/s</span></div>
+    <div class="ro"><span class="l">Power, motor side</span><span class="v m" id="r-pm">0 W</span><span class="s">motor V × motor A</span></div>
+    <div class="ro"><span class="l">Power, battery side</span><span class="v b" id="r-pb">0 W</span><span class="s">battery V × battery A</span></div>
+    <div class="ro"><span class="l">Braking force</span><span class="v" id="r-f">0 N</span><span class="s">right wheel, follows motor A</span></div>
+  </div>
+
+  <div class="scrub">
+    <span class="mono fine">0 s</span>
+    <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the stop">
+    <span class="mono fine" id="tmax">2.5 s</span>
+  </div>
+
+  <div class="charts">
+    <div class="chart" id="c-speed"><div class="ttl">Chair speed</div><div class="sub">m/s over the stop</div></div>
+    <div class="chart" id="c-amps"><div class="ttl">Right motor's two currents</div><div class="sub">amps over the stop; hover for values</div></div>
+  </div>
+</section>
+
+<!-- ============ 48 vs 53 ============ -->
+<section class="prose">
+  <span class="eyebrow">Question 1</span>
+  <h2>It says 48 V. Why do we keep saying 53 V?</h2>
+  <p>"48 V" is the battery's <em>name</em>, its size class. It isn't what you measure across it. Our pack is 16 lithium iron phosphate (LiFePO4) cells in series. Each cell is officially "3.2 V", so the official pack voltage is 16 × 3.2 = <span class="mono">51.2 V</span>. It gets sold as "48 V" because it drops into the same systems as a classic 48 V lead-acid pack (four 12 V car-style batteries in series).</p>
+  <p>It's the same thing with a "12 V" car battery. Nobody measures 12.0 V on one. It reads about 12.6 V resting and over 14 V while the engine charges it.</p>
+  <p>The real voltage depends on how charged the battery is. LiFePO4 has a very flat middle: from about 20% to 90% charged, each cell sits between roughly 3.25 and 3.35 V, so the pack sits around <span class="mono">52–53.5 V</span> almost all the time. On 11/22 we measured <b class="mono">53.4–53.6 V</b> on the court. That's the number I use in the math, because it's what the VESC actually sees.</p>
+</section>
+
+<section class="panel">
+  <div class="chart" id="c-volt"><div class="ttl">Pack voltage vs. how charged it is</div><div class="sub">Typical resting voltage for a 16-cell LiFePO4 pack (typical curve, not Bioenno's own data)</div></div>
+</section>
+
+<section class="prose">
+  <p>Two lines on that chart matter for braking. The <b>charger</b> fills the pack to <span class="mono">58.2 V</span>. The <b>VESC's hard limit is 57 V</b>. Right after charging, the pack is already near the VESC's limit. Braking pushes the voltage up a little more, so hard braking on a fresh pack is the one case where voltage could become a problem. Mid-charge, at 53 V, there's lots of room.</p>
+</section>
+
+<!-- ============ MOTOR CURRENT ============ -->
+<section class="prose">
+  <span class="eyebrow">Question 2</span>
+  <h2>What "motor current" actually is</h2>
+  <p>Start with the one fact that everything else hangs on: <b>a motor and a generator are the same machine.</b> Our hub motors have coils of copper wire sitting next to strong magnets. Two things are always true at the same time:</p>
+  <ul class="tight">
+    <li><b>Current through the coils makes force.</b> Current in a wire next to a magnet gets pushed sideways. More current, more push. This is true no matter which way the current flows. Flip the direction and the push flips too.</li>
+    <li><b>Spinning the motor makes voltage.</b> Moving the magnets past the coils generates a voltage across them, and the faster it spins, the higher that voltage. This is called back-EMF. On our chair it's about <span class="mono">7.9 V per m/s</span>, so about <span class="mono">24 V</span> at 3 m/s (estimated from the 11/22 logs).</li>
+  </ul>
+  <p>"<span class="m">Motor current</span>" just means the current flowing in those coils. Because current in the coils is what makes force, <b>motor current is the force</b>: double the motor current, double the push on the wheel. Whether that push speeds the chair up or slows it down depends on which way the current flows.</p>
+</section>
+
+<section class="two">
+  <div class="panel">
+    <span class="tag" style="color:var(--batt)">Driving</span>
+    <svg viewBox="0 0 320 120" class="scene" role="img" aria-label="Driving: current flows from battery to motor">
+      <rect x="6" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--batt)" stroke-width="2"/><text x="41" y="64" text-anchor="middle" class="lbl ink">battery</text>
+      <rect x="125" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--ink-2)" stroke-width="2"/><text x="160" y="64" text-anchor="middle" class="lbl ink">VESC</text>
+      <circle cx="275" cy="60" r="34" fill="var(--panel)" stroke="var(--motor)" stroke-width="2"/><text x="275" y="64" text-anchor="middle" class="lbl ink">motor</text>
+      <path d="M80 60 H118" stroke="var(--batt)" stroke-width="3" marker-end="url(#arr2)"/>
+      <path d="M199 60 H236" stroke="var(--motor)" stroke-width="3" marker-end="url(#arr3)"/>
+      <text x="160" y="110" text-anchor="middle" class="lbl">energy: battery → motor → chair speeds up</text>
+      <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--batt)"/></marker>
+      <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--motor)"/></marker></defs>
+    </svg>
+    <p>This is the picture you had: the battery supplies current, the VESC sends it into the motor, and the push spins the wheel forward. That's correct, <b>for driving</b>.</p>
+  </div>
+  <div class="panel">
+    <span class="tag" style="color:var(--motor)">Braking</span>
+    <svg viewBox="0 0 320 120" class="scene" role="img" aria-label="Braking: current flows from motor back to battery">
+      <rect x="6" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--batt)" stroke-width="2"/><text x="41" y="64" text-anchor="middle" class="lbl ink">battery</text>
+      <rect x="125" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--ink-2)" stroke-width="2"/><text x="160" y="64" text-anchor="middle" class="lbl ink">VESC</text>
+      <circle cx="275" cy="60" r="34" fill="var(--panel)" stroke="var(--motor)" stroke-width="2"/><text x="275" y="64" text-anchor="middle" class="lbl ink">motor</text>
+      <path d="M118 60 H80" stroke="var(--batt)" stroke-width="3" marker-end="url(#arr2)"/>
+      <path d="M236 60 H199" stroke="var(--motor)" stroke-width="3" marker-end="url(#arr3)"/>
+      <text x="160" y="110" text-anchor="middle" class="lbl">energy: chair's motion → motor → battery</text>
+    </svg>
+    <p>When braking, <b>the battery doesn't send anything</b>. The spinning wheel turns the motor into a generator. The VESC lets current flow <em>out</em> of the coils, and because current in the coils always makes force, that outgoing current makes a push <em>backwards</em> against the spin. That's the braking force. The energy it takes out of the chair's motion goes back into the battery.</p>
+  </div>
+</section>
+
+<section class="prose">
+  <p class="callout">So the fix to the sentence you were building: <b>motor current is the current in the motor's coils, and it is the braking force.</b> When braking, it flows <em>out</em> of the motor, and the VESC decides how much to let out. Let more out and you brake harder. That current then has to go somewhere, and the only place is the battery. That's <span class="b">battery current</span>.</p>
+  <p>Why would those two currents ever be different? Because the VESC doesn't just pass current through like a wire. It works like a transformer for DC: it trades voltage for current. Which brings us to the one rule.</p>
+</section>
+
+<!-- ============ THE RULE ============ -->
+<section class="prose">
+  <span class="eyebrow">The rule</span>
+  <h2>Same power on both sides, different volts and amps</h2>
+  <p>Energy can't appear or vanish inside the VESC (apart from some heat, which I'll ignore). So the <b>power</b> coming out of the motor equals the power going into the battery. Power is volts times amps:</p>
+  <div class="formula"><span class="m">motor volts × motor amps</span> = <span class="b">battery volts × battery amps</span></div>
+  <p>Now put in what's fixed. The battery side is pinned: about <span class="mono">53.5 V</span>, and we've capped battery current at <span class="mono">3 A</span> per motor because we thought the battery couldn't take more. So the battery side can never take more than 53.5 × 3 ≈ <b class="mono">160 W</b> per motor.</p>
+  <p>The motor side has to fit inside that same 160 W. But the motor's voltage isn't fixed: it depends on speed. So:</p>
+  <div class="formula"><span class="m">motor amps allowed</span> = 160 W ÷ <span class="m">motor volts</span> = 160 W ÷ (7.9 V × speed in m/s)</div>
+  <p>Fast means high motor voltage, so 160 W buys only a few amps: weak braking. Slow means low motor voltage, so the same 160 W buys a lot of amps: strong braking, then far too strong. Drag the slider and watch.</p>
+</section>
+
+<section class="panel" style="display:flex;flex-direction:column;gap:.8rem">
+  <div class="slider-row">
+    <label for="spd" class="mono" style="min-width:8.5rem">Chair speed <b id="spd-v">2.00 m/s</b></label>
+    <input type="range" id="spd" min="0.15" max="3" step="0.01" value="2">
+  </div>
+  <div class="readouts">
+    <div class="ro"><span class="l">Motor voltage</span><span class="v m" id="s-vm">—</span><span class="s">7.9 V × speed</span></div>
+    <div class="ro"><span class="l">Motor amps, 3 A cap</span><span class="v m" id="s-i3">—</span><span class="s">160 W ÷ motor V</span></div>
+    <div class="ro"><span class="l">Motor amps, 7.5 A cap</span><span class="v m" id="s-i75">—</span><span class="s">400 W ÷ motor V</span></div>
+    <div class="ro"><span class="l">What happens</span><span class="v" id="s-what" style="font-size:1rem;font-family:var(--f-body);font-weight:600">—</span><span class="s" id="s-why">&nbsp;</span></div>
+  </div>
+  <div class="chart" id="c-rule"><div class="ttl">Motor current the battery cap allows, by speed</div><div class="sub">Per motor. The battery cap alone sets this curve; the dashed lines are the VESC's own motor-current limits.</div></div>
+</section>
+
+<!-- ============ TWO PROBLEMS ============ -->
+<section class="prose">
+  <span class="eyebrow">The two problems</span>
+  <h2>One curve, two different ways to fail</h2>
+  <p>Read the curve from right to left, which is what happens during a stop: the chair starts fast on the right and slows toward zero on the left.</p>
+</section>
+
+<section class="two">
+  <div class="panel">
+    <span class="tag" style="color:var(--ink-3)">Problem 2 · the fast end</span>
+    <h3>Braking is too weak at speed</h3>
+    <p>At 3 m/s the motor makes about 24 V. Divide the 160 W the battery can take by 24 V and you get only <b class="mono">~6.7 A</b> of motor current. Motor current is braking force, so the chair brakes gently right when you most want it to brake hard.</p>
+    <p><b>The bottleneck is the battery cap.</b> Let the battery take 7.5 A instead of 3 A (400 W) and the motor current at 3 m/s goes up to ~17 A, about 2.5× the braking force. That's the "raise the regen limit" fix, or the brake resistor, which is just another place to send that power.</p>
+  </div>
+  <div class="panel">
+    <span class="tag" style="color:var(--fault)">Problem 1 · the slow end</span>
+    <h3>The VESC faults near the end of a stop</h3>
+    <p>Below about 1 m/s the motor makes only a few volts, so 160 W would allow 20, 40, 80 A. <b>The battery cap stops limiting anything.</b> Our firmware (the 50 RPM clamp) tells the VESC to brake as hard as it possibly can all the way down. So when the cap lets go, motor current surges, overshoots the VESC's hard limit of about 50 A, and the VESC shuts off to protect itself. It releases that motor for ~0.6 s and the chair swerves.</p>
+    <p><b>Raising the battery cap doesn't help here</b>, because the battery isn't the bottleneck at low speed. The fix is to cap the motor current itself (the −20 A setting already uploaded, not ridden yet), then firmware that eases off the brake as the chair slows.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <h3 style="margin-bottom:.6rem">Same stop from 3 m/s, three settings (simulated)</h3>
+  <div class="tablewrap">
+  <table id="results">
+    <thead><tr><th>Setting</th><th>Stop time</th><th>Stop distance</th><th>Peak motor current</th><th>Result</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  <p class="fine" style="margin-top:.6rem">Fix 1 alone barely changes the stop, because it only touches the last fraction of a second. It just stops the fault. Fix 2 is what makes the chair stop faster. You need both, and you should test them one at a time: ride the −20 A cap first, then raise the regen limit.</p>
+</section>
+
+<section class="prose">
+  <h3>The numbers behind this page</h3>
+  <ul class="tight fine">
+    <li>Battery 53.5 V: measured 53.4–53.6 V on 11/22. Battery cap: −3 A per VESC today (6 A total).</li>
+    <li>Motor voltage 7.9 V per m/s: estimated from an 11/22 log line (1690 ERPM at 13.7% duty on 53 V) and the earlier note that 900 ERPM ≈ 0.49 m/s.</li>
+    <li>Chair + rider 120 kg: an estimate. Both motors brake equally until a fault.</li>
+    <li>The simulation ignores losses. Real motors turn some braking energy into heat in their own coils, which adds a bit of braking, so real stops are a little shorter than shown.</li>
+    <li>The fault surge is drawn as a simplified spike to ~55 A where the cap lets go (about 0.6 m/s with the old −32.7 A limit). The 11/22 logs show the faults happened during hard stops but don't pin the exact speed.</li>
+    <li>Fix 1 not faulting is what we expect. It hasn't been ridden yet.</li>
+  </ul>
+</section>
+
+</div>
+
+<script>
+(() => {
+const K = 7.94, M = 120, VB = 53.5, HARD = 50;
+const SC = {
+  today: { name: "Today (−3 A cap)", P: VB*3, Imax: 32.68, faults: true },
+  cap20: { name: "Fix 1: −20 A motor cap", P: VB*3, Imax: 20, faults: false },
+  regen: { name: "Fix 1 + 2: −20 A cap, −7.5 A regen", P: VB*7.5, Imax: 20, faults: false },
+};
+function simulate(sc){
+  let v=3,t=0,x=0,dt=0.001,spike=null,out=[],peak=0,stopT=null;
+  const T=2.5;
+  for(let i=0;t<=T+1e-9;i++){
+    const Ia = v>0 ? Math.min(sc.P/(K*Math.max(v,1e-3)), sc.Imax) : 0;
+    let IL=Ia, IR=Ia, fault=false;
+    if(sc.faults && v>0){
+      if(spike===null && sc.P/(K*v) >= sc.Imax) spike=t;
+      if(spike!==null){ const ts=t-spike; if(ts<0.06) IR=Ia+(55-Ia)*(ts/0.06); else if(ts<0.66){IR=0;fault=true} }
+    }
+    if(sc.faults && spike!==null && v<=0){ const ts=t-spike; if(ts>=0.06&&ts<0.66) fault=true; }
+    peak=Math.max(peak,IR);
+    const vm=K*Math.max(v,0), ib=vm*IR/VB;
+    if(i%10===0) out.push({t, v:Math.max(v,0), im:IR, ib, vm, fault, spiking: spike!==null && t-spike<0.06 && v>0});
+    if(v>0){ const a=K*(IL+IR)/M; v-=a*dt; x+=Math.max(v,0)*dt; if(v<=0){v=0; stopT=t;} }
+    t+=dt;
+  }
+  return {pts:out, stopT, dist:x, peak, spike};
+}
+const RES = {}; for(const k in SC) RES[k]=simulate(SC[k]);
+
+// ---------- helpers ----------
+const NS="http://www.w3.org/2000/svg";
+const el=(tag,attrs={},parent)=>{const e=document.createElementNS(NS,tag);for(const a in attrs)e.setAttribute(a,attrs[a]);if(parent)parent.appendChild(e);return e;};
+const $=id=>document.getElementById(id);
+const fmt=(n,d=1)=>(Math.abs(n)<0.05&&d===1?0:n).toFixed(d);
+
+// ---------- results table ----------
+const tb=document.querySelector("#results tbody");
+for(const k in SC){const r=RES[k];const tr=document.createElement("tr");
+  const res = SC[k].faults ? '<span class="pill bad">VESC faults, chair swerves</span>' : (k==="regen" ? '<span class="pill good">Stops faster, no fault (expected)</span>' : '<span class="pill meh">No fault (expected), same stop</span>');
+  tr.innerHTML=`<td>${SC[k].name}</td><td class="num">${r.stopT.toFixed(2)} s</td><td class="num">${r.dist.toFixed(1)} m</td><td class="num">${r.peak.toFixed(0)} A</td><td>${res}</td>`;tb.appendChild(tr);}
+
+// ---------- generic line chart ----------
+function lineChart(host, {xMax, yMin=0, yMax, xTicks, yTicks, xLabel, yLabel, series, refs=[], bands=[], h=220, xFmt=v=>v, tip, mr=14}){
+  const W=Math.round(Math.max(300,Math.min(900,host.clientWidth||520))),H=h,ml=44,mt=12,mb=34;
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img"},host);
+  const X=v=>ml+(v/xMax)*(W-ml-mr), Y=v=>mt+(1-(v-yMin)/(yMax-yMin))*(H-mt-mb);
+  for(const b of bands) el("rect",{x:X(b.x0),y:mt,width:X(b.x1)-X(b.x0),height:H-mt-mb,fill:b.fill},svg);
+  const ax=el("g",{class:"axis"},svg);
+  for(const t of yTicks){el("line",{x1:ml,x2:W-mr,y1:Y(t),y2:Y(t),stroke:"var(--grid)","stroke-width":1},ax);const tx=el("text",{x:ml-6,y:Y(t)+4,"text-anchor":"end"},ax);tx.textContent=t;}
+  for(const t of xTicks){const tx=el("text",{x:X(t),y:H-mb+16,"text-anchor":"middle"},ax);tx.textContent=xFmt(t);}
+  el("line",{x1:ml,x2:W-mr,y1:Y(yMin),y2:Y(yMin),stroke:"var(--ink-3)","stroke-width":1},ax);
+  if(xLabel){const tx=el("text",{x:W-mr,y:H-3,"text-anchor":"end"},ax);tx.textContent=xLabel;}
+  if(yLabel){const tx=el("text",{x:ml,y:mt-2+0,"text-anchor":"start",dy:"-0.1em"},ax);tx.textContent="";}
+  for(const r of refs){el("line",{x1:ml,x2:W-mr,y1:Y(r.y),y2:Y(r.y),stroke:r.color,"stroke-width":1.5,"stroke-dasharray":r.dash||"5 4"},svg);
+    const tx=el("text",{x:r.edge?W-mr+5:(r.left?ml+4:W-mr-4),y:r.edge?Y(r.y)+4:(r.below?Y(r.y)+13:Y(r.y)-5),"text-anchor":(r.edge||r.left)?"start":"end",class:"lbl",style:`fill:${r.color}`},svg);tx.textContent=r.label;}
+  const paths=[];
+  for(const s of series){const p=el("path",{fill:"none",stroke:s.color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round","stroke-dasharray":s.dash||"none"},svg);paths.push(p);
+    if(s.label){const tx=el("text",{class:"lbl",style:`fill:${s.color};font-weight:500`},svg);s._lbl=tx;}}
+  const cursor=el("line",{y1:mt,y2:H-mb,stroke:"var(--ink-3)","stroke-width":1,"stroke-dasharray":"3 3",opacity:0},svg);
+  const dots=series.map(s=>el("circle",{r:4,fill:s.color,stroke:"var(--panel)","stroke-width":2,opacity:0},svg));
+  function draw(dataFn){series.forEach((s,i)=>{const d=dataFn(s);paths[i].setAttribute("d",d.filter(p=>p[1]<=yMax+1e-9).map((p,j)=>(j?"L":"M")+X(p[0]).toFixed(1)+" "+Y(Math.min(Math.max(p[1],yMin),yMax)).toFixed(1)).join(""));
+    if(s._lbl&&s.labelAt){const p=s.labelAt(d);s._lbl.setAttribute("x",X(p[0]));s._lbl.setAttribute("y",Y(p[1])+(s.labelDy||-8));s._lbl.setAttribute("text-anchor",s.labelAnchor||"start");s._lbl.textContent=s.label;}});}
+  function setCursor(xv, ys){cursor.setAttribute("x1",X(xv));cursor.setAttribute("x2",X(xv));cursor.setAttribute("opacity",1);
+    dots.forEach((d,i)=>{if(ys[i]==null){d.setAttribute("opacity",0);return;}d.setAttribute("cx",X(xv));d.setAttribute("cy",Y(Math.min(Math.max(ys[i],yMin),yMax)));d.setAttribute("opacity",1);});}
+  // hover
+  const tipEl=document.createElement("div");tipEl.className="tip";tipEl.hidden=true;host.appendChild(tipEl);
+  const hit=el("rect",{x:ml,y:mt,width:W-ml-mr,height:H-mt-mb,fill:"transparent"},svg);
+  hit.addEventListener("pointermove",e=>{if(!tip)return;const r=svg.getBoundingClientRect();const xv=Math.max(0,Math.min(xMax,((e.clientX-r.left)/r.width*W-ml)/(W-ml-mr)*xMax));
+    const info=tip(xv);if(!info)return;setCursor(xv,info.ys);tipEl.innerHTML=info.html;tipEl.hidden=false;
+    const hr=host.getBoundingClientRect();let lx=e.clientX-hr.left+12;if(lx>hr.width-150)lx=e.clientX-hr.left-160;tipEl.style.left=lx+"px";tipEl.style.top=(e.clientY-hr.top-10)+"px";});
+  hit.addEventListener("pointerleave",()=>{tipEl.hidden=true;if(host._onLeave)host._onLeave();});
+  return {draw,setCursor,X,Y,svg};
+}
+
+// ---------- animation charts ----------
+let cur="today";
+const speedHost=$("c-speed"), ampsHost=$("c-amps");
+const leg=document.createElement("div");leg.className="legend";leg.innerHTML='<span><i style="background:var(--motor)"></i>motor current (= braking force)</span><span><i style="background:var(--batt)"></i>battery current</span>';ampsHost.appendChild(leg);
+const T=2.5;
+const at=(pts,t)=>pts[Math.min(pts.length-1,Math.max(0,Math.round(t/0.01)))];
+const cs=lineChart(speedHost,{xMax:T,yMax:3.2,xTicks:[0,0.5,1,1.5,2,2.5],yTicks:[0,1,2,3],xLabel:"seconds",xFmt:v=>v+"s",
+  series:[{color:"var(--ink)"}], tip:t=>{const p=at(RES[cur].pts,t);return{ys:[p.v],html:`t ${p.t.toFixed(2)} s<br>speed ${p.v.toFixed(2)} m/s`}}});
+const ca=lineChart(ampsHost,{xMax:T,yMax:60,xTicks:[0,0.5,1,1.5,2,2.5],yTicks:[0,10,20,30,40,50,60],xLabel:"seconds",xFmt:v=>v+"s",
+  refs:[{y:HARD,label:"~50 A: VESC faults",color:"var(--fault)",left:true}],
+  series:[{color:"var(--motor)"},{color:"var(--batt)"}],
+  tip:t=>{const p=at(RES[cur].pts,t);return{ys:[p.im,p.ib],html:`t ${p.t.toFixed(2)} s<br><span style="color:var(--motor)">motor ${p.im.toFixed(1)} A</span><br><span style="color:var(--batt)">battery ${p.ib.toFixed(1)} A</span>`}}});
+function drawSimCharts(){const pts=RES[cur].pts;cs.draw(()=>pts.map(p=>[p.t,p.v]));ca.draw(s=>pts.map(p=>[p.t,s.color.includes("motor")?p.im:p.ib]));}
+
+// ---------- scene ----------
+const cells=$("cells");for(let i=0;i<8;i++){el("rect",{x:32+i*19.5,y:74,width:15,height:92,rx:3,fill:"var(--batt-soft)",stroke:"var(--batt)","stroke-width":1},cells);}
+const spokes=$("spokes");for(let i=0;i<8;i++){const a=i*Math.PI/4;el("line",{x1:38*Math.cos(a),y1:38*Math.sin(a),x2:88*Math.cos(a),y2:88*Math.sin(a),stroke:"var(--ink-3)","stroke-width":3,"stroke-linecap":"round"},spokes);}
+let dashB=0,dashM=0,angle=0;
+function render(t, dtReal){
+  const p=at(RES[cur].pts,t);
+  $("r-t").textContent=t.toFixed(2)+" s";$("r-v").textContent=p.v.toFixed(2)+" m/s";
+  $("t-im").textContent=fmt(p.im)+" A";$("t-ib").textContent=fmt(p.ib)+" A";$("t-vm").textContent=p.vm.toFixed(1)+" V";
+  $("r-pm").textContent=Math.round(p.vm*p.im)+" W";$("r-pb").textContent=Math.round(VB*p.ib)+" W";$("r-f").textContent=Math.round(K*p.im)+" N";
+  // wire widths & flow
+  const wm=2+Math.min(p.im,55)/55*9, wb=2+Math.min(p.ib,8)/55*9*6.9;
+  for(const id of["wm1","wm2"])$(id).setAttribute("stroke-width",p.im>0.05?wm:0);
+  for(const id of["wb1","wb2"])$(id).setAttribute("stroke-width",p.ib>0.05?Math.min(wb,11):0);
+  if(dtReal){dashM-=p.im*dtReal*14;dashB-=p.ib*dtReal*14;angle+=p.v/0.3*dtReal*57.3;}
+  for(const id of["wm1","wm2"])$(id).setAttribute("stroke-dashoffset",dashM);
+  for(const id of["wb1","wb2"])$(id).setAttribute("stroke-dashoffset",dashB);
+  spokes.setAttribute("transform",`rotate(${angle})`);
+  $("faultbox").setAttribute("opacity",p.fault?1:0);
+  $("banner").hidden=!p.fault;
+  $("t-mode").textContent=p.fault?"FAULT: motor released":(p.v>0?"braking":"stopped");
+  $("t-mode").style.fill=p.fault?"var(--fault)":"";
+  cs.setCursor(t,[p.v]);ca.setCursor(t,[p.im,p.ib]);
+  $("scrub").value=Math.round(t/T*1000);
+}
+speedHost._onLeave=ampsHost._onLeave=()=>render(time);
+
+let time=0,playing=false,last=null;
+const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function frame(ts){if(!playing){last=null;return;}if(last==null)last=ts;const dt=Math.min(0.05,(ts-last)/1000);last=ts;
+  const slow=0.5; // half speed so it can be followed
+  time+=dt*slow; if(time>=T){time=T;playing=false;$("play").textContent="▶ Play again";}
+  render(time,dt*slow*2);if(playing)requestAnimationFrame(frame);}
+$("play").addEventListener("click",()=>{if(playing){playing=false;$("play").textContent="▶ Resume";return;}if(time>=T)time=0;playing=true;$("play").textContent="❚❚ Pause";requestAnimationFrame(frame);});
+$("reset").addEventListener("click",()=>{playing=false;time=0;$("play").textContent="▶ Play the stop";render(0);});
+$("scrub").addEventListener("input",e=>{playing=false;$("play").textContent="▶ Resume";time=e.target.value/1000*T;render(time);});
+const scBtns={today:$("sc-today"),cap20:$("sc-cap20"),regen:$("sc-regen")};
+for(const k in scBtns)scBtns[k].addEventListener("click",()=>{cur=k;for(const j in scBtns)scBtns[j].setAttribute("aria-pressed",j===k);drawSimCharts();render(time);});
+drawSimCharts();
+// resting frame: mid-stop so the still image already shows current flowing
+time=0.6;render(time);
+if(!reduce){time=0;render(0);setTimeout(()=>{playing=true;$("play").textContent="❚❚ Pause";requestAnimationFrame(frame);},700);}
+
+// ---------- voltage chart ----------
+const soc=[0,5,10,20,30,40,50,60,70,80,90,95,100];
+const cell=[2.50,3.00,3.20,3.25,3.28,3.30,3.31,3.32,3.33,3.34,3.36,3.40,3.45];
+const vHost=$("c-volt");
+const cv=lineChart(vHost,{xMax:100,yMin:38,yMax:60,h:260,xTicks:[0,20,40,60,80,100],yTicks:[40,44,48,52,56,60],xLabel:"% charged",xFmt:v=>v+"%",
+  bands:[{x0:20,x1:90,fill:"var(--batt-soft)"}],
+  refs:[{y:58.2,label:"58.2 V: charger fills to",color:"var(--ink-2)",left:true,dash:"2 3"},{y:57,label:"57 V: VESC hard limit",color:"var(--fault)",left:true,below:true,dash:"6 3"},
+        {y:51.2,label:"51.2 V: official (16 × 3.2 V)",color:"var(--ink-3)",dash:"2 3",below:true},{y:48,label:"48 V: the name on the label",color:"var(--ink-3)",dash:"2 3",below:true}],
+  series:[{color:"var(--batt)"}],
+  tip:x=>{let i=0;while(i<soc.length-2&&soc[i+1]<x)i++;const f=(x-soc[i])/(soc[i+1]-soc[i]);const v=16*(cell[i]+f*(cell[i+1]-cell[i]));return{ys:[v],html:`${x.toFixed(0)}% charged<br>≈ ${v.toFixed(1)} V resting`}}});
+cv.draw(()=>soc.map((s,i)=>[s,16*cell[i]]));
+// measured band marker
+const mY1=cv.Y(53.6),mY2=cv.Y(53.4);
+el("rect",{x:cv.X(70),y:mY1-3,width:cv.X(92)-cv.X(70),height:(mY2-mY1)+6,rx:3,fill:"none",stroke:"var(--ink)","stroke-width":1.5},cv.svg);
+const mt=el("text",{x:cv.X(70)-6,y:mY1-10,"text-anchor":"end",class:"lbl ink"},cv.svg);mt.textContent="measured 11/22: 53.4–53.6 V";
+const ft=el("text",{x:cv.X(55),y:cv.Y(41.5),"text-anchor":"middle",class:"lbl",style:"fill:var(--batt)"},cv.svg);ft.textContent="flat middle: 20–90% charged ≈ 52–53.8 V";
+
+// ---------- rule chart ----------
+const rHost=$("c-rule");
+const rl=document.createElement("div");rl.className="legend";rl.innerHTML='<span><i style="background:var(--motor)"></i>battery cap 3 A (today)</span><span><i style="background:repeating-linear-gradient(90deg,var(--motor) 0 5px,transparent 5px 8px)"></i>battery cap 7.5 A</span><span><i style="background:var(--fault)"></i>~50 A: VESC hard limit, it faults</span><span><i style="background:var(--ink-3)"></i>32.7 A: old motor limit</span><span><i style="background:var(--cap)"></i>20 A: new motor cap (fix 1)</span>';
+const vs=[];for(let v=0.15;v<=3.0001;v+=0.01)vs.push(v);
+const cr=lineChart(rHost,{xMax:3,yMax:80,h:250,mr:50,xTicks:[0,0.5,1,1.5,2,2.5,3],yTicks:[0,20,40,60,80],xLabel:"chair speed (m/s)",
+  bands:[{x0:0,x1:0.40,fill:"var(--fault-soft)"}],
+  refs:[{y:HARD,label:"50 A",color:"var(--fault)",edge:true},{y:32.68,label:"32.7 A",color:"var(--ink-3)",edge:true},{y:20,label:"20 A",color:"var(--cap)",edge:true}],
+  series:[{color:"var(--motor)",label:"3 A cap",labelAt:d=>d.find(p=>p[0]>=2.2),labelDy:16,labelAnchor:"start"},{color:"var(--motor)",dash:"6 4",label:"7.5 A cap",labelAt:d=>d.find(p=>p[0]>=1.75),labelDy:-9,labelAnchor:"start"}],
+  tip:v=>{const a=VB*3/(K*v),b=VB*7.5/(K*v);return{ys:[a,b],html:`${v.toFixed(2)} m/s · motor ${(K*v).toFixed(1)} V<br>3 A cap → ${a.toFixed(1)} A<br>7.5 A cap → ${b.toFixed(1)} A`}}});
+cr.draw(s=>vs.map(v=>[v,(s.dash?VB*7.5:VB*3)/(K*v)]));
+rHost.appendChild(rl);
+const zt=el("text",{x:cr.X(0.2),y:cr.Y(74),"text-anchor":"middle",class:"lbl",style:"fill:var(--fault)"},cr.svg);zt.textContent="problem 1";
+const zt2=el("text",{x:cr.X(2.55),y:cr.Y(2.5),"text-anchor":"middle",class:"lbl ink"},cr.svg);zt2.textContent="problem 2: few amps";
+function setSpeed(v){$("spd-v").textContent=v.toFixed(2)+" m/s";const vm=K*v,a=VB*3/vm,b=VB*7.5/vm;
+  $("s-vm").textContent=vm.toFixed(1)+" V";$("s-i3").textContent=a.toFixed(1)+" A";$("s-i75").textContent=b.toFixed(1)+" A";
+  let w,why;if(a>HARD){w="Fault zone";why="cap allows more than ~50 A";$("s-what").style.color="var(--fault)";}
+  else if(a>20){w="Battery cap no longer limits";why="only a motor cap keeps it safe";$("s-what").style.color="var(--fault)";}
+  else if(a<10){w="Weak braking";why="the 3 A battery cap is the bottleneck";$("s-what").style.color="var(--ink-2)";}
+  else {w="Decent braking";why="cap and speed roughly balanced";$("s-what").style.color="var(--ink)";}
+  $("s-what").textContent=w;$("s-why").textContent=why;cr.setCursor(v,[a,b]);}
+$("spd").addEventListener("input",e=>setSpeed(+e.target.value));
+rHost._onLeave=()=>setSpeed(+$("spd").value);
+setSpeed(2);
+})();
+</script>
+
+</body></html>

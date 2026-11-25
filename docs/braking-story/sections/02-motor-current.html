@@ -1,0 +1,44 @@
+<div class="prose">
+  <span class="eyebrow">The motor</span>
+  <h2>Motor current is force</h2>
+  <p>A motor and a generator are the same machine. Ours are Nanotec DB87 brushless motors with a gearbox, about 14.55 : 1, between each motor and its wheel. Inside each motor, coils of copper wire sit next to strong magnets. Two things are always true, at the same time:</p>
+  <ul>
+    <li><b>Current in the coils makes force.</b> Current flowing in a wire next to a magnet gets pushed sideways. Double the current and you double the push. Flip the direction of the current and the push flips too.</li>
+    <li><b>Spinning makes voltage.</b> Moving magnets past coils generates a voltage across them, called back-EMF. The faster it spins, the higher the voltage. On our chair it's about <b class="mono">6.6 V per m/s</b> of chair speed <span class="badge meas">measured</span>, so about 26 V at the 4 m/s we hit on the court.</li>
+  </ul>
+  <p>"<span class="m">Motor current</span>" is the current in those coils. It's the thing that makes force, so you can read it as force. Our numbers: about <b class="mono">5 N of push per amp, per wheel</b> <span class="badge est">estimate</span>. With 20 A in both motors, that's about 200 N on a 120 kg chair, or about 1.7 m/s² of braking (0.17 g).</p>
+  <p>The sign says which way the force points. Positive current pushes the chair forward (driving). Negative current pushes back against the roll (braking). The VESC controls the amount and the sign.</p>
+</div>
+
+<div class="two">
+  <div class="panel">
+    <span class="tag" style="color:var(--batt)">Driving · motor current +</span>
+    <svg viewBox="0 0 320 120" class="scene" role="img" aria-label="Driving: energy flows from the battery to the motor">
+      <defs><marker id="mcA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--batt)"/></marker>
+      <marker id="mcB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--motor)"/></marker></defs>
+      <rect x="6" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--batt)" stroke-width="2"/><text x="41" y="64" text-anchor="middle" class="lbl ink">battery</text>
+      <rect x="125" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--ink-2)" stroke-width="2"/><text x="160" y="64" text-anchor="middle" class="lbl ink">VESC</text>
+      <circle cx="275" cy="60" r="34" fill="var(--panel)" stroke="var(--motor)" stroke-width="2"/><text x="275" y="64" text-anchor="middle" class="lbl ink">motor</text>
+      <path d="M80 60 H118" stroke="var(--batt)" stroke-width="3" marker-end="url(#mcA)"/>
+      <path d="M199 60 H236" stroke="var(--motor)" stroke-width="3" marker-end="url(#mcB)"/>
+      <text x="160" y="112" text-anchor="middle" class="lbl">energy: battery → motor → chair speeds up</text>
+    </svg>
+    <p>The battery supplies energy. The VESC pushes current into the coils in the direction that pushes the wheel forward.</p>
+  </div>
+  <div class="panel">
+    <span class="tag" style="color:var(--motor)">Braking · motor current −</span>
+    <svg viewBox="0 0 320 120" class="scene" role="img" aria-label="Braking: energy flows from the motor to the battery">
+      <rect x="6" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--batt)" stroke-width="2"/><text x="41" y="64" text-anchor="middle" class="lbl ink">battery</text>
+      <rect x="125" y="35" width="70" height="50" rx="6" fill="var(--panel)" stroke="var(--ink-2)" stroke-width="2"/><text x="160" y="64" text-anchor="middle" class="lbl ink">VESC</text>
+      <circle cx="275" cy="60" r="34" fill="var(--panel)" stroke="var(--motor)" stroke-width="2"/><text x="275" y="64" text-anchor="middle" class="lbl ink">motor</text>
+      <path d="M118 60 H80" stroke="var(--batt)" stroke-width="3" marker-end="url(#mcA)"/>
+      <path d="M236 60 H199" stroke="var(--motor)" stroke-width="3" marker-end="url(#mcB)"/>
+      <text x="160" y="112" text-anchor="middle" class="lbl">energy: chair's motion → motor → battery</text>
+    </svg>
+    <p>The spinning wheel turns the motor into a generator. The VESC lets current flow <em>out</em> of the coils. Current in the coils always makes force, and this current runs the other way, so the force pushes back against the roll. That's the braking. The energy it pulls out of the chair's motion has to go somewhere, and it goes into the battery.</p>
+  </div>
+</div>
+
+<div class="prose">
+  <p class="callout">The VESC has two currents to manage, and the whole story is about the difference between them. <span class="m">Motor current</span> (in the coils) is the force. <span class="b">Battery current</span> (in the wires to the battery) is where the energy goes. They are different numbers because the VESC converts between them, like a DC transformer. The rule for that conversion is two sections down.</p>
+</div>

@@ -1,0 +1,47 @@
+<div class="prose">
+  <span class="eyebrow">The 50 RPM clamp</span>
+  <h2>How the Teensy tells the VESC to brake</h2>
+  <p>The Teensy never sends a current. Fifty times a second it sends each VESC a <span class="k">speed setpoint</span> in RPM: "make this wheel turn at X". The VESC runs its own speed controller, which compares the setpoint with the wheel's <span class="mono">measured</span> speed and picks a motor current to close the gap. The bigger the gap, the more current. That current then goes through the two ceilings from the rule section.</p>
+  <p>When the rider leans back to stop, the Teensy's smoother ramps the setpoint down at 117 RPM per second. The wheel can't slow that fast (the battery ceiling holds braking back), so the gap grows. The <b>50 RPM clamp</b> (<code>MAX_RPM_COMMAND_DIFF = 50</code> in <code>drive_constants.h</code>) stops the setpoint from going more than 50 RPM below the measured speed. It was added after earlier over-current faults, to keep the VESC from braking too hard.</p>
+  <p>It doesn't do that. The VESC's speed controller turns a 50 RPM gap into about 60% of the motor-current setting straight away, and its integral term ramps that up to 100% within about a second (<code>s_pid_kp</code> and <code>s_pid_ki</code> = 0.004 on both VESCs) <span class="badge est">estimate</span>. So the clamp keeps the VESC asking for <b>maximum braking for the whole stop</b>. At speed, the battery ceiling still wins, so you don't feel it. Near the end of a stop, you do.</p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="cl-rpm"><div class="ttl">Court, 11/22 at 17:08:10: a hard stop from 4.3 m/s</div><div class="sub">Left wheel. Setpoint (what the Teensy asked for) vs. measured speed. Hover for values. <span class="badge meas">measured</span></div></div>
+  <div class="chart" id="cl-amp"><div class="ttl">The same stop: currents</div><div class="sub">Left VESC. Negative = braking / charging. 20 samples a second.</div></div>
+</div>
+
+<div class="prose">
+  <p>Reading the two charts left to right:</p>
+  <ol>
+    <li><b>Driving (0–1.1 s).</b> Motor current about +19 A, battery current about +10 A.</li>
+    <li><b>Rider leans back (1.1 s).</b> The setpoint starts falling. Within 0.3 s it's 50 RPM below the wheel, and the clamp holds it there.</li>
+    <li><b>Braking against the battery cap (1.4–2.4 s).</b> <span class="b">Battery current sits at −3 A</span>, flat. That's the cap. Motor current creeps from −6 to −10 A as the wheel slows, exactly as the rule predicts. The chair slows at about 1.1 m/s² (0.12 g). <b>This is problem 2, measured.</b></li>
+    <li><b>Below 50 RPM (about 2.9 s).</b> "Measured minus 50" would be negative, so the setpoint falls to the smoother's own value, which has reached 0. The wheel is still turning at about 1.5 m/s. The next section zooms in on what happens there.</li>
+  </ol>
+</div>
+
+<script>
+const { line, legend, data, C } = Story;
+data("fault-1708.json").then(d => {
+  const P = d.points, f = d.faults.find(x => x.code !== "NONE");
+  const marks = [{ x: 1.1, color: "var(--ink-3)", label: "lean back" }, { x: 1.42, color: "var(--ink-3)", label: "clamp", dy: 14 }, { x: 2.93, color: "var(--cmd)", label: "setpoint → 0", left: true }, { x: f.t, color: "var(--fault)", label: "right VESC faults", dy: 14 }];
+  const xt = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
+  const near = t => P.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+  const h1 = root.querySelector("#cl-rpm");
+  const c1 = line(h1, { xMax: 4.3, yMin: -10, yMax: 150, h: 240, xTicks: xt, yTicks: [0, 50, 100, 150], xFmt: v => v + "s", yFmt: v => v + " rpm", marks,
+    series: [{ color: "var(--ink)", width: 2.5 }, { color: "var(--cmd)", width: 2 }, { color: "var(--cmd)", dash: "2 4", width: 1.2, opacity: .8 }],
+    tip: t => { const p = near(t); return { x: p.t, ys: [p.actL, p.cmdL, p.actL - 50], html: `t ${p.t.toFixed(2)} s<br>measured ${p.actL.toFixed(0)} rpm (${(p.actL * C.RPM_TO_MPS).toFixed(2)} m/s)<br><span style="color:var(--cmd)">setpoint ${p.cmdL.toFixed(0)} rpm</span>` }; } });
+  c1.draw([P.map(p => [p.t, p.actL]), P.map(p => [p.t, p.cmdL]), P.map(p => [p.t, p.actL - 50])]);
+  legend(h1, [{ color: "var(--ink)", label: "measured wheel speed" }, { color: "var(--cmd)", label: "setpoint sent by the Teensy" }, { color: "var(--cmd)", dash: 1, label: "measured − 50 (the clamp)" }]);
+  const h2 = root.querySelector("#cl-amp");
+  const c2 = line(h2, { xMax: 4.3, yMin: -45, yMax: 25, h: 240, xTicks: xt, yTicks: [-40, -30, -20, -10, 0, 10, 20], xFmt: v => v + "s", yFmt: v => v + " A", marks,
+    hbands: [{ y0: -3.3, y1: -2.7, fill: "var(--batt-soft)" }],
+    refs: [{ y: -32.68, label: "−32.7 A motor setting (target ceiling)", color: "var(--cap)", right: true, below: true }],
+    series: [{ color: "var(--motor)", width: 2.5 }, { color: "var(--batt)", width: 2 }],
+    tip: t => { const p = near(t); return { x: p.t, ys: [p.curL, p.iinL], html: `t ${p.t.toFixed(2)} s<br><span style="color:var(--motor)">motor ${p.curL.toFixed(1)} A</span><br><span style="color:var(--batt)">battery ${p.iinL.toFixed(1)} A</span><br>duty ${p.dutyL.toFixed(3)}` }; } });
+  c2.draw([P.map(p => [p.t, p.curL]), P.map(p => [p.t, p.iinL])]);
+  c2.el("text", { x: c2.X(1.9), y: c2.Y(-3) + 16, "text-anchor": "middle", class: "lbl", style: "fill:var(--batt);font-weight:600" }).textContent = "battery pinned at −3 A";
+  legend(h2, [{ color: "var(--motor)", label: "motor current (force)" }, { color: "var(--batt)", label: "battery current" }]);
+});
+</script>

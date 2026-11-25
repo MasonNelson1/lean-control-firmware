@@ -1,0 +1,56 @@
+<div class="prose">
+  <span class="eyebrow">Problem 1, measured</span>
+  <h2>The 17:08 fault</h2>
+  <p>At about 2.9 s into that stop, the setpoint drops to 0 RPM while the wheels are still rolling at roughly 35–55 RPM (1.1–1.7 m/s). The VESC has a special rule for this. Any setpoint below <code>s_pid_min_erpm</code> (a few wheel RPM) means "stop", and the VESC handles "stop" by driving the motor's <b>duty to zero</b>:</p>
+</div>
+<pre class="code">// VESC firmware 6.06, mcpwm_foc.c
+// Brake when set ERPM is below min ERPM
+if (control_mode == SPEED && fabsf(speed_pid_set_rpm) &lt; s_pid_min_erpm) {
+    control_duty = true;
+    duty_set = 0.0;        // apply zero volts to the motor, using up to the full motor-current setting
+}</pre>
+<div class="prose">
+  <p>Duty zero means the VESC applies zero volts to a motor that's generating about 10 V on its own (at 1.5 m/s). The only things in the way of that 10 V are the coils' own resistance, about 0.17 Ω, and the VESC's current control. Ten volts across 0.17 Ω could push about <b>58 A</b> <span class="badge est">estimate</span>, more than the trip wire. Two more things line up against us:</p>
+  <ul>
+    <li><b>Duty near zero erases the battery ceiling.</b> The rule divides the battery cap by duty, and duty is now heading to 0. Nothing on the battery side limits the braking any more. You can see it below: battery current goes <em>back toward zero</em> while motor current jumps.</li>
+    <li><b>The VESC's controller is already pushing at full braking.</b> The clamp kept it at maximum for the last 1.5 s. It hands over to the duty-zero controller while already running flat out.</li>
+  </ul>
+  <p>The VESC's current control is supposed to hold the motor current at or under the −32.7 A target. It doesn't keep up. The measured current swings between −7 and −42 A from one sample to the next, and the wheel's measured speed starts jumping around too. These samples are averages over 50 ms, so the instantaneous peaks are higher than anything on the chart. The trip proves at least one instant crossed 52 A.</p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="f1-amp"><div class="ttl">17:08:12.8 → 17:08:14.3, both motors</div><div class="sub">Motor current, 20 samples a second. Each sample is an average, so the real peaks are higher. <span class="badge meas">measured</span></div></div>
+  <div class="chart" id="f1-duty"><div class="ttl">Right VESC: duty and battery current</div><div class="sub">Duty is the motor voltage as a fraction of the battery's. It's heading for zero, and the battery ceiling (cap ÷ duty) goes with it.</div></div>
+</div>
+
+<div class="prose">
+  <p class="callout fault">The VESC isn't failing because of the motor or the battery. It's tripping its own over-current wire, because the Teensy asked a rolling wheel to stop instantly. The VESC's response to "stop instantly" is to short the motor through its current control, and that control overshoots.</p>
+  <p>Earlier you asked whether the motor setting is a target we'll always overshoot, so it has to be tuned to keep the overshoot under 50 A. That's half right. Overshoot this big happens <em>because the command jumps</em>, from "brake at the battery cap" to "duty zero now". A smooth command barely overshoots. So the real fix is to stop the jump (next sections), and the lower 20 A target is the safety margin while we do.</p>
+</div>
+
+<script>
+const { line, legend, data } = Story;
+data("fault-1708.json").then(d => {
+  const P = d.points.filter(p => p.t >= 2.4 && p.t <= 3.9), f = d.faults.find(x => x.code !== "NONE"), r = d.faults.find(x => x.code === "NONE");
+  const near = t => P.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+  const marks = [{ x: 2.93, color: "var(--cmd)", label: "setpoint → 0", left: true }, { x: f.t, color: "var(--fault)", label: "right VESC faults: releases motor" }, { x: r.t, color: "var(--ink-3)", label: "back on", left: true }];
+  const xt = [2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8];
+  const h1 = root.querySelector("#f1-amp");
+  const c1 = line(h1, { xMin: 2.4, xMax: 3.9, yMin: -60, yMax: 5, h: 280, xTicks: xt, yTicks: [-60, -50, -40, -30, -20, -10, 0], xFmt: v => v.toFixed(1) + "s", yFmt: v => v + " A", marks,
+    bands: [{ x0: f.t, x1: r.t, fill: "var(--fault-soft)" }],
+    refs: [{ y: -32.68, label: "−32.7 A target ceiling", color: "var(--cap)", right: true, below: true }, { y: -52.22, label: "−52.2 A trip wire (right)", color: "var(--fault)", right: true, below: true }, { y: -49.03, label: "−49.0 A trip wire (left)", color: "var(--fault)", dash: "2 3" }],
+    series: [{ color: "var(--motor)", width: 2.5 }, { color: "var(--motor)", width: 1.5, dash: "4 3", opacity: .75 }],
+    tip: t => { const p = near(t); return { x: p.t, ys: [p.curR, p.curL], html: `t ${p.t.toFixed(2)} s<br>right motor ${p.curR.toFixed(1)} A<br>left motor ${p.curL.toFixed(1)} A<br>right wheel ${p.actR.toFixed(0)} rpm · left ${p.actL.toFixed(0)} rpm` }; } });
+  c1.draw([P.map(p => [p.t, p.t > f.t && p.t < r.t ? null : p.curR]), P.map(p => [p.t, p.curL])]);
+  const pk = P.reduce((a, b) => b.curR < a.curR ? b : a);
+  c1.dots([{ x: pk.t, y: pk.curR, color: "var(--motor)", label: `${pk.curR.toFixed(1)} A sample`, left: true }]);
+  legend(h1, [{ color: "var(--motor)", label: "right motor (faulted)" }, { color: "var(--motor)", dash: 1, label: "left motor" }, { color: "var(--fault)", label: "trip wire" }, { color: "var(--cap)", label: "target ceiling" }]);
+  const h2 = root.querySelector("#f1-duty");
+  const c2 = line(h2, { xMin: 2.4, xMax: 3.9, yMin: -6, yMax: 6, h: 200, xTicks: xt, yTicks: [-6, -3, 0, 3, 6], xFmt: v => v.toFixed(1) + "s", marks,
+    bands: [{ x0: f.t, x1: r.t, fill: "var(--fault-soft)" }],
+    series: [{ color: "var(--ink)", width: 2 }, { color: "var(--batt)", width: 2 }],
+    tip: t => { const p = near(t); return { x: p.t, ys: [p.dutyR * 10, p.iinR], html: `t ${p.t.toFixed(2)} s<br>duty ${p.dutyR.toFixed(3)}<br><span style="color:var(--batt)">battery ${p.iinR.toFixed(1)} A</span>` }; } });
+  c2.draw([P.map(p => [p.t, p.dutyR * 10]), P.map(p => [p.t, p.iinR])]);
+  legend(h2, [{ color: "var(--ink)", label: "duty × 10 (0.5 duty plots at 5)" }, { color: "var(--batt)", label: "battery current (A)" }]);
+});
+</script>

@@ -1,0 +1,24 @@
+<div class="prose">
+  <span class="eyebrow">Battery state</span>
+  <h2>Full, normal, low: what voltage can tell us</h2>
+  <p>LiFePO4's flat middle makes an exact percentage from voltage unreliable: 20% and 90% are only about 1.5 V apart, and driving at 20 A sags the voltage by about 1.6 V. But the two ends are steep and easy to read. That's exactly the three states that matter for safety:</p>
+</div>
+
+<div class="panel tablewrap">
+  <table>
+    <thead><tr><th>State</th><th>Resting voltage</th><th>Why it matters</th><th>Proposed response</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill bad">Full</span></td><td class="num">≥ 54.5 V</td><td>Just off the charger. Braking pushes toward the VESC's 57 V fault. The VESC already backs off regen from 55 V.</td><td>LED shows "braking limited" for the first minutes. Reset the gauge to 100%.</td></tr>
+      <tr><td><span class="pill good">Normal</span></td><td class="num">50.5–54.5 V</td><td>The flat middle. Nothing to do.</td><td>No LED.</td></tr>
+      <tr><td><span class="pill meh">Low</span></td><td class="num">48.5–50.5 V</td><td>Roughly the last 10% <span class="badge est">estimate</span>. Still safe, time to wrap up.</td><td>One LED blinks slowly.</td></tr>
+      <tr><td><span class="pill bad">Empty</span></td><td class="num">&lt; 48.5 V</td><td>The VESC starts cutting drive power at 48 V and stops at 44 V. Deep discharge shortens the battery's life.</td><td>LED blinks fast. Stop using the chair and charge.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="prose">
+  <p><b>Reading resting voltage while driving.</b> The Teensy already gets each VESC's battery voltage and current over CAN, 5–10 times a second. Correct for the sag with the pack resistance we measured from the logs (60–90 mΩ): <span class="mono">resting ≈ measured + battery current × 0.08 Ω</span>. Average it over a few seconds, and add a little hysteresis so the LED doesn't flicker between states. Blinking an LED is a behaviour change, so it gets flagged before upload. Which LED to use is still open.</p>
+  <h3>A percentage gauge, if we want one later</h3>
+  <p>Count charge instead of reading voltage. Each VESC already counts amp-hours used and regenerated (<code>ah=</code> in the logs). Remaining % ≈ 100% − net Ah used ÷ 30 Ah. Reset to 100% whenever the chair powers up with resting voltage ≥ 54.5 V (just charged). Store the running total in the Teensy's EEPROM, since the VESC counters reset at every power-up.</p>
+  <p class="callout fault"><b>Don't route the charger through the VESCs.</b> A VESC only measures current flowing between the battery and its own motor. There's no way to put the charger "behind" a VESC: the VESC has no charger input, and a charger connected to the battery bypasses it by design. The reset-to-100% rule gets the same information for free: after a full charge, the gauge knows it's at 100%.</p>
+</div>

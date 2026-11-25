@@ -1,0 +1,65 @@
+<div class="prose">
+  <span class="eyebrow">Overshoot</span>
+  <h2>Why a sudden command overshoots and a smooth one doesn't</h2>
+  <p><span class="badge ill">illustration</span> This section is a teaching model, not the VESC. It's a generic springy controller, tuned so that jumping straight to −32.7 A crosses the trip wire, as it did on 11/22. Use it to see the shape of the idea, not to read off numbers.</p>
+  <p>Any feedback controller that reacts fast also tends to overshoot when its target jumps: it pushes hard to close the gap, can't stop exactly on the target, swings past, and rings back. How far it swings depends on two things you can control: <b>how high the target is</b>, and <b>how suddenly it arrives</b>.</p>
+</div>
+
+<div class="panel">
+  <div class="row"><label for="os-t">Braking target <b id="os-tv">32.7 A</b></label><input type="range" id="os-t" min="10" max="35" step="0.5" value="32.68"></div>
+  <div class="row"><label for="os-r">Command ramps over <b id="os-rv">0 ms</b></label><input type="range" id="os-r" min="0" max="400" step="10" value="0"></div>
+  <div class="row">
+    <button class="btn ghost" data-p="old">Old: 32.7 A, instant</button>
+    <button class="btn ghost" data-p="fix1">Fix 1: 20 A, instant</button>
+    <button class="btn ghost" data-p="prof">Braking profile: 25 A over 250 ms</button>
+  </div>
+  <div class="readouts">
+    <div class="ro"><span class="l">Peak current</span><span class="v m" id="os-pk">–</span><span class="s">largest swing</span></div>
+    <div class="ro"><span class="l">Margin to trip</span><span class="v" id="os-mg">–</span><span class="s">trip wire 49 A (left VESC)</span></div>
+    <div class="ro"><span class="l">Result</span><span class="v" id="os-res" style="font-size:1rem;font-family:var(--f-body);font-weight:700">–</span><span class="s">&nbsp;</span></div>
+  </div>
+  <div class="chart" id="os-chart"><div class="ttl">Braking current after the command changes</div><div class="sub">Shown as positive amps of braking. <span class="badge ill">illustration</span></div></div>
+</div>
+
+<div class="prose">
+  <p>Try the three buttons. Lowering the target to 20 A (fix 1) brings the peak well under the trip wire, even with an instant command. Ramping the command over a few hundred milliseconds nearly removes the overshoot, so the target can sit higher (more braking for Parker) and still clear the wire. That's why the full fix for problem 1 has two parts: the lower setting now, and a smooth braking command in the firmware.</p>
+</div>
+
+<script>
+const { line, legend } = Story;
+const ZETA = 0.13, WN = 2 * Math.PI * 9, TRIP = 49.03, T = 0.5;
+function sim(target, rampS) {
+  let y = 0, dy = 0, dt = 1e-4, out = [], pk = 0;
+  for (let t = 0; t <= T; t += dt) {
+    const u = rampS > 0 ? target * Math.min(1, Math.max(0, (t - 0.02) / rampS)) : (t >= 0.02 ? target : 0);
+    const ddy = WN * WN * (u - y) - 2 * ZETA * WN * dy;
+    dy += ddy * dt; y += dy * dt; pk = Math.max(pk, y);
+    if (Math.round(t / dt) % 20 === 0) out.push([t, y, u]);
+  }
+  return { out, pk };
+}
+const host = root.querySelector("#os-chart");
+const ch = line(host, { xMax: T, yMax: 70, h: 260, xTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5], yTicks: [0, 10, 20, 30, 40, 50, 60, 70], xFmt: v => (v * 1000).toFixed(0) + " ms", yFmt: v => v + " A",
+  hbands: [{ y0: TRIP, y1: 70, fill: "var(--fault-soft)" }],
+  refs: [{ y: TRIP, label: "49 A trip wire: VESC faults", color: "var(--fault)", right: true }],
+  series: [{ color: "var(--cmd)", dash: "5 4", width: 1.8 }, { color: "var(--motor)", width: 2.5 }] });
+legend(host, [{ color: "var(--cmd)", dash: 1, label: "target the VESC is given" }, { color: "var(--motor)", label: "current that actually flows" }]);
+const tS = root.querySelector("#os-t"), rS = root.querySelector("#os-r");
+function upd() {
+  const tg = +tS.value, rp = +rS.value / 1000, s = sim(tg, rp);
+  root.querySelector("#os-tv").textContent = tg.toFixed(1) + " A";
+  root.querySelector("#os-rv").textContent = (+rS.value).toFixed(0) + " ms";
+  ch.draw([s.out.map(p => [p[0], p[2]]), s.out.map(p => [p[0], p[1]])]);
+  const pkT = s.out.reduce((a, b) => b[1] > a[1] ? b : a);
+  ch.dots([{ x: pkT[0], y: pkT[1], color: s.pk > TRIP ? "var(--fault)" : "var(--motor)", label: s.pk.toFixed(1) + " A peak" }]);
+  root.querySelector("#os-pk").textContent = s.pk.toFixed(1) + " A";
+  root.querySelector("#os-mg").textContent = (TRIP - s.pk).toFixed(1) + " A";
+  const res = root.querySelector("#os-res");
+  res.textContent = s.pk > TRIP ? "Trips: wheel released" : "Clears the trip wire";
+  res.style.color = s.pk > TRIP ? "var(--fault)" : "var(--ok)";
+}
+tS.addEventListener("input", upd); rS.addEventListener("input", upd);
+const PRE = { old: [32.68, 0], fix1: [20, 0], prof: [25, 250] };
+root.querySelectorAll("[data-p]").forEach(b => b.addEventListener("click", () => { const [a, r] = PRE[b.dataset.p]; tS.value = a; rS.value = r; upd(); }));
+upd();
+</script>

@@ -1,0 +1,58 @@
+<div class="prose">
+  <span class="eyebrow">The battery</span>
+  <h2>It says 48 V. We measure 53 V.</h2>
+  <p>"48 V" is the battery's name, the class of system it fits into. It isn't a measurement. Our pack is a Bioenno BLF-4830A: 16 lithium iron phosphate (LiFePO4) cells in series. Each cell is officially 3.2 V, so the official pack voltage is 16 × 3.2 = <span class="mono">51.2 V</span>. It's sold as "48 V" because it replaces a classic 48 V lead-acid pack (four 12 V batteries in series). A "12 V" car battery works the same way: it reads about 12.6 V at rest.</p>
+  <p>The voltage you actually measure depends on how full the pack is. LiFePO4 has a very flat middle. From about 20% to 90% charged, the pack sits around <span class="mono">52–53.8 V</span>. On 11/22 we measured <b class="mono">53.4–53.6 V</b> <span class="badge meas">measured</span>, so every calculation on this site uses 53.5 V.</p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="volt"><div class="ttl">Pack voltage at rest vs. how full it is</div><div class="sub">Typical curve for a 16-cell LiFePO4 pack, not Bioenno's own data <span class="badge est">estimate</span>. Lines are the VESC settings read on 11/22 <span class="badge meas">measured</span>. Hover for values.</div></div>
+</div>
+
+<div class="prose">
+  <p>The VESCs already have four voltage settings that protect the battery and themselves. Both VESCs have the same values:</p>
+</div>
+<div class="panel tablewrap">
+  <table>
+    <thead><tr><th>VESC setting</th><th>Value</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>l_max_vin</code></td><td class="num">57 V</td><td>The VESC's own hard limit. Above this it faults and lets go of the motor.</td></tr>
+      <tr><td><code>l_battery_regen_cut_end</code></td><td class="num">57 V</td><td>Braking current into the battery is fully off by here.</td></tr>
+      <tr><td><code>l_battery_regen_cut_start</code></td><td class="num">55 V</td><td>Above this the VESC starts reducing braking current into the battery. This is the "dynamically back off braking when the voltage is high" feature, and it's already on.</td></tr>
+      <tr><td><code>l_battery_cut_start</code></td><td class="num">48 V</td><td>Below this the VESC starts reducing drive power (about 3.0 V per cell, nearly empty).</td></tr>
+      <tr><td><code>l_battery_cut_end</code></td><td class="num">44 V</td><td>Drive power is fully off by here (2.75 V per cell).</td></tr>
+    </tbody>
+  </table>
+  <p class="src">Source: <code>wheelchair-firmware/docs/vesc-config-2026-11-22.txt</code>, read from both VESCs over CAN.</p>
+</div>
+
+<div class="prose">
+  <p class="callout fault">One thing to tighten: the regen cutoff ends at exactly 57 V, the same voltage where the VESC faults. Ending it at <b>56.5 V</b> leaves a margin, so a fresh pack gets gentle braking instead of a fault. That's one VESC setting, and it needs a flagged upload.</p>
+</div>
+
+<script>
+const { line, legend } = Story;
+const soc = [0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100];
+const cell = [2.50, 3.00, 3.20, 3.25, 3.28, 3.30, 3.31, 3.32, 3.33, 3.34, 3.36, 3.40, 3.45];
+const host = root.querySelector("#volt");
+const vAt = x => { let i = 0; while (i < soc.length - 2 && soc[i + 1] < x) i++; const f = (x - soc[i]) / (soc[i + 1] - soc[i]); return 16 * (cell[i] + f * (cell[i + 1] - cell[i])); };
+const ch = line(host, {
+  xMax: 100, yMin: 38, yMax: 60, h: 300, xTicks: [0, 20, 40, 60, 80, 100], yTicks: [40, 44, 48, 52, 56, 60], xFmt: v => v + "%", xLabel: "% charged", yFmt: v => v + " V",
+  bands: [{ x0: 20, x1: 90, fill: "var(--batt-soft)" }],
+  hbands: [{ y0: 55, y1: 57, fill: "var(--cap-soft)" }],
+  refs: [
+    { y: 58.2, label: "58.2 V charger fills to", color: "var(--ink-2)", dash: "2 3" },
+    { y: 57, label: "57 V VESC faults · regen fully off", color: "var(--fault)", dash: "6 3", right: true, below: true },
+    { y: 55, label: "55 V regen starts backing off", color: "var(--cap)", dash: "6 3", right: true, below: true },
+    { y: 51.2, label: "51.2 V official (16 × 3.2 V)", color: "var(--ink-3)", dash: "2 3", right: true, below: true },
+    { y: 48, label: "48 V name on the label · VESC starts cutting drive", color: "var(--ink-3)", dash: "2 3", right: true, below: true },
+    { y: 44, label: "44 V drive fully off", color: "var(--ink-3)", dash: "2 3", right: true, below: true },
+  ],
+  series: [{ color: "var(--batt)", width: 2.5 }],
+  tip: x => ({ ys: [vAt(x)], html: `${x.toFixed(0)}% charged<br>≈ ${vAt(x).toFixed(1)} V at rest` }),
+});
+ch.draw([soc.map((s, i) => [s, 16 * cell[i]])]);
+ch.el("rect", { x: ch.X(66), y: ch.Y(53.75), width: ch.X(92) - ch.X(66), height: ch.Y(53.25) - ch.Y(53.75), rx: 3, fill: "none", stroke: "var(--ink)", "stroke-width": 1.5 });
+ch.el("text", { x: ch.X(66), y: ch.Y(53.25) + 14, "text-anchor": "start", class: "lbl ink" }).textContent = "measured 11/22: 53.4–53.6 V";
+ch.el("text", { x: ch.X(55), y: ch.Y(41), "text-anchor": "middle", class: "lbl", style: "fill:var(--batt)" }).textContent = "flat middle: 20–90% charged ≈ 52–53.8 V";
+</script>

@@ -1,0 +1,14 @@
+<div class="prose">
+  <span class="eyebrow">Open</span>
+  <h2>Still open</h2>
+  <ul>
+    <li><b>Bioenno:</b> the protection board's charge-overcurrent trip, its delay, how it recovers, and whether regen through the SB50 port is OK.</li>
+    <li><b>Does −20 A alone stop the faults?</b> Ride it. Expected yes for straight stops, less certain while turning.</li>
+    <li><b>Spec P at top speed:</b> time a real stop from 4.92 m/s to check the estimate in the Fixes section.</li>
+    <li><b>Braking profile design:</b> what deceleration feels right for Parker, and where to hand over to a full stop.</li>
+    <li><b>Which LED</b> shows low battery and "braking limited".</li>
+    <li><b>Was <code>s_pid_min_erpm</code> 900 or 300 at 17:08?</b> It doesn't change the story (the setpoint was 0, inside either band), but it's worth knowing when the write landed.</li>
+    <li><b>The trip wire</b> is still 1.5 × the old motor setting. Leave it until the overshoot is fixed; raising it would only hide the problem.</li>
+  </ul>
+  <p class="src">Data: <code>wheelchair-firmware/logs/live/2026-11-22-170317.csv</code> and <code>2026-11-22-171917.csv</code>, cut with <code>docs/braking-story/tools/extract_fault.py</code>. VESC settings: <code>wheelchair-firmware/docs/vesc-config-2026-11-22.txt</code>. VESC source: <code>docs/vesc-firmware-ref/</code> (firmware 6.06). Motor and gearbox: CDR section 12.2.</p>
+</div>

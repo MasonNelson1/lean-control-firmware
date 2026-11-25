@@ -1,0 +1,98 @@
+<div class="prose">
+  <span class="eyebrow">The rule</span>
+  <h2>Two limits, and the smaller one wins</h2>
+  <p>Inside the VESC, power in equals power out (minus some heat). Power is volts × amps on each side:</p>
+  <div class="formula"><span class="m">motor volts × motor amps</span> ≈ <span class="b">battery volts × battery amps</span></div>
+  <p>The battery side is pinned: about 53.5 V, and at most 3 A going in. The motor's voltage depends on speed: 6.6 V for every m/s. So the motor current the battery cap allows is:</p>
+  <div class="formula"><span class="m">motor amps allowed</span> ≈ <span class="b">3 A</span> × 53.5 V ÷ (6.6 V/(m/s) × chair speed)</div>
+  <p>Units check: V ÷ (V/(m/s) × m/s) = V ÷ V, so the right side comes out in amps. In practice the VESC lets a bit more motor current through than this ideal number. The logs fit <b class="mono">motor amps ≈ battery amps × 11.3 ÷ speed in m/s</b> <span class="badge meas">measured</span>, and the chart below uses that fit.</p>
+  <p>The VESC firmware does exactly this, every control cycle. It sets the motor current target, then applies two limits, one after the other:</p>
+</div>
+<pre class="code">// VESC firmware 6.06, mcpwm_foc.c, "Apply current limits" (simplified)
+// 1. battery limit, divided by duty (how fast the motor spins, as a fraction of full voltage)
+iq_target = clamp(iq_target, l_in_current_min / duty, l_in_current_max / duty);
+// 2. the motor-current setting
+iq_target = clamp(iq_target, l_current_min, l_current_max);</pre>
+<div class="prose">
+  <p>So there are two ceilings on braking current. <b>The battery ceiling</b> is the curve: low at speed, rising as the chair slows, and going to infinity at a stop. <b>The motor ceiling</b> is a flat line, set in VESC Tool: −32.7 A on 11/22 and −20 A after the patch. Whichever is lower is what the VESC aims for. Drag the slider.</p>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <div class="seg" role="group" aria-label="Settings">
+      <button data-k="today" aria-pressed="true">Today: 3 A battery, 32.7 A motor</button>
+      <button data-k="fix1" aria-pressed="false">Fix 1: 3 A, 20 A</button>
+      <button data-k="both" aria-pressed="false">Fix 1 + 2: 7.5 A, 20 A</button>
+    </div>
+  </div>
+  <div class="row"><label for="rule-v">Chair speed <b id="rule-vv">3.00 m/s</b></label><input type="range" id="rule-v" min="0.2" max="4.9" step="0.01" value="3"></div>
+  <div class="readouts">
+    <div class="ro"><span class="l">Battery ceiling</span><span class="v b" id="rule-a">–</span><span class="s">battery cap × 11.3 ÷ speed</span></div>
+    <div class="ro"><span class="l">Motor ceiling</span><span class="v c" id="rule-b">–</span><span class="s">VESC Tool setting</span></div>
+    <div class="ro"><span class="l">VESC aims for</span><span class="v m" id="rule-c">–</span><span class="s" id="rule-who">the smaller one</span></div>
+    <div class="ro"><span class="l">Braking, both wheels</span><span class="v" id="rule-d">–</span><span class="s">≈ 5 N/A × 2 ÷ 120 kg</span></div>
+  </div>
+  <div class="chart" id="rule-chart"><div class="ttl">Braking current the VESC aims for, by speed</div><div class="sub">Per motor. The thick line is what the VESC actually targets. Dots are real 11/22 samples while braking at the 3 A cap <span class="badge meas">measured</span>.</div></div>
+</div>
+
+<div class="two">
+  <div class="panel"><span class="tag">Fast end (right side)</span><p>The battery ceiling is low and it wins. At 4 m/s the 3 A cap allows only about 8 A of motor current, about 0.07 g of braking. The real court samples sit right on that curve. <b>That's problem 2.</b> Raising the battery cap lifts the whole curve.</p></div>
+  <div class="panel"><span class="tag">Slow end (left side)</span><p>The battery ceiling shoots up, passes the motor ceiling, and stops mattering. Below about 1 m/s (today's settings) only the motor setting limits braking. Nothing here is wrong by itself. It becomes problem 1 when the firmware asks for maximum braking in this zone, and the current overshoots the target. That's the next four sections.</p></div>
+</div>
+
+<script>
+const { line, legend, C, data } = Story;
+const SET = { today: { cap: 3, lim: 32.68 }, fix1: { cap: 3, lim: 20 }, both: { cap: 7.5, lim: 20 } };
+let k = "today";
+const host = root.querySelector("#rule-chart");
+const vs = []; for (let v = 0.2; v <= 4.9001; v += 0.02) vs.push(v);
+const ch = line(host, {
+  xMax: 5, yMax: 60, h: 300, xTicks: [0, 1, 2, 3, 4, 5], yTicks: [0, 10, 20, 30, 40, 50, 60], xLabel: "chair speed (m/s)", yFmt: v => v + " A",
+  refs: [{ y: 49.03, label: "~49–52 A trip wire (abs max)", color: "var(--fault)", right: true }],
+  series: [
+    { color: "var(--batt)", dash: "5 4", width: 1.5 },
+    { color: "var(--cap)", dash: "5 4", width: 1.5 },
+    { color: "var(--motor)", width: 3.5 },
+  ],
+  tip: v => { const s = SET[k], a = C.allowed(v, s.cap), m = Math.min(a, s.lim); return { ys: [a, s.lim, m], html: `${v.toFixed(2)} m/s<br><span style="color:var(--batt)">battery ceiling ${a.toFixed(1)} A</span><br><span style="color:var(--cap)">motor ceiling ${s.lim.toFixed(1)} A</span><br><span style="color:var(--motor)">VESC aims for ${m.toFixed(1)} A</span>` }; },
+  onLeave: () => setV(+slider.value),
+});
+legend(host, [
+  { color: "var(--batt)", dash: 1, label: "battery ceiling (battery cap ÷ duty)" },
+  { color: "var(--cap)", dash: 1, label: "motor ceiling (motor-current setting)" },
+  { color: "var(--motor)", label: "what the VESC aims for (the lower one)" },
+  { color: "var(--fault)", label: "trip wire: the VESC faults if measured current crosses it" },
+]);
+const dotLayer = ch.el("g", {});
+data("fault-1708.json").then(d => {
+  for (const p of d.points) for (const side of ["L", "R"]) {
+    const act = p["act" + side], cmd = p["cmd" + side], cur = p["cur" + side];
+    if (act > 60 && cmd < act - 40 && cur < 0) {
+      const v = act * C.RPM_TO_MPS;
+      Story.el("circle", { cx: ch.X(v), cy: ch.Y(-cur), r: 3.5, fill: "var(--ink)", opacity: .75 }, dotLayer);
+    }
+  }
+});
+function redraw() {
+  const s = SET[k];
+  ch.draw([vs.map(v => [v, C.allowed(v, s.cap)]), [[0, s.lim], [5, s.lim]], vs.map(v => [v, Math.min(C.allowed(v, s.cap), s.lim)])]);
+  setV(+slider.value);
+}
+const slider = root.querySelector("#rule-v");
+function setV(v) {
+  const s = SET[k], a = C.allowed(v, s.cap), m = Math.min(a, s.lim);
+  root.querySelector("#rule-vv").textContent = v.toFixed(2) + " m/s";
+  root.querySelector("#rule-a").textContent = a.toFixed(1) + " A";
+  root.querySelector("#rule-b").textContent = s.lim.toFixed(1) + " A";
+  root.querySelector("#rule-c").textContent = m.toFixed(1) + " A";
+  root.querySelector("#rule-who").textContent = a < s.lim ? "battery ceiling wins" : "motor ceiling wins";
+  const acc = 2 * C.N_PER_A * m / C.MASS;
+  root.querySelector("#rule-d").textContent = acc.toFixed(2) + " m/s²";
+  ch.setCursor(v, [a, s.lim, m]);
+}
+slider.addEventListener("input", e => setV(+e.target.value));
+root.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  k = b.dataset.k; root.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b)); redraw();
+}));
+redraw();
+</script>

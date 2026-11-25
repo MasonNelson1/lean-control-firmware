@@ -1,0 +1,32 @@
+<div class="prose">
+  <span class="eyebrow">LEAN chair · working document · started 2026-11-25</span>
+  <h1>Why the chair brakes the way it does</h1>
+  <p class="lede">Two problems with the chair's braking, traced from the physics to the court logs from 11/22. Each section adds one piece. Read them in order the first time.</p>
+</div>
+
+<div class="panel">
+  <h3>The story in six sentences</h3>
+  <ol>
+    <li>When the chair brakes, the motors act as generators. The VESC decides how much current to pull out of them, and that current is the braking force.</li>
+    <li>That current has to go somewhere, and it goes into the battery. We capped it at 3 A per side, so at speed the brakes are weak. <b>(Problem 2)</b></li>
+    <li>The VESC turns the battery cap into a motor-current limit by dividing by how fast the motor spins. Near a stop that division blows up, and the battery cap stops limiting anything.</li>
+    <li>Our firmware tells the VESC to stop the wheel right now (setpoint 0 RPM) while it's still rolling at 1–2 m/s. The VESC then brakes as hard as its motor-current setting allows.</li>
+    <li>The VESC's current control overshoots and oscillates, the current spikes past the VESC's ~50 A trip wire, and the VESC lets go of that wheel for 0.6 s. <b>(Problem 1)</b></li>
+    <li>Fix problem 1 by lowering the motor-current setting and commanding a smooth braking profile. Fix problem 2 by letting more braking current into the battery.</li>
+  </ol>
+</div>
+
+<div class="prose">
+  <p>Every number on this site carries one of three labels:</p>
+  <p><span class="badge meas">measured</span> read from the 11/22 court logs or the VESC settings. <span class="badge est">estimate</span> calculated from measured numbers plus an assumption (usually the 120 kg chair-plus-rider mass). <span class="badge ill">illustration</span> a made-up shape that shows the idea, not our data.</p>
+</div>
+
+<div class="panel" style="border-color:var(--fault)">
+  <h3>Corrections to the first explainer (11/25 afternoon)</h3>
+  <ul>
+    <li><b>Motor voltage is about 6.6 V per m/s, not 7.9.</b> The first number came from one log line. 6.6 is a fit across 2,329 VESC samples. <span class="badge meas">measured</span></li>
+    <li><b>Push per amp is about 5 N per wheel, not 7.9.</b> It comes from the VESC's own motor model, not from the voltage constant. <span class="badge est">estimate</span></li>
+    <li><b>The faults happened at 1–2 m/s, not 0.6 m/s.</b> The first explainer's spike was a simulation. The real cause is the setpoint dropping to 0 while the wheel is still rolling (see "The 17:08 fault"). <span class="badge meas">measured</span></li>
+    <li><b>The VESC's soft regen cutoff is already set: 55 V start, 57 V end.</b> Nobody needs to add it. <span class="badge meas">measured</span></li>
+  </ul>
+</div>

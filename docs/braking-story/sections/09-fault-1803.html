@@ -1,0 +1,39 @@
+<div class="prose">
+  <span class="eyebrow">Problem 1, second time</span>
+  <h2>The 18:03 fault: turning while slowing</h2>
+  <p>By 18:03 the clamp had been changed so it only limits the chair's average speed, which let the rider steer while braking. Here the rider is slowing from about 3.3 m/s and turning. To turn, the inside (left) wheel's setpoint drops below the outside wheel's. It goes all the way to <b>−3 to −5 RPM: slightly backwards</b>, while the left wheel is still rolling forward at about 63 RPM (2 m/s).</p>
+  <p>A setpoint of −5 RPM is inside the VESC's "stop" band, so it's the same duty-zero brake as 17:08, with the same result. The left motor current reaches about −20 A in the 50 ms samples, the left VESC trips at 49 A and lets go for 0.6 s, and only the right wheel is braking.</p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="f2-rpm"><div class="ttl">18:03:35.7 → 18:03:38.3, left wheel</div><div class="sub">Setpoint vs. measured speed. <span class="badge meas">measured</span></div></div>
+  <div class="chart" id="f2-amp"><div class="ttl">Left motor current</div><div class="sub">20 samples a second; real peaks are higher.</div></div>
+</div>
+
+<div class="prose">
+  <p class="callout fault">After this fault the firmware got a "no plugging" rule: a wheel rolling faster than 15 RPM is never commanded backwards; it's <b>commanded to 0 instead</b>. That removes the reverse command, but 0 RPM is still inside the VESC's stop band. So the no-plug rule sends the wheel into the same duty-zero brake that tripped at 17:08. It makes this fault less likely, but it doesn't remove it. The real fix is the same for both: never hand the VESC a near-zero setpoint while the wheel is rolling.</p>
+</div>
+
+<script>
+const { line, legend, data, C } = Story;
+data("fault-1803.json").then(d => {
+  const P = d.points, f = d.faults.find(x => x.code !== "NONE"), r = d.faults.find(x => x.code === "NONE");
+  const near = t => P.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+  const firstNeg = P.find(p => p.cmdL < 0 && p.actL > 20);
+  const marks = [{ x: firstNeg.t, color: "var(--cmd)", label: "setpoint goes below 0", left: true }, { x: f.t, color: "var(--fault)", label: "left VESC faults" }, { x: r.t, color: "var(--ink-3)", label: "back on", left: true }];
+  const xt = [0, 0.5, 1, 1.5, 2, 2.5];
+  const band = [{ x0: f.t, x1: r.t, fill: "var(--fault-soft)" }];
+  const h1 = root.querySelector("#f2-rpm");
+  const c1 = line(h1, { xMax: 2.6, yMin: -40, yMax: 120, h: 240, xTicks: xt, yTicks: [-40, 0, 40, 80, 120], xFmt: v => v + "s", yFmt: v => v + " rpm", marks, bands: band,
+    series: [{ color: "var(--ink)", width: 2.5 }, { color: "var(--cmd)", width: 2 }],
+    tip: t => { const p = near(t); return { x: p.t, ys: [p.actL, p.cmdL], html: `t ${p.t.toFixed(2)} s<br>measured ${p.actL.toFixed(0)} rpm (${(p.actL * C.RPM_TO_MPS).toFixed(2)} m/s)<br><span style="color:var(--cmd)">setpoint ${p.cmdL.toFixed(1)} rpm</span><br>turn ${p.turn.toFixed(2)}` }; } });
+  c1.draw([P.map(p => [p.t, p.actL]), P.map(p => [p.t, p.cmdL])]);
+  legend(h1, [{ color: "var(--ink)", label: "measured left wheel" }, { color: "var(--cmd)", label: "left setpoint" }]);
+  const h2 = root.querySelector("#f2-amp");
+  const c2 = line(h2, { xMax: 2.6, yMin: -60, yMax: 20, h: 220, xTicks: xt, yTicks: [-60, -40, -20, 0, 20], xFmt: v => v + "s", yFmt: v => v + " A", marks, bands: band,
+    refs: [{ y: -49.03, label: "−49 A trip wire (left)", color: "var(--fault)", right: true, below: true }, { y: -32.68, label: "−32.7 A target ceiling", color: "var(--cap)", right: true, below: true }],
+    series: [{ color: "var(--motor)", width: 2.5 }],
+    tip: t => { const p = near(t); return { x: p.t, ys: [p.curL], html: `t ${p.t.toFixed(2)} s<br><span style="color:var(--motor)">left motor ${p.curL.toFixed(1)} A</span>` }; } });
+  c2.draw([P.map(p => [p.t, p.t > f.t && p.t < r.t ? null : p.curL])]);
+});
+</script>

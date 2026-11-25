@@ -1,0 +1,66 @@
+<div class="prose">
+  <span class="eyebrow">The limits</span>
+  <h2>A target is not a trip wire</h2>
+  <p>The VESC has two kinds of current limit, and they work differently:</p>
+  <ul>
+    <li><b>The motor-current setting</b> (<code>l_current_min</code> / <code>l_current_max</code>, ±32.7 A on 11/22) is a <b>target ceiling</b>. The VESC never <em>asks</em> for more than this. But asking isn't getting: the measured current can swing above the target for a moment, because the VESC's current control can't follow a sudden change perfectly.</li>
+    <li><b>The absolute maximum</b> (<code>l_abs_current_max</code>, 49.0 A left / 52.2 A right) is a <b>trip wire</b>. The VESC checks the measured current every switching cycle, many thousands of times a second. If it crosses this once, the VESC faults (<code>ABS_OVER_CURRENT</code>), lets go of the motor, and waits 0.5–0.6 s before driving again.</li>
+  </ul>
+  <p>So "the line blows past the 32.7 A cap" on the earlier chart was really about the battery ceiling, which the motor ceiling cuts off. The real overshoot is different: the <em>measured</em> current going above the <em>target</em>. The 11/22 logs show that happening, in the 17:08 fault section.</p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="ladder"><div class="ttl">Every current level that matters, per motor</div><div class="sub">Where each number comes from is in the table below.</div></div>
+</div>
+
+<div class="panel tablewrap">
+  <table>
+    <thead><tr><th>Level</th><th>Amps</th><th>Where it comes from</th></tr></thead>
+    <tbody>
+      <tr><td>Motor rated current</td><td class="num">10.8 A</td><td>Motor datasheet via the CDR. What the motor can carry continuously without overheating. Short bursts above it are normal. <span class="badge meas">datasheet</span></td></tr>
+      <tr><td>New braking setting (fix 1)</td><td class="num">20 A</td><td>Chosen on 11/22 to leave room under the trip wire. Not yet ridden. <span class="badge meas">VESC config</span></td></tr>
+      <tr><td>Gearbox torque rating</td><td class="num">~32–39 A</td><td>The gearbox is rated 60 N·m. The CDR warns that the motor's peak torque (62.6 N·m at the wheel) exceeds it and that the controller must limit it. 60 N·m works out to 32–39 A depending on which torque-per-amp number you use. <span class="badge est">estimate</span></td></tr>
+      <tr><td>Old setting</td><td class="num">32.7 A</td><td>Very likely set by VESC Tool's motor setup wizard. It's about 3 × the rated current. The right VESC was 34.8 A until 11/22. <span class="badge meas">VESC config</span></td></tr>
+      <tr><td>Trip wire</td><td class="num">49.0 / 52.2 A</td><td>Exactly 1.5 × each VESC's old motor setting (32.68 × 1.5 = 49.0, 34.81 × 1.5 = 52.2), the wizard's rule. It wasn't recalculated when the motor setting changed. <span class="badge meas">VESC config</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="prose">
+  <h3>Why not set it as high as the motor can take?</h3>
+  <p>Because the motor isn't the tightest limit. Three things cap braking current before the motor does:</p>
+  <ol>
+    <li><b>The gearbox.</b> Above about 32–39 A, the motor's torque is more than the 60 N·m gearbox rating. You'd be designing to break the gearbox.</li>
+    <li><b>Heat.</b> The motor is rated 10.8 A continuous. Braking at 20–30 A for a couple of seconds is fine, but there's no temperature sensor on the motors, so there's no warning if it overheats over a long session.</li>
+    <li><b>Parker.</b> More braking current means a harder stop. 20 A on both wheels is about 0.17 g, and 32.7 A is about 0.28 g. Parker has no trunk control to brace against a hard stop. A stop that's too abrupt is its own safety problem.</li>
+  </ol>
+  <p>There's also a floor. Spec P requires a stop from top speed (4.92 m/s) in 3.0 s, which needs an average of about 1.64 m/s², or 0.17 g. <b>20 A is right at that floor.</b> So 20 A is a reasonable setting, but there's no room to go lower, and 22–25 A is worth testing once the overshoot is fixed. The stop-time numbers are in the "Fixes" section.</p>
+  <p>The VESC 6 hardware is built for more current than any of these, so it isn't the bottleneck (worth confirming on Trampa's spec sheet).</p>
+</div>
+
+<script>
+const { el } = Story;
+const host = root.querySelector("#ladder");
+const W = Math.round(Math.max(320, Math.min(900, host.clientWidth || 600))), H = 200, ml = 12, mr = 12, top = 50, barH = 34;
+const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Current levels ladder" }, host);
+const X = a => ml + a / 60 * (W - ml - mr);
+el("rect", { x: X(0), y: top, width: X(60) - X(0), height: barH, rx: 4, fill: "var(--grid)" }, svg);
+el("rect", { x: X(0), y: top, width: X(20) - X(0), height: barH, rx: 4, fill: "var(--ok)", opacity: .25 }, svg);
+el("rect", { x: X(20), y: top, width: X(32.68) - X(20), height: barH, fill: "var(--motor)", opacity: .2 }, svg);
+el("rect", { x: X(32), y: top - 6, width: X(39) - X(32), height: barH + 12, fill: "var(--ink-3)", opacity: .18 }, svg);
+el("rect", { x: X(49.03), y: top, width: X(60) - X(49.03), height: barH, fill: "var(--fault)", opacity: .25 }, svg);
+for (let a = 0; a <= 60; a += 10) { el("text", { x: X(a), y: top + barH + 18, "text-anchor": "middle", class: "lbl" }, svg).textContent = a + " A"; }
+const marks = [
+  { a: 10.8, c: "var(--ink-2)", t: "10.8 A motor rated", up: true, row: 0 },
+  { a: 20, c: "var(--cap)", t: "20 A new setting", up: false, row: 0 },
+  { a: 32.68, c: "var(--motor)", t: "32.7 A old setting", up: false, row: 1 },
+  { a: 35.5, c: "var(--ink-3)", t: "gearbox ~32–39 A", up: true, row: 1 },
+  { a: 49.03, c: "var(--fault)", t: "49 A trip (left)", up: true, row: 0 },
+  { a: 52.22, c: "var(--fault)", t: "52 A trip (right)", up: false, row: 2 },
+];
+for (const m of marks) {
+  el("line", { x1: X(m.a), x2: X(m.a), y1: top - 4, y2: top + barH + 4, stroke: m.c, "stroke-width": 2.5 }, svg);
+  const y = m.up ? top - 12 - m.row * 14 : top + barH + 34 + m.row * 14;
+  el("text", { x: X(m.a), y, "text-anchor": m.a > 45 ? "end" : "middle", class: "lbl", style: `fill:${m.c};font-weight:600` }, svg).textContent = m.t;
+}
+</script>

@@ -1,0 +1,25 @@
+<div class="prose">
+  <span class="eyebrow">Regen</span>
+  <h2>Yes, the chair already does regenerative braking</h2>
+  <p>The design review (CDR section 12.3.3.3) says: <i>"Regenerative braking was considered but was not selected as a required feature for the current prototype."</i> Its reason is energy: one stop returns about 0.004% of the battery, so it isn't worth it for range. That reasoning is correct.</p>
+  <p>But the same CDR (section 12.2.5) says the chair brakes by <i>"reversing the commanded current of the motor controller instead of using a mechanical brake."</i> On a spinning motor, that <em>is</em> regenerative braking. Three pieces of evidence:</p>
+</div>
+
+<div class="two">
+  <div class="panel"><span class="tag">VESC setting</span><p><code>l_in_current_min = −3 A</code> on both VESCs. That's the limit on current flowing <em>into</em> the battery. It exists only because current can flow that way.</p><span class="badge meas">measured</span></div>
+  <div class="panel"><span class="tag">Court log 17:08:12</span><p>While braking, both VESCs report battery current of <span class="b">−2.8 to −3.2 A</span>, pinned at the cap. Negative means charging.</p><span class="badge meas">measured</span></div>
+  <div class="panel"><span class="tag">VESC counters</span><p>Each VESC counts amp-hours out and back in. On 11/22 the left VESC showed <code>ah=0.1124/0.0161</code>: 0.11 Ah used, 0.016 Ah put back.</p><span class="badge meas">measured</span></div>
+</div>
+
+<div class="prose">
+  <h3>Where last semester's framing went wrong</h3>
+  <p>The framing was: either the battery sends current to the motor to stop it (costs battery), or the motor sends current back (regen). The physics doesn't offer the first option at speed. When the chair slows down, its motion energy has to go somewhere. There are only four places:</p>
+  <ol>
+    <li><b>Into the battery.</b> That's regen. Today it's capped at 3 A per side.</li>
+    <li><b>Into a resistor as heat.</b> That's the brake chopper idea from today's meeting.</li>
+    <li><b>Into the motor's own coils as heat.</b> This one is small at speed but matters near a stop.</li>
+    <li><b>Into friction.</b> Mechanical brakes, or rolling resistance while coasting.</li>
+  </ol>
+  <p>"Send battery current to stop" only exists below a few tenths of a m/s, where the motor makes almost no voltage. Above that, asking a spinning motor for braking force means current flows out of it, and the VESC steers that current into the battery. Setting the regen limit to 0 A doesn't give "braking without regen." It gives almost no electric braking at speed, because the energy has nowhere to go.</p>
+  <p class="callout ok">The accurate sentence for the report: <b>"The chair uses regenerative braking for stopping force. We don't count on it for range, because one stop returns less than 0.01% of the battery's energy."</b></p>
+</div>

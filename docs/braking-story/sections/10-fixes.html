@@ -1,0 +1,62 @@
+<div class="prose">
+  <span class="eyebrow">Fixes</span>
+  <h2>What fixes what</h2>
+</div>
+
+<div class="panel tablewrap">
+  <table>
+    <thead><tr><th>Fix</th><th>Solves</th><th>How</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><b>1a.</b> Motor braking setting −32.7 → −20 A</td><td>Problem 1 (margin)</td><td>Lower target, so the overshoot peaks lower. VESC setting.</td><td><span class="pill meh">uploaded 11/22, not ridden</span></td></tr>
+      <tr><td><b>1b.</b> Braking profile in the Teensy</td><td>Problem 1 (cause)</td><td>Never send a near-zero setpoint to a rolling wheel. Ramp braking down smoothly as the chair slows, and only command 0 below about 0.3 m/s. Remove the 50 RPM clamp, which just keeps the VESC at maximum braking.</td><td><span class="pill bad">to design</span></td></tr>
+      <tr><td><b>2.</b> Battery regen limit −3 → −5 → −7.5 A per side</td><td>Problem 2</td><td>Lifts the battery ceiling, so braking at speed gets stronger. VESC setting. Needs Bioenno's answer on the protection board's charge trip, or a careful step-up test.</td><td><span class="pill meh">email drafted; test planned</span></td></tr>
+      <tr><td><b>3.</b> Regen cutoff end 57 → 56.5 V</td><td>Fresh-pack braking</td><td>Backs off braking before the VESC's 57 V fault instead of exactly at it.</td><td><span class="pill meh">proposed</span></td></tr>
+      <tr><td><b>Later.</b> Brake chopper (~56 V)</td><td>Protection-board trip</td><td>Catches the voltage spike if the battery's protection board cuts charging mid-stop.</td><td><span class="pill meh">only if needed</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="prose">
+  <h3>Do we meet Spec P today?</h3>
+  <p>Spec P: stop from top speed (4.92 m/s) within 3.0 s. Charles thought we're close. This estimate says <b>today's settings miss it by about a second at top speed</b>, because the battery ceiling makes braking so weak above 3 m/s. The stop at 17:08 agrees: from 4.3 m/s, the chair was still at 3 m/s after 1.5 s of braking. <span class="badge est">estimate</span></p>
+</div>
+
+<div class="panel">
+  <div class="chart" id="sp-chart"><div class="ttl">Estimated stop time from 4.92 m/s</div><div class="sub">Bars span "no rolling resistance" to "0.1 m/s² of rolling resistance". Uses the measured current relation, 5 N/A per wheel and 120 kg. <span class="badge est">estimate</span></div></div>
+</div>
+
+<div class="prose">
+  <p>Fix 2 is what gets us under 3.0 s. Fix 1 alone makes the top-speed stop slightly <em>slower</em>, because it caps braking at the slow end too. With both, the 20 A setting becomes the limit for most of the stop, which is why 22–25 A is worth testing after the braking profile is in.</p>
+  <h3>Test order</h3>
+  <ol>
+    <li>Ride the −20 A setting. Hard stops from speed, including turning while stopping. Pass = no <code>ABS_OVER_CURRENT</code> in the log.</li>
+    <li>Measure the top-speed stop time, to check this estimate against Spec P.</li>
+    <li>Raise the regen limit one step at a time (−5, then −7.5 A). Use a mid-charge pack and a teammate rider, with a spotter and logging on.</li>
+    <li>Bench-test the braking-profile firmware with the wheels off, then on the court.</li>
+  </ol>
+  <p>Change one thing per test. If two changes go in together and something faults, you can't tell which one caused it.</p>
+</div>
+
+<script>
+const { el, C } = Story;
+function stop(v0, cap, lim, rr) { let v = v0, t = 0, dt = 1e-3; while (v > 0.05 && t < 20) { const im = Math.min(C.allowed(v, cap), lim); v -= (2 * C.N_PER_A * im / C.MASS + rr) * dt; t += dt; } return t; }
+const rows = [
+  { n: "Today: 3 A battery, 32.7 A motor", cap: 3, lim: 32.68 },
+  { n: "Fix 1: 3 A, 20 A", cap: 3, lim: 20 },
+  { n: "Fix 1 + 2: 7.5 A, 20 A", cap: 7.5, lim: 20 },
+  { n: "7.5 A, 25 A (after profile)", cap: 7.5, lim: 25 },
+].map(r => ({ ...r, hi: stop(4.92, r.cap, r.lim, 0), lo: stop(4.92, r.cap, r.lim, 0.1) }));
+const host = root.querySelector("#sp-chart");
+const W = Math.round(Math.max(320, Math.min(900, host.clientWidth || 600))), lw = Math.min(230, W * 0.42), H = rows.length * 46 + 44, mr = 56;
+const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Stop time estimates" }, host);
+const X = s => lw + s / 5 * (W - lw - mr);
+for (let s = 0; s <= 5; s++) { el("line", { x1: X(s), x2: X(s), y1: 8, y2: H - 26, stroke: "var(--grid)" }, svg); el("text", { x: X(s), y: H - 8, "text-anchor": "middle", class: "lbl" }, svg).textContent = s + " s"; }
+el("line", { x1: X(3), x2: X(3), y1: 4, y2: H - 26, stroke: "var(--fault)", "stroke-width": 2, "stroke-dasharray": "6 3" }, svg);
+el("text", { x: X(3) + 5, y: 14, class: "lbl", style: "fill:var(--fault);font-weight:600" }, svg).textContent = "Spec P: 3.0 s";
+rows.forEach((r, i) => {
+  const y = 22 + i * 46, pass = r.hi <= 3;
+  el("text", { x: lw - 10, y: y + 15, "text-anchor": "end", class: "lbl ink", style: "font-size:12px" }, svg).textContent = r.n;
+  el("rect", { x: X(r.lo), y, width: Math.max(4, X(r.hi) - X(r.lo)), height: 22, rx: 4, fill: pass ? "var(--ok)" : "var(--fault)", opacity: .8 }, svg);
+  el("text", { x: X(r.hi) + 6, y: y + 15, class: "lbl", style: "fill:var(--ink);font-weight:600" }, svg).textContent = `${r.lo.toFixed(1)}–${r.hi.toFixed(1)} s`;
+});
+</script>

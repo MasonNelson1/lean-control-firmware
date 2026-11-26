@@ -115,8 +115,8 @@ body.nav-hidden main{padding-top:2.5rem}
 .dock-head{display:flex;align-items:center;gap:.6rem;padding:.45rem .5rem .45rem .8rem;border-bottom:1px solid var(--line);background:var(--panel);cursor:move;user-select:none;touch-action:none}
 .dock-title{flex:1;min-width:0;font:600 .85rem/1.2 var(--f-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .grip{color:var(--ink-3)}
-.dock-body{flex:1;overflow:auto;padding:.6rem}
-.dock-body > .panel{border:0;padding:.4rem;background:transparent}
+.dock-body{flex:1;overflow:hidden;padding:.5rem;position:relative}
+.dock-body > .panel{border:0;padding:.4rem;background:transparent;max-width:none}
 .dock-body .pin-btn{display:none}
 .legend i.dot{width:8px;height:8px;border-radius:50%}
 
@@ -149,3 +149,6 @@ body.nav-hidden main{padding-top:2.5rem}
 .note-flash{outline:3px solid rgba(255,196,0,.7);outline-offset:3px;border-radius:3px}
 .notes-copy{font:600 .72rem/1 var(--f-body);background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:6px;height:1.7rem;padding:0 .5rem;cursor:pointer}
 .notes-copy:hover{color:var(--ink)}
+.notes-head{cursor:move;user-select:none;touch-action:none}
+.notes-head button{cursor:pointer}
+.notes-pill{touch-action:none}

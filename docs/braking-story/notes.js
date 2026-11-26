@@ -35,8 +35,41 @@ document.body.appendChild(addBtn);
 function setOpen(open) {
   panel.hidden = !open; pill.hidden = open; pill.setAttribute("aria-expanded", open);
   ls.set(LS_OPEN, open ? "1" : "0");
+  clampPos();
 }
-pill.addEventListener("click", () => setOpen(true));
+
+// ---------- move: drag the header (or the pill); anchored to the bottom-right corner ----------
+const LS_POS = "story-notes-pos";
+let dragged = false;
+function setPos(right, bottom) { wrap.style.right = right + "px"; wrap.style.bottom = bottom + "px"; }
+function clampPos() {
+  const r = wrap.getBoundingClientRect();
+  let right = innerWidth - r.right, bottom = innerHeight - r.bottom;
+  right = Math.min(Math.max(4, right), innerWidth - r.width - 4);
+  bottom = Math.min(Math.max(4, bottom), innerHeight - r.height - 4);
+  setPos(right, bottom);
+}
+function startDrag(e) {
+  if (e.button !== 0 || e.target.closest(".notes-head button")) return;
+  const r = wrap.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+  const r0 = innerWidth - r.right, b0 = innerHeight - r.bottom;
+  dragged = false;
+  const move = ev => {
+    const dx = ev.clientX - sx, dy = ev.clientY - sy;
+    if (!dragged && Math.hypot(dx, dy) < 4) return;
+    dragged = true; setPos(r0 - dx, b0 - dy); clampPos();
+  };
+  const up = () => {
+    removeEventListener("pointermove", move); removeEventListener("pointerup", up);
+    if (dragged) { ls.set(LS_POS, JSON.stringify({ right: parseFloat(wrap.style.right), bottom: parseFloat(wrap.style.bottom) })); setTimeout(() => (dragged = false), 0); }
+  };
+  addEventListener("pointermove", move); addEventListener("pointerup", up);
+}
+wrap.querySelector(".notes-head").addEventListener("pointerdown", startDrag);
+pill.addEventListener("pointerdown", startDrag);
+try { const q = JSON.parse(ls.get(LS_POS) || "null"); if (q) setPos(q.right, q.bottom); } catch (e) {}
+addEventListener("resize", clampPos);
+pill.addEventListener("click", () => { if (dragged) return; setOpen(true); });
 wrap.querySelector(".notes-min").addEventListener("click", () => setOpen(false));
 wrap.querySelector(".notes-new").addEventListener("click", () => { const n = { id: uid(), created: new Date().toISOString(), text: "" }; notes.push(n); save(); render(); focusNote(n.id); });
 wrap.querySelector(".notes-copy").addEventListener("click", async () => {

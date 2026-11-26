@@ -84,9 +84,10 @@ function line(host, o) {
       const x = xMin + Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width * W - ml) / (W - ml - mr))) * (o.xMax - xMin);
       const info = o.tip(x); if (!info) return;
       setCursor(info.x ?? x, info.ys || []); tip.innerHTML = info.html; tip.hidden = false;
-      const hr = host.getBoundingClientRect(); let lx = e.clientX - hr.left + 14;
-      if (lx > hr.width - 190) lx = e.clientX - hr.left - 200;
-      tip.style.left = lx + "px"; tip.style.top = (e.clientY - hr.top - 10) + "px";
+      // the host may be zoomed (a pinned figure), so convert screen px to its own px
+      const hr = host.getBoundingClientRect(), k = hr.width / (host.offsetWidth || hr.width);
+      const px = (e.clientX - hr.left) / k, py = (e.clientY - hr.top) / k;
+      tip.style.left = (px > host.offsetWidth - 200 ? px - 200 : px + 14) + "px"; tip.style.top = (py - 10) + "px";
     });
     hit.addEventListener("pointerleave", () => { tip.hidden = true; hideCursor(); o.onLeave && o.onLeave(); });
   }
@@ -157,6 +158,7 @@ const dock = document.getElementById("dock"), dockBody = dock.querySelector(".do
 let pinned = null; // { panel, placeholder }
 function unpin() {
   if (!pinned) return;
+  Object.assign(pinned.panel.style, { width: "", transform: "", transformOrigin: "", marginLeft: "" });
   pinned.placeholder.replaceWith(pinned.panel);
   pinned.panel.querySelector(".pin-btn").textContent = "Pin";
   pinned = null; dock.hidden = true; store.sset("story-pin", "");
@@ -164,6 +166,7 @@ function unpin() {
 function pin(panel) {
   if (pinned && pinned.panel === panel) { unpin(); return; }
   unpin();
+  const natW = panel.offsetWidth;
   const ph = document.createElement("div"); ph.className = "pin-placeholder";
   ph.style.height = panel.offsetHeight + "px";
   ph.innerHTML = `<span>Pinned to the floating window.</span> <button class="btn ghost">Unpin</button>`;
@@ -171,7 +174,20 @@ function pin(panel) {
   panel.replaceWith(ph); dockBody.appendChild(panel);
   panel.querySelector(".pin-btn").textContent = "Unpin";
   const t = panel.querySelector(".ttl, h3"); dockTitle.textContent = t ? t.textContent : "Pinned figure";
-  pinned = { panel, placeholder: ph }; dock.hidden = false; store.sset("story-pin", panel.id);
+  pinned = { panel, placeholder: ph, natW }; dock.hidden = false; store.sset("story-pin", panel.id);
+  fitDock();
+}
+// Zoom the pinned figure to fit the window: it keeps its page layout, so resizing the
+// window scales the whole figure instead of adding scroll bars.
+function fitDock() {
+  if (!pinned || dock.hidden) return;
+  const p = pinned.panel, W0 = pinned.natW;
+  Object.assign(p.style, { width: W0 + "px", transform: "", transformOrigin: "0 0", marginLeft: "0" });
+  const cs = getComputedStyle(dockBody);
+  const H0 = p.offsetHeight, aw = dockBody.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = dockBody.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const s = Math.min(aw / W0, ah / H0, 1.6);
+  p.style.transform = `scale(${s})`;
+  p.style.marginLeft = Math.max(0, (aw - W0 * s) / 2) + "px";
 }
 function setupPins(main) {
   const counts = {};
@@ -190,7 +206,8 @@ dock.querySelector(".dock-close").addEventListener("click", unpin);
 // geometry: drag by the header, resize from the corner (CSS resize), remembered for the session
 function saveGeo() { store.sset("story-dock", JSON.stringify({ l: dock.offsetLeft, t: dock.offsetTop, w: dock.offsetWidth, h: dock.offsetHeight })); }
 try { const g = JSON.parse(store.sget("story-dock") || "null"); if (g) Object.assign(dock.style, { left: g.l + "px", top: g.t + "px", width: g.w + "px", height: g.h + "px", right: "auto" }); } catch (e) {}
-new ResizeObserver(() => { if (!dock.hidden) saveGeo(); }).observe(dock);
+new ResizeObserver(() => { if (!dock.hidden) { saveGeo(); fitDock(); } }).observe(dock);
+addEventListener("resize", fitDock);
 dock.querySelector(".dock-head").addEventListener("pointerdown", e => {
   if (e.target.closest("button")) return;
   const sx = e.clientX, sy = e.clientY, l0 = dock.offsetLeft, t0 = dock.offsetTop;

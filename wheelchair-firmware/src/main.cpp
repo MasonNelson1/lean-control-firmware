@@ -5,6 +5,7 @@
 #include "vesc_apply.h"
 #include "vesc_monitor.h"
 #include "rpm_setpoint_pid.h"
+#include "stop_band_guard.h"
 #include "common.h"
 #include "driveModes/DriveMode.h"
 #include "driveModes/LeanDriveMode.h"
@@ -120,6 +121,32 @@ static void noteControlTick(uint32_t gapMs)
 // Speed cap after the slew below (m/s); file scope only so DBG M can log it.
 static float speedLimitMS = 0.0f;
 
+// Stop-band guard per wheel (stop_band_guard.h), on the final RPM command only.
+static stopguard::Wheel stopGuard[2];
+static stopguard::LogGate stopGuardLog[2];
+// STATUS_1 arrives at 50 Hz; older than this and the guard doesn't arm.
+constexpr uint32_t STOP_GUARD_FRESH_MS = 100;
+
+// DBG EVT <ms> stop-guard <L|R> on|off meas=<wheel RPM> cmd=<RPM before the guard> n=<engagements since boot>
+static void logStopGuard(int side, float measured, float command, uint32_t now)
+{
+    const stopguard::Wheel &g = stopGuard[side];
+    if (stopGuardLog[side].due(g.engaged(), now))
+        telemetry::Telemetry::logf("DBG EVT %lu stop-guard %c %s meas=%.1f cmd=%.1f n=%lu\n",
+                                   static_cast<unsigned long>(now), side ? 'R' : 'L', g.engaged() ? "on" : "off",
+                                   measured, command, static_cast<unsigned long>(g.engagements()));
+}
+
+// Every control tick that sends no RPM command: the guard lets go (logs "off" if it was on).
+static void idleStopGuards(uint32_t now)
+{
+    for (int side = 0; side < 2; ++side)
+    {
+        stopGuard[side].reset();
+        logStopGuard(side, measuredMotors[side].erpm / VESC_ERPM_PER_WHEEL_RPM, 0.0f, now);
+    }
+}
+
 void setMotorPower(double left, double right, float dt)
 {
     // Turning the speed knob up takes effect at once (the PID still limits
@@ -150,9 +177,10 @@ void setMotorPower(double left, double right, float dt)
     // it slow more: the chair just went straight. While turning and slowing, the
     // OUTSIDE wheel isn't braked (its command is held at its measured speed), so
     // the inside wheel's braking turns the chair. (2) A wheel still rolling one way
-    // must not be commanded the other way: that reverse surge tripped
-    // ABS_OVER_CURRENT. Above NO_PLUG_RPM it is commanded to zero instead (the
-    // VESC brakes it), and reverses only once it has slowed down.
+    // must not be commanded the other way, nor to zero: either puts the setpoint
+    // under the VESC's min ERPM, which shorts the motor and tripped ABS_OVER_CURRENT.
+    // The stop-band guard below handles that (it replaced "command 0 above
+    // NO_PLUG_RPM", which was the same short).
     constexpr float TURN_BRAKE_MIN_DIFF_RPM = 5.0f;
     constexpr float NO_PLUG_RPM = 15.0f;
     if (fabsf(halfDiff) > TURN_BRAKE_MIN_DIFF_RPM)
@@ -165,10 +193,15 @@ void setMotorPower(double left, double right, float dt)
         else if (outsideMeasured < -NO_PLUG_RPM && outside > outsideMeasured)
             outside = std::max(outsideMeasured, -maxRPM);
     }
-    if (leftMeasuredRPM > NO_PLUG_RPM && leftRpms < 0.0f) leftRpms = 0.0f;
-    if (leftMeasuredRPM < -NO_PLUG_RPM && leftRpms > 0.0f) leftRpms = 0.0f;
-    if (rightMeasuredRPM > NO_PLUG_RPM && rightRpms < 0.0f) rightRpms = 0.0f;
-    if (rightMeasuredRPM < -NO_PLUG_RPM && rightRpms > 0.0f) rightRpms = 0.0f;
+    // Last step before CAN: a wheel still rolling gets +-STOP_GUARD_FLOOR_RPM in its
+    // own direction instead of a near-zero or reversed command (stop_band_guard.h).
+    const uint32_t now = millis();
+    const float leftWanted = leftRpms, rightWanted = rightRpms;
+    const auto fresh = [now](const VescStatus &m) { return m.rpmFrames != 0 && now - m.lastRpmMs <= STOP_GUARD_FRESH_MS; };
+    leftRpms = stopGuard[0].apply(leftRpms, leftMeasuredRPM, fresh(measuredMotors[0]));
+    rightRpms = stopGuard[1].apply(rightRpms, rightMeasuredRPM, fresh(measuredMotors[1]));
+    logStopGuard(0, leftMeasuredRPM, leftWanted, now);
+    logStopGuard(1, rightMeasuredRPM, rightWanted, now);
     vescSetWheelRPM(can1, motors.leftId, leftRpms);
     vescSetWheelRPM(can1, motors.rightId, rightRpms);
     motorTelemetry = {leftTargetRPM, rightTargetRPM, leftRpms, rightRpms};
@@ -646,6 +679,7 @@ static void updateDrive()
         vescSetCurrent(can1, motors.leftId, 0.0f);
         vescSetCurrent(can1, motors.rightId, 0.0f);
         assistBoostCurrent = {};
+        idleStopGuards(now);
         return;
     }
 
@@ -688,6 +722,7 @@ static void updateDrive()
         break;
     }
     assistBoostCurrent = modeState.current() == ASSIST ? targets : MotorTargets{};
+    bool rpmDrive = false; // setMotorPower ran (the stop-band guard is live)
     if (modeState.current() == DISARM && benchCommand.cmd != bench::Cmd::None)
     {
         // The same command to both wheels, so the sides can be compared.
@@ -710,6 +745,7 @@ static void updateDrive()
     else if (modeState.current() == LEAN || modeState.current() == REMOTE)
     {
         setMotorPower(targets.left, targets.right, dt);
+        rpmDrive = true;
     }
     else if (modeState.current() == DISARM && safetyBrake)
     {
@@ -729,6 +765,8 @@ static void updateDrive()
         vescSetCurrent(can1, motors.leftId, targets.left);
         vescSetCurrent(can1, motors.rightId, targets.right);
     }
+    if (!rpmDrive)
+        idleStopGuards(now);
 }
 
 static void replyToConfiguration()

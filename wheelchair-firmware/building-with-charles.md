@@ -37,6 +37,7 @@ How Claude connects to the chair, reads its data, and runs experiments with the 
   - `DBG M <ms> curL curR dutyL dutyR iinL iinR pidL pidR accL accR rateL rateR intL intR lim`, 20 Hz: VESC motor/input current and duty, plus the RPM smoother's internals (`pid` is its RPM before the clamp to measured ± `MAX_RPM_COMMAND_DIFF`; `lim` is the slewed speed cap). Table `motor`.
   - `DBG VFAULT id= code= name= ...` the moment a VESC's fault code changes, including back to `NONE`. It carries the currents, erpm, duty and voltage from that poll. Table `vfault`.
   - `DBG EVT <ms> <kind> ...` on every button press/release, mode or selection change (`why=seat-empty|selected`), rail or CoP-jump disarm, calibration press/end, profile and settings change. Table `evt`.
+  - `DBG EVT <ms> stop-guard <L|R> on|off meas= cmd= n=`: the stop-band guard (`src/stop_band_guard.h`) replaced a near-zero or reversed RPM command on a wheel still rolling with ±8 RPM in its own direction (`on`), or let go below 11 RPM (`off`). `cmd` = the command before the guard, `n` = engagements since boot. At most one line per wheel per 100 ms.
   - Once a second (each on its own 20 Hz tick, so no burst overruns the HC-06):
     - `DBG SENSORS`: raw, floors, W, seat load, seated/calibrated/railed flags, `layout=PLUS|CORNER`.
     - `DBG CORNER` (corner layout): neutral, relaxed posture, the no-output box and full-lean box (left/right/back/front, inches), `reachCal`, the empty-plate baseline in use and `auto=1` when the empty-seat zero set it (`chair_sql.py` table `corner`).

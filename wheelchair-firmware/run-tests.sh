@@ -45,6 +45,7 @@ run_native() {
     native drive_settings      "${LEAN_INC[@]}" tests/native/drive_settings_test.cpp "${SETTINGS_SRC[@]}"
     native drive_knobs         -I src tests/native/drive_knobs_test.cpp
     native rpm_setpoint_pid    -I src tests/native/rpm_setpoint_pid_test.cpp
+    native stop_band_guard     -I src tests/native/stop_band_guard_test.cpp
     native mode_state_machine  -I src tests/native/mode_state_machine_test.cpp src/ModeStateMachine.cpp
     native bench_test          -I src tests/native/bench_test_test.cpp
     native telemetry           -I tests/native/telemetry_stubs -I src tests/native/telemetry_test.cpp \

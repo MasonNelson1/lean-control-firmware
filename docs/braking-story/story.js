@@ -101,13 +101,15 @@ function legend(host, items) {
 }
 
 const cache = {};
-const data = name => cache[name] || (cache[name] = fetch("data/" + name).then(r => r.json()));
+// A bundled copy (tools/bundle.py) carries everything in window.STORY_BUNDLE, so it opens from a file.
+const B = window.STORY_BUNDLE;
+const data = name => cache[name] || (cache[name] = B ? Promise.resolve(B.data[name]) : fetch("data/" + name).then(r => r.json()));
 window.Story = { C, line, legend, data, el };
 
 // ---- load sections ----
 async function boot() {
   const main = document.querySelector("main"), nav = document.querySelector("nav.toc .list");
-  const list = await fetch("story.json").then(r => r.json());
+  const list = B ? B.story : await fetch("story.json").then(r => r.json());
   let n = 0;
   for (const item of list.sections) {
     if (item.hidden) continue;
@@ -117,7 +119,7 @@ async function boot() {
     if (only && !only.split(",").includes(id)) continue;
     const sec = document.createElement("section"); sec.className = "s"; sec.id = id;
     try {
-      sec.innerHTML = await fetch("sections/" + item.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
+      sec.innerHTML = B ? B.sections[item.file] : await fetch("sections/" + item.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
     } catch (e) { sec.innerHTML = `<p class="err">Couldn't load sections/${item.file} (${e.message}).</p>`; }
     main.appendChild(sec);
     sec.dataset.title = item.nav;
@@ -219,6 +221,6 @@ dock.querySelector(".dock-head").addEventListener("pointerdown", e => {
   addEventListener("pointermove", move); addEventListener("pointerup", up);
 });
 addEventListener("keydown", e => { if (e.key === "Escape" && pinned) unpin(); });
-if (window.EventSource && !/[?&]static/.test(location.search)) { const es = new EventSource("/__reload"); es.onmessage = () => location.reload(); }
+if (window.EventSource && !B && location.protocol.startsWith("http") && !/[?&]static/.test(location.search)) { const es = new EventSource("/__reload"); es.onmessage = () => location.reload(); }
 Story.ready = boot();
 })();

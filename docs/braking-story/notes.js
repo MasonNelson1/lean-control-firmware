@@ -110,7 +110,7 @@ list.addEventListener("click", e => {
 
 // ---------- persistence ----------
 async function load() {
-  try { const r = await fetch("/__notes", { cache: "no-store" }); if (!r.ok) throw 0; notes = await r.json(); }
+  try { if (window.STORY_BUNDLE || !location.protocol.startsWith("http")) throw 0; const r = await fetch("/__notes", { cache: "no-store" }); if (!r.ok) throw 0; notes = await r.json(); }
   catch (e) { server = false; try { notes = JSON.parse(ls.get(LS) || "[]"); } catch (e2) { notes = []; } }
   render();
 }

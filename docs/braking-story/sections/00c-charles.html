@@ -1,0 +1,31 @@
+<div class="prose">
+  <span class="eyebrow">In Charles's words</span>
+  <h2>The whole thing, the way I'd explain it</h2>
+  <p class="src">Charles's restatement from 11/25, lightly cleaned up. The <span class="fix">highlighted</span> parts are corrections from checking it against the logs and the VESC code.</p>
+</div>
+
+<div class="panel charles">
+  <p>The VESC pulls current out of the generators, and how much current it pulls is how fast we're able to stop (excluding skidding or something like that).</p>
+
+  <p>We can only pull like 50 amps max or the VESC <span class="fix">trips. It doesn't break, it lets go of the wheel for about 0.6 s to protect itself. And 50 isn't really our ceiling anyway: the gearbox tops out around 32–39 amps, so that's the real one to stay under.</span></p>
+
+  <p>The VESC converts that energy coming from the motor, at its voltage and current, to energy at another voltage and current the battery can take.</p>
+
+  <p>The battery is fixed at 50-something volts, and we can only put so many amps into the battery without tripping its overcurrent protection<span class="fix">. Right now the 3 amps per side is our own setting, from the charger rating. We don't actually know where the protection trips yet; that's what we're asking Bioenno</span>. Which means the power we can dump into the battery is pretty much capped at a certain level on that side of the VESC.</p>
+
+  <p>Because power is capped on that side of the VESC, power is capped on the motor side of the VESC too. Voltage depends on speed, so current is capped at whatever it takes to hit that power level.</p>
+
+  <p>We control braking by demanding a certain amount of current from the motor, say 30-ish amps. At high speeds the <span class="fix">VESC is only allowed to pull</span> like a couple amps <span class="fix">(the motor could actually give way more)</span>, because total power is at the cap with the high voltage. So braking power is low and we take longer to slow down. As the motor slows, the voltage gets lower, so we can get more current from the motor and still be at our power cap. We start slowing down faster the more we slow.</p>
+
+  <p>As we get really slow, the voltage is so low, if we demand all the current from the motor to meet that power cap, then the current from the motor gets up past 50 amps, which the VESC can't handle, so it shuts itself down. <span class="fix">Not quite. Once the power cap would let us go past the motor setting (32.7 amps, now 20), the motor setting takes over, so steady braking never gets to 50. What actually trips it is that our code suddenly tells the wheel "0 RPM" while it's still rolling at like 1.6 m/s. The VESC treats that as "stop right now": it basically shorts the motor, skips the battery cap completely, and the current overshoots way past the target for an instant. That spike is what crosses 50.</span></p>
+
+  <p>So the first problem is that it takes too long to slow, because:</p>
+  <ol>
+    <li>we can only get a couple amps from the motor at high speeds,</li>
+    <li>because we're capped at total power and the motor voltage is high,</li>
+    <li>and the total power is capped by the battery, which has a set voltage and a cap on how much current it can take in.</li>
+  </ol>
+  <p>So if we increase how much current the battery takes, we can stop faster and solve that problem. <span class="fix">But we raise it in steps, because if the battery's protection trips mid-stop, both VESCs fault at once.</span></p>
+
+  <p>The other problem is that at low speeds, the voltage is too low in the motor, so when we demand MAX BRAKING from the motor, we're asking it to reach the highest power level we can reach. Voltage is low, so to do that we get all the current, and that's too much current for the VESC to handle. <span class="fix">Close, but the real trigger is the sudden jump to "0 RPM": the VESC goes into "stop right now" mode and the current overshoots past the target.</span> We can fix this by being smarter about how we tell the chair to slow down<span class="fix">: never tell a rolling wheel "0 RPM", ease the braking off smoothly as we slow, and keep the target lower (20 amps) as a safety margin while we do the rewrite.</span></p>
+</div>

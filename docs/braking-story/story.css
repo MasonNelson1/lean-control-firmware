@@ -152,3 +152,5 @@ body.nav-hidden main{padding-top:2.5rem}
 .notes-head{cursor:move;user-select:none;touch-action:none}
 .notes-head button{cursor:pointer}
 .notes-pill{touch-action:none}
+.charles p{font-size:1.02rem}
+.fix{background:var(--cap-soft);color:var(--ink);border-bottom:2px solid var(--cap);padding:0 .15em;border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}

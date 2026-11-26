@@ -1,3 +1,26 @@
 # Braking story notes
 
 Written by the site's Notes panel. Edit there, not here.
+
+## 2026-11-25 17:05 · The story
+
+> The story in six sentences
+> ([jump](http://localhost:8090/#note-mwwskjhu9z3q))
+
+restated:
+the vesc pulls current out of the generators, and how much current it pulls is how fast we are able to stop (excluding skidding or something like that)
+we can only pull like 50 amps max or the vesc breaks
+the vesc converts that energy coming from the motor at its current voltage and current to energy at another voltage and current the battery can take. 
+The battery is fixed at 50 something volts, and we can only put so many amps in the battery without spiking its overcurrent protection. which means that the power we can dump into the battery is pretty much capped at a certain power level on that side of the vesc.
+because power its capped on that side of the vesc, power is capped on the motor side of the vesc too. voltage is dependant on speed, then current is capped at whatever it would be to get to the certain power level. 
+We control braking by demanding a certain amount of current from the motor. say, 30ish amps. the motor at high speeds can only supply like a couple amps because total power is at cap with the high voltage - so breaking power is low and we take longer to slow down. as the motor slows, the voltage gets lower, so can get more current from the motor be be at our power cap. we can start slowing down faster the more we slow.
+as we get really slow, the voltage is so low, if we demand all the current from the motor to meet that power cap, then the current from the motor gets up past 50 amps, which the vesc cant handle so it shuts itself down. 
+
+so the two problems are the fact that it takes too long to slow because 
+1. we can only get a couple amps from the motor at high speeds
+2. because we are capped at total power and the motor voltage is high
+3. the total power is capped by the battery, which has a set voltage and cap on how much current it can intake
+
+so if we increase how much current the battery takes, we can stop faster and solve that problem.
+
+the other problem is that at low speeds, the voltage is too low in the motor, so when we demand MAX BREAKING from the motor, we are asking it to reach the highest power level we can reach. voltage is low, so to do that we get all teh current, and that is too much current for the vesc to handle. we can fix this by being more smart about how we tell the chair to slow down. 

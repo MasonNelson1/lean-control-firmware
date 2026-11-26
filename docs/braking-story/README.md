@@ -21,3 +21,10 @@ Saving any file in this folder reloads open pages.
 
 Labels on numbers: `measured` (logs, VESC config), `estimate` (measured numbers
 plus an assumption), `illustration` (a teaching shape, not our data).
+
+Notes: the ✎ Notes pill (bottom right) opens a small notebook. Select text
+anywhere on the page and press **+ Note** to save the quote as a link back to
+that spot; clicking the quote later scrolls there and highlights it. The server
+saves notes to `notes.json` and a readable `notes.md` in this folder (saving a
+note doesn't reload the page). Opened without the server, notes stay in that
+browser only.

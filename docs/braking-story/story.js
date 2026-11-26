@@ -119,6 +119,7 @@ async function boot() {
       sec.innerHTML = await fetch("sections/" + item.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); });
     } catch (e) { sec.innerHTML = `<p class="err">Couldn't load sections/${item.file} (${e.message}).</p>`; }
     main.appendChild(sec);
+    sec.dataset.title = item.nav;
     const a = document.createElement("a"); a.href = "#" + id; a.innerHTML = `<span class="n">${String(n).padStart(2, "0")}</span><span>${item.nav}</span>`; nav.appendChild(a);
     for (const old of sec.querySelectorAll("script")) {
       const s = document.createElement("script"); s.textContent = `(()=>{const root=document.getElementById(${JSON.stringify(id)});\n${old.textContent}\n})();`;
@@ -129,7 +130,7 @@ async function boot() {
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle("on", l.getAttribute("href") === "#" + e.target.id)); }), { rootMargin: "-30% 0px -60% 0px" });
   main.querySelectorAll("section.s").forEach(s => io.observe(s));
   setupPins(main);
-  if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
+  if (location.hash && !location.hash.startsWith("#note-")) document.getElementById(location.hash.slice(1))?.scrollIntoView();
   // keep the scroll position across live reloads
   try { const y = sessionStorage.getItem("story-y"); if (y && !location.hash) window.scrollTo(0, +y); } catch (e) {}
 }
@@ -178,7 +179,7 @@ function setupPins(main) {
     if (!p.querySelector(".chart, svg.scene, canvas")) return;
     const sid = p.closest("section").id; counts[sid] = (counts[sid] || 0) + 1;
     p.id = p.id || `fig-${sid}-${counts[sid]}`;
-    p.classList.add("pinnable");
+    p.classList.add("pinnable"); p.dataset.section = sid;
     const b = document.createElement("button"); b.className = "pin-btn"; b.type = "button"; b.textContent = "Pin";
     b.title = "Keep this figure in a floating window while you scroll"; b.addEventListener("click", () => pin(p));
     p.prepend(b);
@@ -202,5 +203,5 @@ dock.querySelector(".dock-head").addEventListener("pointerdown", e => {
 });
 addEventListener("keydown", e => { if (e.key === "Escape" && pinned) unpin(); });
 if (window.EventSource && !/[?&]static/.test(location.search)) { const es = new EventSource("/__reload"); es.onmessage = () => location.reload(); }
-boot();
+Story.ready = boot();
 })();
